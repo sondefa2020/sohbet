@@ -3,6 +3,8 @@ name: APK derle
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "server/**"
   pull_request:
   workflow_dispatch:
 
