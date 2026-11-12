@@ -51,7 +51,9 @@ object Api {
         } catch (e: ApiException) {
             throw e
         } catch (e: Exception) {
-            throw ApiException("BAGLANTI", "Sunucuya bağlanılamadı. İnternet bağlantını kontrol et.")
+            // Teknik ayrıntı sorun giderme içindir; şifre ya da anahtar içermez.
+            val detail = (e::class.simpleName ?: "Hata") + ": " + (e.message ?: "").take(250)
+            throw ApiException("BAGLANTI", "Sunucuya bağlanılamadı. İnternet bağlantını kontrol et.\n\nAyrıntı: $detail")
         }
     }
 

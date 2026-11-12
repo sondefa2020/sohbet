@@ -11,9 +11,12 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.navigation.compose.NavHost
 import com.bayx.chat.data.AuthState
 import com.bayx.chat.data.Bayx
@@ -56,8 +59,10 @@ fun BayxTheme(content: @Composable () -> Unit) {
             onSurfaceVariant = Muted,
             outline = Line,
         ),
-        content = content,
-    )
+    ) {
+        // Arayüz Türkçe olduğu için telefonun dili sağdan sola olsa bile soldan sağa çizilir.
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr, content = content)
+    }
 }
 
 @Composable
