@@ -93,6 +93,13 @@ object Api {
         parseMembers(request("GET", "/bayx/members", token = token))
     }
 
+    /** Yoklama gönderir ve şu an çevrimiçi olan üyelerin kimliklerini döndürür. */
+    suspend fun presence(token: String, active: Boolean): Set<String> = io {
+        val json = request("POST", "/bayx/presence", JSONObject().put("active", active), token)
+        val array = json.optJSONArray("online")
+        if (array == null) emptySet() else (0 until array.length()).map { array.getString(it) }.toSet()
+    }
+
     suspend fun adminMembers(token: String): AdminMembers = io {
         val json = request("GET", "/bayx/admin/members", token = token)
         AdminMembers(parseMembers(json), json.optInt("count"), json.optInt("max", 10))

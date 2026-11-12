@@ -9,6 +9,7 @@ Synapse'in önünde duran küçük bir yardımcı servis:
 Yalnızca Python standart kütüphanesini kullanır. Ayarlar ortam değişkenlerinden okunur.
 Şifreler hiçbir yere yazılmaz; doğrudan Synapse'e iletilir.
 """
+import hashlib
 import json
 import os
 import re
@@ -30,6 +31,13 @@ LISTEN_PORT = int(os.environ.get("BAYX_LISTEN_PORT", "8010"))
 USERNAME_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{2,19}$")
 MAX_BODY = 8 * 1024
 REGISTRATIONS_PER_HOUR = 5
+
+PRESENCE_WINDOW = 90  # saniye: bu süre içinde yoklama gönderen üye çevrimiçi sayılır
+TOKEN_CACHE_SECONDS = 300
+
+_presence_lock = threading.Lock()
+_last_seen = {}
+_token_cache = {}
 
 _rate_lock = threading.Lock()
 _rate = {}
@@ -182,6 +190,32 @@ def require_member(headers):
     return data["user_id"]
 
 
+def presence(headers, body):
+    """Çağıranın yoklamasını kaydeder ve şu an çevrimiçi olan üyeleri döndürür."""
+    auth = headers.get("Authorization", "")
+    if not auth.startswith("Bearer ") or len(auth) < 12:
+        raise ApiError(401, "YETKISIZ", "Oturum gerekli.")
+    key = hashlib.sha256(auth.encode()).hexdigest()
+    now = time.time()
+    with _presence_lock:
+        cached = _token_cache.get(key)
+    if cached and cached[1] > now:
+        uid = cached[0]
+    else:
+        uid = require_member(headers)
+        with _presence_lock:
+            if len(_token_cache) > 500:
+                _token_cache.clear()
+            _token_cache[key] = (uid, now + TOKEN_CACHE_SECONDS)
+    with _presence_lock:
+        if body.get("active", True):
+            _last_seen[uid] = now
+        else:
+            _last_seen.pop(uid, None)
+        online = [u for u, seen in _last_seen.items() if now - seen < PRESENCE_WINDOW]
+    return {"online": online}
+
+
 def target_user(body, caller):
     uid = body.get("user_id")
     if not isinstance(uid, str) or not re.match(r"^@[a-z0-9._-]+:" + re.escape(DOMAIN) + "$", uid):
@@ -264,6 +298,9 @@ class Handler(BaseHTTPRequestHandler):
                     if not m["pending"]
                 ]
                 self._send(200, {"members": members, "me": caller})
+            elif method == "POST" and path == "/bayx/presence":
+                length = self.headers.get("Content-Length", "0")
+                self._send(200, presence(self.headers, self._body() if length not in ("", "0") else {}))
             elif method == "GET" and path == "/bayx/admin/members":
                 require_admin(self.headers)
                 members = list_members()

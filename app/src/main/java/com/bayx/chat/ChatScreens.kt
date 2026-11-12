@@ -43,6 +43,7 @@ import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.Storage
+import androidx.compose.material.icons.outlined.Vibration
 import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -106,6 +107,10 @@ fun ChatScreen(roomId: String, onBack: () -> Unit) {
 private fun ChatContent(session: ChatSession, onBack: () -> Unit) {
     val messages by session.messages.collectAsState()
     val title by session.title.collectAsState()
+    val partner by session.dmUserId.collectAsState()
+    val onlineUsers by Bayx.online.collectAsState()
+    val partnerOnline = partner != null && partner in onlineUsers
+    var lastNudge by remember { mutableLongStateOf(0L) }
     var draft by remember { mutableStateOf("") }
     var showAttach by remember { mutableStateOf(false) }
     var sending by remember { mutableStateOf(false) }
@@ -215,7 +220,7 @@ private fun ChatContent(session: ChatSession, onBack: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Geri", tint = Ink) }
-            Avatar(title, 52.dp)
+            Avatar(title, 52.dp, online = partnerOnline)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(
@@ -229,8 +234,27 @@ private fun ChatContent(session: ChatSession, onBack: () -> Unit) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Outlined.Lock, contentDescription = null, tint = Muted, modifier = Modifier.size(13.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("Uçtan uca şifreli", color = Muted, fontSize = 13.sp)
+                    Text(
+                        when {
+                            partner == null -> "Uçtan uca şifreli"
+                            partnerOnline -> "Çevrimiçi · şifreli"
+                            else -> "Çevrimdışı · şifreli"
+                        },
+                        color = if (partnerOnline) Color(0xFF136A38) else Muted,
+                        fontSize = 13.sp,
+                    )
                 }
+            }
+            IconButton(onClick = {
+                val now = System.currentTimeMillis()
+                if (now - lastNudge < 5_000) {
+                    toast("Biraz bekle; titreşim 5 saniyede bir gönderilebilir.")
+                } else {
+                    lastNudge = now
+                    scope.launch { if (!Bayx.sendNudge(session)) toast("Titreşim gönderilemedi.") }
+                }
+            }) {
+                Icon(Icons.Outlined.Vibration, "Titreşim gönder", tint = Color(0xFF8A4B00))
             }
             IconButton(onClick = { toast("Sesli arama sonraki sürümde eklenecek.") }) {
                 Icon(Icons.Outlined.Call, "Sesli ara", tint = Ink)
@@ -375,6 +399,27 @@ private fun formatClock(millis: Long): String =
 
 @Composable
 private fun MessageRow(msg: ChatMessage, showSender: Boolean, onOpen: (ChatMessage) -> Unit) {
+    if (msg.kind == MsgKind.NUDGE) {
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Row(
+                Modifier
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xFFFFF4D6))
+                    .padding(horizontal = 14.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Outlined.Vibration, contentDescription = null, tint = Color(0xFF6B4A00), modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    (if (msg.mine) "Titreşim gönderdin" else "${msg.sender} sana titreşim gönderdi") + " · " + formatClock(msg.time),
+                    color = Color(0xFF6B4A00),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
+        return
+    }
     if (msg.kind == MsgKind.DATE) {
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             Text(

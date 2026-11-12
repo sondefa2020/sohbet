@@ -7,7 +7,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -73,9 +75,10 @@ data class ChatSummary(
     val time: Long,
     val unread: Int,
     val isDirect: Boolean,
+    val dmUserId: String? = null,
 )
 
-enum class MsgKind { TEXT, DATE, IMAGE, VIDEO, VOICE, LOCATION }
+enum class MsgKind { TEXT, DATE, IMAGE, VIDEO, VOICE, LOCATION, NUDGE }
 enum class MsgState { NONE, SENDING, SENT, FAILED }
 
 /** Bir mesaja bağlı medya: şifreli kaynak adresi ve gösterim için gereken bilgiler. */
@@ -105,6 +108,7 @@ class ChatSession internal constructor(val roomId: String) {
     val messages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val title = MutableStateFlow("")
     @Volatile var isDirect: Boolean = true
+    val dmUserId = MutableStateFlow<String?>(null)
     internal var timeline: Timeline? = null
     internal var handle: TaskHandle? = null
     internal val items = ArrayList<TimelineItem>()
@@ -123,6 +127,15 @@ object Bayx {
     private var delegateHandle: TaskHandle? = null
     private val roomEntries = ArrayList<Room>()
     private var refreshJob: Job? = null
+    private var presenceJob: Job? = null
+    @Volatile private var foreground = false
+    private val nudgeSeen = HashSet<String>()
+
+    /** Şu an çevrimiçi olan üyelerin kullanıcı kimlikleri. */
+    val online = MutableStateFlow<Set<String>>(emptySet())
+
+    /** Gelen titreşimler: gönderenin görünen adı. */
+    val nudges = MutableSharedFlow<String>(extraBufferCapacity = 4)
 
     /** SDK platform başlatması başarısız olduysa nedeni; giriş hatalarında gösterilir. */
     @Volatile var platformError: String? = null
@@ -285,6 +298,10 @@ object Bayx {
 
     private fun teardown() {
         refreshJob?.cancel()
+        presenceJob?.cancel()
+        presenceJob = null
+        online.value = emptySet()
+        synchronized(nudgeSeen) { nudgeSeen.clear() }
         runCatching { roomListResult?.entriesStream()?.cancel() }
         runCatching { delegateHandle?.cancel() }
         runCatching { syncService?.close() }
@@ -330,7 +347,48 @@ object Bayx {
         result.controller().setFilter(RoomListEntriesDynamicFilterKind.NonLeft)
         roomListResult = result
         sync.start()
+        startPresence()
     }
+
+    // ------------------------------------------------------ çevrimiçi durumu
+
+    private fun startPresence() {
+        presenceJob?.cancel()
+        presenceJob = scope.launch {
+            while (isActive) {
+                val token = accessToken
+                if (foreground && token != null) {
+                    runCatching { Api.presence(token, active = true) }.onSuccess { online.value = it }
+                }
+                delay(30_000)
+            }
+        }
+    }
+
+    /** Uygulama öne geldiğinde ya da arka plana geçtiğinde çağrılır. */
+    fun setForeground(active: Boolean) {
+        foreground = active
+        val token = accessToken ?: return
+        scope.launch {
+            runCatching { Api.presence(token, active) }.onSuccess { if (active) online.value = it }
+        }
+    }
+
+    // --------------------------------------------------------------- titreşim
+
+    private const val NUDGE_MARK = "\u2060\u2060"
+    private const val NUDGE_BODY = NUDGE_MARK + "Titreşim gönderdi"
+
+    private fun isNudge(body: String) = body.startsWith(NUDGE_MARK)
+
+    /** Yeni gelen (son 20 saniye) ve daha önce işlenmemiş bir titreşimi bir kez bildirir. */
+    private fun noticeNudge(senderId: String, senderName: String, time: Long) {
+        if (System.currentTimeMillis() - time > 20_000) return
+        val fresh = synchronized(nudgeSeen) { nudgeSeen.add("$senderId:$time") }
+        if (fresh) nudges.tryEmit(senderName)
+    }
+
+    suspend fun sendNudge(session: ChatSession): Boolean = sendText(session, NUDGE_BODY)
 
     private fun applyRoomUpdates(updates: List<RoomListEntriesUpdate>) {
         synchronized(roomEntries) {
@@ -377,6 +435,11 @@ object Bayx {
             is LatestEventValue.Remote -> {
                 text = describe(latest.content).orEmpty()
                 time = latest.timestamp.toLong()
+                if (!latest.isOwn && text == NUDGE_LABEL) {
+                    val profile = latest.profile
+                    val name = if (profile is ProfileDetails.Ready) profile.displayName ?: latest.sender else latest.sender
+                    noticeNudge(latest.sender, name, time)
+                }
             }
             is LatestEventValue.Local -> {
                 text = describe(latest.content).orEmpty()
@@ -395,7 +458,16 @@ object Bayx {
             time = time,
             unread = info.numUnreadMessages.toInt(),
             isDirect = info.isDirect,
+            dmUserId = if (info.isDirect) dmPartner(room) else null,
         )
+    }
+
+    private const val NUDGE_LABEL = "Titreşim gönderdi"
+
+    /** Birebir sohbetteki karşı tarafın kullanıcı kimliği. */
+    private suspend fun dmPartner(room: Room): String? {
+        val me = (auth.value as? AuthState.LoggedIn)?.userId
+        return runCatching { room.heroes().map { it.userId }.firstOrNull { it != me } }.getOrNull()
     }
 
     /** Mesaj içeriğini kısa bir metne çevirir; sohbette gösterilmeyecek olaylar için null döner. */
@@ -403,7 +475,7 @@ object Bayx {
         if (content !is TimelineItemContent.MsgLike) return null
         return when (val kind = content.content.kind) {
             is MsgLikeKind.Message -> when (val type = kind.content.msgType) {
-                is MessageType.Text -> type.content.body
+                is MessageType.Text -> if (isNudge(type.content.body)) NUDGE_LABEL else type.content.body
                 is MessageType.Notice -> type.content.body
                 is MessageType.Emote -> type.content.body
                 is MessageType.Image -> "Fotoğraf"
@@ -430,6 +502,7 @@ object Bayx {
             val info = room.roomInfo()
             session.title.value = info.displayName.orEmpty()
             session.isDirect = info.isDirect
+            if (info.isDirect) session.dmUserId.value = dmPartner(room)
         }
         runCatching { syncService?.roomListService()?.setRoomSubscriptions(listOf(roomId)) }
         val timeline = room.timeline()
@@ -500,9 +573,10 @@ object Bayx {
         }
         val profile = event.senderProfile
         val sender = if (profile is ProfileDetails.Ready) profile.displayName ?: event.sender else event.sender
-        return ChatMessage(
-            key, media?.first ?: MsgKind.TEXT, text, event.isOwn, sender, event.timestamp.toLong(), state, media?.second,
-        )
+        val nudge = media == null && text == NUDGE_LABEL
+        if (nudge && !event.isOwn) noticeNudge(event.sender, sender, event.timestamp.toLong())
+        val kind = if (nudge) MsgKind.NUDGE else media?.first ?: MsgKind.TEXT
+        return ChatMessage(key, kind, text, event.isOwn, sender, event.timestamp.toLong(), state, media?.second)
     }
 
     private fun mediaOf(content: TimelineItemContent): Pair<MsgKind, MediaRef>? {

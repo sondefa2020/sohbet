@@ -406,6 +406,7 @@ internal fun InfoDialog(message: String, onDismiss: () -> Unit) {
 fun ChatListScreen(me: AuthState.LoggedIn, onOpenChat: (String) -> Unit, onProfile: () -> Unit) {
     var tab by remember { mutableIntStateOf(0) }
     val rooms by Bayx.rooms.collectAsState()
+    val onlineUsers by Bayx.online.collectAsState()
     var members by remember { mutableStateOf<List<Member>?>(null) }
     var membersError by remember { mutableStateOf<String?>(null) }
     var showNewGroup by remember { mutableStateOf(false) }
@@ -493,7 +494,7 @@ fun ChatListScreen(me: AuthState.LoggedIn, onOpenChat: (String) -> Unit, onProfi
                         EmptyHint("Henüz sohbet yok.\nKişiler sekmesinden birini seçerek başla.")
                     } else {
                         LazyColumn {
-                            items(rooms, key = { it.id }) { chat -> ChatRow(chat) { onOpenChat(chat.id) } }
+                            items(rooms, key = { it.id }) { chat -> ChatRow(chat, online = chat.dmUserId != null && chat.dmUserId in onlineUsers) { onOpenChat(chat.id) } }
                         }
                     }
                     1 -> {
@@ -506,7 +507,7 @@ fun ChatListScreen(me: AuthState.LoggedIn, onOpenChat: (String) -> Unit, onProfi
                             list.isEmpty() -> EmptyHint("Henüz başka üye yok.\nArkadaşların kayıt olduğunda burada görünür.")
                             else -> LazyColumn {
                                 items(list, key = { it.userId }) { member ->
-                                    PersonRow(member.displayName, member.userId.substringBefore(":")) { openDirect(member) }
+                                    PersonRow(member.displayName, member.userId.substringBefore(":"), online = member.userId in onlineUsers) { openDirect(member) }
                                 }
                             }
                         }
@@ -522,7 +523,7 @@ fun ChatListScreen(me: AuthState.LoggedIn, onOpenChat: (String) -> Unit, onProfi
                                 EmptyHint("Henüz grup yok.")
                             } else {
                                 LazyColumn {
-                                    items(groups, key = { it.id }) { chat -> ChatRow(chat) { onOpenChat(chat.id) } }
+                                    items(groups, key = { it.id }) { chat -> ChatRow(chat, online = chat.dmUserId != null && chat.dmUserId in onlineUsers) { onOpenChat(chat.id) } }
                                 }
                             }
                         }
@@ -653,12 +654,12 @@ private fun RowScope.NavItem(label: String, icon: ImageVector, selected: Boolean
 }
 
 @Composable
-private fun PersonRow(name: String, handle: String, onClick: () -> Unit) {
+private fun PersonRow(name: String, handle: String, online: Boolean = false, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Avatar(name, 56.dp)
+        Avatar(name, 56.dp, online = online)
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
             Text(name, color = Ink, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -668,12 +669,12 @@ private fun PersonRow(name: String, handle: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun ChatRow(chat: ChatSummary, onClick: () -> Unit) {
+private fun ChatRow(chat: ChatSummary, online: Boolean = false, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Avatar(chat.name, 60.dp)
+        Avatar(chat.name, 60.dp, online = online)
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {

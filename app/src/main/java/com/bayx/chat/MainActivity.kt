@@ -3,6 +3,20 @@ package com.bayx.chat
 import android.graphics.Color as AndroidColor
 import android.net.Uri
 import android.os.Bundle
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.widget.Toast
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
 import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -44,6 +58,16 @@ class MainActivity : ComponentActivity() {
         window.decorView.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
         setContent { BayxTheme { BayxApp() } }
     }
+
+    override fun onStart() {
+        super.onStart()
+        Bayx.setForeground(true)
+    }
+
+    override fun onStop() {
+        Bayx.setForeground(false)
+        super.onStop()
+    }
 }
 
 @Composable
@@ -68,11 +92,32 @@ fun BayxTheme(content: @Composable () -> Unit) {
 @Composable
 fun BayxApp() {
     val auth by Bayx.auth.collectAsState()
-    when (val state = auth) {
-        AuthState.Loading -> SplashScreen()
-        AuthState.LoggedOut -> AuthFlow()
-        AuthState.Offline -> OfflineScreen()
-        is AuthState.LoggedIn -> MainNav(state)
+    val context = LocalContext.current
+    val shake = remember { Animatable(0f) }
+
+    // Gelen titreşim: telefonu titret, ekranı kısa süre salla ve kimden geldiğini göster.
+    LaunchedEffect(Unit) {
+        Bayx.nudges.collect { sender ->
+            runCatching {
+                context.getSystemService(Vibrator::class.java)
+                    ?.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 140, 80, 140, 80, 220), -1))
+            }
+            Toast.makeText(context, "$sender sana titreşim gönderdi!", Toast.LENGTH_SHORT).show()
+            repeat(4) {
+                shake.animateTo(16f, tween(45))
+                shake.animateTo(-16f, tween(45))
+            }
+            shake.animateTo(0f, tween(45))
+        }
+    }
+
+    Box(Modifier.fillMaxSize().offset { IntOffset(shake.value.dp.roundToPx(), 0) }) {
+        when (val state = auth) {
+            AuthState.Loading -> SplashScreen()
+            AuthState.LoggedOut -> AuthFlow()
+            AuthState.Offline -> OfflineScreen()
+            is AuthState.LoggedIn -> MainNav(state)
+        }
     }
 }
 
