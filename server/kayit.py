@@ -171,6 +171,17 @@ def require_admin(headers):
     return data["user_id"]
 
 
+def require_member(headers):
+    """Onaylanmış herhangi bir üyenin oturumunu doğrular; kullanıcı kimliğini döndürür."""
+    auth = headers.get("Authorization", "")
+    if not auth.startswith("Bearer ") or len(auth) < 12:
+        raise ApiError(401, "YETKISIZ", "Oturum gerekli.")
+    status, data = synapse("GET", "/_matrix/client/v3/account/whoami", token=auth[7:].strip())
+    if status != 200 or not data.get("user_id"):
+        raise ApiError(401, "YETKISIZ", "Oturum geçersiz.")
+    return data["user_id"]
+
+
 def target_user(body, caller):
     uid = body.get("user_id")
     if not isinstance(uid, str) or not re.match(r"^@[a-z0-9._-]+:" + re.escape(DOMAIN) + "$", uid):
@@ -245,6 +256,14 @@ class Handler(BaseHTTPRequestHandler):
             elif method == "POST" and path == "/bayx/register":
                 ip = self.headers.get("X-Real-IP") or self.client_address[0]
                 self._send(201, register(self._body(), ip))
+            elif method == "GET" and path == "/bayx/members":
+                caller = require_member(self.headers)
+                members = [
+                    {"user_id": m["user_id"], "display_name": m["display_name"], "admin": m["admin"]}
+                    for m in list_members()
+                    if not m["pending"]
+                ]
+                self._send(200, {"members": members, "me": caller})
             elif method == "GET" and path == "/bayx/admin/members":
                 require_admin(self.headers)
                 members = list_members()

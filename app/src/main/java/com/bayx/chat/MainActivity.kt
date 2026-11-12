@@ -1,6 +1,7 @@
 package com.bayx.chat
 
 import android.graphics.Color as AndroidColor
+import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import androidx.activity.ComponentActivity
@@ -10,8 +11,12 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.Color
 import androidx.navigation.compose.NavHost
+import com.bayx.chat.data.AuthState
+import com.bayx.chat.data.Bayx
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 
@@ -57,32 +62,41 @@ fun BayxTheme(content: @Composable () -> Unit) {
 
 @Composable
 fun BayxApp() {
+    val auth by Bayx.auth.collectAsState()
+    when (val state = auth) {
+        AuthState.Loading -> SplashScreen()
+        AuthState.LoggedOut -> AuthFlow()
+        AuthState.Offline -> OfflineScreen()
+        is AuthState.LoggedIn -> MainNav(state)
+    }
+}
+
+@Composable
+private fun MainNav(me: AuthState.LoggedIn) {
     val nav = rememberNavController()
-    NavHost(navController = nav, startDestination = "login") {
-        composable("login") {
-            LoginScreen(onLogin = {
-                nav.navigate("chats") { popUpTo("login") { inclusive = true } }
-            })
-        }
+    NavHost(navController = nav, startDestination = "chats") {
         composable("chats") {
             ChatListScreen(
-                onOpenChat = { name -> nav.navigate("chat/$name") },
+                me = me,
+                onOpenChat = { roomId -> nav.navigate("chat/" + Uri.encode(roomId)) },
                 onProfile = { nav.navigate("profile") },
             )
         }
-        composable("chat/{name}") { entry ->
+        composable("chat/{id}") { entry ->
             ChatScreen(
-                name = entry.arguments?.getString("name").orEmpty(),
+                roomId = entry.arguments?.getString("id").orEmpty(),
                 onBack = { nav.popBackStack() },
             )
         }
         composable("profile") {
             ProfileScreen(
+                me = me,
                 onBack = { nav.popBackStack() },
-                onLogout = {
-                    nav.navigate("login") { popUpTo(nav.graph.id) { inclusive = true } }
-                },
+                onAdmin = { nav.navigate("admin") },
             )
+        }
+        composable("admin") {
+            AdminScreen(me = me, onBack = { nav.popBackStack() })
         }
     }
 }
