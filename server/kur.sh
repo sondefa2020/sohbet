@@ -43,12 +43,14 @@ if [ ! -d "$INCLUDE_DIR" ]; then
     chmod -R u=rwX,go=rX "$NEW_TOP"
 fi
 
-port_in_use() { ss -tln 2>/dev/null | grep -qE "[:.]$1 "; }
+# Not: "set -o pipefail" altında "grep -q" kullanılmaz; erken çıkıp borunun başını öldürür.
+port_in_use() { ss -tln 2>/dev/null | grep -E "[:.]$1 " >/dev/null; }
+unit_exists() { systemctl cat "$1" >/dev/null 2>&1; }
 
-if ! systemctl list-unit-files 2>/dev/null | grep -q '^matrix-synapse\.service'; then
+if ! unit_exists matrix-synapse.service; then
     port_in_use 8008 && fail "8008 portu başka bir program tarafından kullanılıyor."
 fi
-if ! systemctl list-unit-files 2>/dev/null | grep -q '^bayx-kayit\.service'; then
+if ! unit_exists bayx-kayit.service; then
     port_in_use 8010 && fail "8010 portu başka bir program tarafından kullanılıyor."
 fi
 
@@ -171,7 +173,7 @@ ADMIN_NOTE=""
 if [ ! -f /etc/bayx/yonetici-olusturuldu ]; then
     say "Yönetici hesabı"
     ADMIN_USER="${BAYX_ADMIN_USER:-}"
-    while ! printf '%s' "$ADMIN_USER" | grep -qE '^[a-z0-9][a-z0-9._-]{2,19}$'; do
+    while ! [[ "$ADMIN_USER" =~ ^[a-z0-9][a-z0-9._-]{2,19}$ ]]; do
         read -r -p "Yönetici kullanıcı adı (küçük harf/rakam, 3-20 karakter): " ADMIN_USER
     done
     ADMIN_PASS="$(openssl rand -base64 18 | tr -d '/+=' | cut -c1-16)"
