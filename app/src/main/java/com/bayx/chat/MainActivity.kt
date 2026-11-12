@@ -2,7 +2,15 @@ package com.bayx.chat
 
 import android.graphics.Color as AndroidColor
 import android.net.Uri
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import com.bayx.chat.data.Notifier
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.widget.Toast
@@ -56,7 +64,19 @@ class MainActivity : ComponentActivity() {
         )
         // Giriş bilgileri için sistem otomatik doldurma önerilerini uygulama genelinde kapat.
         window.decorView.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
+        handleIntent(intent)
         setContent { BayxTheme { BayxApp() } }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent?) {
+        val roomId = intent?.getStringExtra(Notifier.EXTRA_ROOM_ID) ?: return
+        intent.removeExtra(Notifier.EXTRA_ROOM_ID)
+        Bayx.pendingRoom.value = roomId
     }
 
     override fun onStart() {
@@ -119,11 +139,32 @@ fun BayxApp() {
             is AuthState.LoggedIn -> MainNav(state)
         }
     }
+    if (auth is AuthState.LoggedIn) CallOverlay()
 }
 
 @Composable
 private fun MainNav(me: AuthState.LoggedIn) {
     val nav = rememberNavController()
+    val context = LocalContext.current
+
+    // Android 13+: bildirim izni (bir kez sorulur; reddedilirse uygulama yine çalışır).
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+    // Bildirime dokunulduysa ilgili sohbeti aç.
+    val pendingRoom by Bayx.pendingRoom.collectAsState()
+    LaunchedEffect(pendingRoom) {
+        val roomId = pendingRoom ?: return@LaunchedEffect
+        Bayx.pendingRoom.value = null
+        nav.navigate("chat/" + Uri.encode(roomId)) { launchSingleTop = true }
+    }
+
     NavHost(navController = nav, startDestination = "chats") {
         composable("chats") {
             ChatListScreen(

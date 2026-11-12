@@ -53,6 +53,11 @@ fi
 if ! unit_exists bayx-kayit.service; then
     port_in_use 8010 && fail "8010 portu başka bir program tarafından kullanılıyor."
 fi
+if ! unit_exists coturn.service; then
+    port_in_use 3478 && fail "3478 portu (arama aktarma) başka bir program tarafından kullanılıyor."
+fi
+PUBLIC_IP="${BAYX_PUBLIC_IP:-$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p')}"
+[ -n "$PUBLIC_IP" ] || fail "Sunucunun IPv4 adresi bulunamadı (BAYX_PUBLIC_IP ile verilebilir)."
 
 # ---------------------------------------------------------------- 1. Synapse
 say "Sohbet sunucusu (Matrix Synapse) kuruluyor"
@@ -75,6 +80,10 @@ if [ -f "$SYNAPSE_CONF" ]; then
     REG_SECRET="$(sed -n 's/^registration_shared_secret: "\(.*\)"$/\1/p' "$SYNAPSE_CONF")"
 fi
 REG_SECRET="${REG_SECRET:-$(openssl rand -hex 32)}"
+if [ -f "$SYNAPSE_CONF" ]; then
+    TURN_SECRET="$(sed -n 's/^turn_shared_secret: "\(.*\)"$/\1/p' "$SYNAPSE_CONF")"
+fi
+TURN_SECRET="${TURN_SECRET:-$(openssl rand -hex 32)}"
 
 umask 077
 cat > "$SYNAPSE_CONF" <<EOF
@@ -92,6 +101,16 @@ url_preview_enabled: false
 max_upload_size: 100M
 presence:
   enabled: true
+# Sesli/görüntülü arama için TURN aktarma sunucusu (coturn, aynı makinede)
+turn_uris:
+  - "turn:$DOMAIN:3478?transport=udp"
+  - "turn:$DOMAIN:3478?transport=tcp"
+turn_shared_secret: "$TURN_SECRET"
+turn_user_lifetime: 86400000
+turn_allow_guests: false
+# Bildirimler aynı makinedeki Bayx servisine (127.0.0.1:8010) iletilir.
+ip_range_whitelist:
+  - "127.0.0.1"
 EOF
 chown matrix-synapse:matrix-synapse "$SYNAPSE_CONF"
 chmod 600 "$SYNAPSE_CONF"
@@ -142,6 +161,28 @@ EOF
     unset BOT_PASS BOT_TOKEN
 fi
 
+set_env() {
+    if grep -E "^$1=" "$ENV_FILE" >/dev/null; then
+        sed -i "s|^$1=.*|$1=$2|" "$ENV_FILE"
+    else
+        echo "$1=$2" >> "$ENV_FILE"
+    fi
+}
+set_env BAYX_APP_ID com.tayfa.chat
+
+# Bildirimler: Firebase servis hesabı dosyası sunucuya elle konur (gizli anahtar içerir).
+PUSH_OK="hayır (/etc/bayx/firebase.json yok)"
+if [ -s /etc/bayx/firebase.json ]; then
+    if python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["type"]=="service_account" and d["private_key"] and d["client_email"]' /etc/bayx/firebase.json 2>/dev/null; then
+        chown root:bayx /etc/bayx/firebase.json
+        chmod 640 /etc/bayx/firebase.json
+        set_env BAYX_FCM_CREDENTIALS /etc/bayx/firebase.json
+        PUSH_OK="evet"
+    else
+        PUSH_OK="hayır (/etc/bayx/firebase.json bir servis hesabı anahtarı değil)"
+    fi
+fi
+
 cat > /etc/systemd/system/bayx-kayit.service <<EOF
 [Unit]
 Description=Bayx kayit ve yonetim servisi
@@ -167,6 +208,65 @@ systemctl enable bayx-kayit >/dev/null 2>&1 || true
 systemctl restart bayx-kayit
 sleep 2
 curl -fsS -o /dev/null http://127.0.0.1:8010/bayx/health || fail "Kayıt servisi açılmadı. Günlük: journalctl -u bayx-kayit -n 50"
+
+# ------------------------------------------- 2b. Arama aktarma sunucusu (TURN)
+say "Arama aktarma sunucusu (coturn) kuruluyor"
+apt-get install -y -qq coturn >/dev/null
+if [ -f /etc/turnserver.conf ] && ! head -1 /etc/turnserver.conf | grep -E "^# Bayx" >/dev/null; then
+    cp /etc/turnserver.conf "/etc/turnserver.conf.yedek-$(date +%Y%m%d%H%M%S)"
+fi
+umask 077
+cat > /etc/turnserver.conf <<TURNCONF
+# Bayx/Tayfa arama aktarma ayarları (kur.sh tarafından yazılır)
+listening-port=3478
+external-ip=$PUBLIC_IP
+realm=$DOMAIN
+use-auth-secret
+static-auth-secret=$TURN_SECRET
+min-port=49160
+max-port=49200
+fingerprint
+no-tls
+no-dtls
+no-cli
+no-multicast-peers
+no-software-attribute
+user-quota=12
+total-quota=600
+syslog
+# Aktarma sunucusu iç ağlara erişemesin
+denied-peer-ip=0.0.0.0-0.255.255.255
+denied-peer-ip=10.0.0.0-10.255.255.255
+denied-peer-ip=100.64.0.0-100.127.255.255
+denied-peer-ip=127.0.0.0-127.255.255.255
+denied-peer-ip=169.254.0.0-169.254.255.255
+denied-peer-ip=172.16.0.0-172.31.255.255
+denied-peer-ip=192.168.0.0-192.168.255.255
+denied-peer-ip=::1
+TURNCONF
+umask 022
+chown root:turnserver /etc/turnserver.conf 2>/dev/null || true
+chmod 640 /etc/turnserver.conf
+if [ -f /etc/default/coturn ]; then
+    sed -i 's/^#\?TURNSERVER_ENABLED=.*/TURNSERVER_ENABLED=1/' /etc/default/coturn
+fi
+systemctl enable coturn >/dev/null 2>&1 || true
+systemctl restart coturn
+systemctl restart matrix-synapse
+for _ in $(seq 1 60); do
+    if curl -fsS -o /dev/null "$SYNAPSE_URL/health" 2>/dev/null; then break; fi
+    sleep 2
+done
+
+FIREWALL_NOTE=""
+if command -v ufw >/dev/null && ufw status 2>/dev/null | grep -E "^Status: active" >/dev/null; then
+    ufw allow 3478/udp >/dev/null
+    ufw allow 3478/tcp >/dev/null
+    ufw allow 49160:49200/udp >/dev/null
+    FIREWALL_NOTE="ufw: 3478 TCP/UDP ve 49160-49200 UDP portları açıldı."
+else
+    FIREWALL_NOTE="Panelde ya da sağlayıcıda güvenlik duvarı varsa şu portları aç: 3478 TCP ve UDP, 49160-49200 UDP."
+fi
 
 # ------------------------------------------------------ 3. Yönetici hesabı
 ADMIN_NOTE=""
@@ -210,7 +310,8 @@ location ^~ /bayx/ {
     proxy_pass http://127.0.0.1:8010;
     proxy_http_version 1.1;
     proxy_set_header X-Real-IP \$remote_addr;
-    client_max_body_size 16k;
+    proxy_read_timeout 60s;
+    client_max_body_size 64k;
 }
 EOF
 mv "$INCLUDE_FILE.yeni" "$INCLUDE_FILE"
@@ -226,7 +327,8 @@ sleep 2
 
 # ------------------------------------------------------------ 5. Kontrol
 say "Kontrol"
-LOCAL_OK="hayır"; PUBLIC_OK="hayır"; KAYIT_OK="hayır"
+LOCAL_OK="hayır"; PUBLIC_OK="hayır"; KAYIT_OK="hayır"; TURN_OK="hayır"
+ss -uln 2>/dev/null | grep -E "[:.]3478 " >/dev/null && TURN_OK="evet"
 curl -fsS -o /dev/null "$SYNAPSE_URL/_matrix/client/versions" && LOCAL_OK="evet"
 curl -fsS -o /dev/null --max-time 15 "https://$DOMAIN/_matrix/client/versions" 2>/dev/null && PUBLIC_OK="evet"
 curl -fsS -o /dev/null --max-time 15 "https://$DOMAIN/bayx/health" 2>/dev/null && KAYIT_OK="evet"
@@ -237,6 +339,9 @@ cat <<EOF
 Sohbet sunucusu çalışıyor (yerel)      : $LOCAL_OK
 https://$DOMAIN üzerinden erişim : $PUBLIC_OK
 Kayıt servisi (https üzerinden)        : $KAYIT_OK
+Arama aktarma sunucusu (coturn)        : $TURN_OK
+Bildirim servisi (Firebase)            : $PUSH_OK
+$FIREWALL_NOTE
 $ADMIN_NOTE
 =====================================================
 EOF

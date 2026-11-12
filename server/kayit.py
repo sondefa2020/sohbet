@@ -9,10 +9,13 @@ Synapse'in önünde duran küçük bir yardımcı servis:
 Yalnızca Python standart kütüphanesini kullanır. Ayarlar ortam değişkenlerinden okunur.
 Şifreler hiçbir yere yazılmaz; doğrudan Synapse'e iletilir.
 """
+import base64
 import hashlib
 import json
 import os
 import re
+import subprocess
+import tempfile
 import threading
 import time
 import urllib.error
@@ -28,8 +31,13 @@ MAX_MEMBERS = int(os.environ.get("BAYX_MAX_MEMBERS", "50"))
 LISTEN_HOST = os.environ.get("BAYX_LISTEN_HOST", "127.0.0.1")
 LISTEN_PORT = int(os.environ.get("BAYX_LISTEN_PORT", "8010"))
 
+APP_ID = os.environ.get("BAYX_APP_ID", "com.tayfa.chat")
+FCM_CREDENTIALS = os.environ.get("BAYX_FCM_CREDENTIALS", "")
+FCM_SEND_BASE = os.environ.get("BAYX_FCM_SEND_BASE", "https://fcm.googleapis.com").rstrip("/")
+
 USERNAME_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{2,19}$")
 MAX_BODY = 8 * 1024
+MAX_CALL_BODY = 64 * 1024  # görüntülü arama teklifleri (SDP) birkaç KB tutabilir
 REGISTRATIONS_PER_HOUR = 5
 
 PRESENCE_WINDOW = 90  # saniye: bu süre içinde yoklama gönderen üye çevrimiçi sayılır
@@ -190,8 +198,8 @@ def require_member(headers):
     return data["user_id"]
 
 
-def presence(headers, body):
-    """Çağıranın yoklamasını kaydeder ve şu an çevrimiçi olan üyeleri döndürür."""
+def member_from_token(headers):
+    """require_member ile aynı; sık çağrılan uç noktalar için oturum doğrulamasını kısa süre önbellekte tutar."""
     auth = headers.get("Authorization", "")
     if not auth.startswith("Bearer ") or len(auth) < 12:
         raise ApiError(401, "YETKISIZ", "Oturum gerekli.")
@@ -200,13 +208,19 @@ def presence(headers, body):
     with _presence_lock:
         cached = _token_cache.get(key)
     if cached and cached[1] > now:
-        uid = cached[0]
-    else:
-        uid = require_member(headers)
-        with _presence_lock:
-            if len(_token_cache) > 500:
-                _token_cache.clear()
-            _token_cache[key] = (uid, now + TOKEN_CACHE_SECONDS)
+        return cached[0]
+    uid = require_member(headers)
+    with _presence_lock:
+        if len(_token_cache) > 500:
+            _token_cache.clear()
+        _token_cache[key] = (uid, now + TOKEN_CACHE_SECONDS)
+    return uid
+
+
+def presence(headers, body):
+    """Çağıranın yoklamasını kaydeder ve şu an çevrimiçi olan üyeleri döndürür."""
+    uid = member_from_token(headers)
+    now = time.time()
     with _presence_lock:
         if body.get("active", True):
             _last_seen[uid] = now
@@ -214,6 +228,209 @@ def presence(headers, body):
             _last_seen.pop(uid, None)
         online = [u for u, seen in _last_seen.items() if now - seen < PRESENCE_WINDOW]
     return {"online": online}
+
+
+# ------------------------------------------------------------------ bildirim (FCM)
+
+
+class Fcm:
+    """Firebase Cloud Messaging HTTP v1 istemcisi. Servis hesabı JWT'si openssl ile imzalanır."""
+
+    def __init__(self, path):
+        with open(path) as f:
+            info = json.load(f)
+        self.project = info["project_id"]
+        self.email = info["client_email"]
+        self.token_uri = info.get("token_uri") or "https://oauth2.googleapis.com/token"
+        fd, self.key_path = tempfile.mkstemp(prefix="fcm-", suffix=".pem")
+        with os.fdopen(fd, "w") as f:
+            f.write(info["private_key"])
+        os.chmod(self.key_path, 0o600)
+        self._token = None
+        self._expires = 0
+        self._lock = threading.Lock()
+
+    @staticmethod
+    def _b64(raw):
+        return base64.urlsafe_b64encode(raw).rstrip(b"=")
+
+    def _jwt(self):
+        now = int(time.time())
+        header = self._b64(json.dumps({"alg": "RS256", "typ": "JWT"}).encode())
+        claims = self._b64(
+            json.dumps(
+                {
+                    "iss": self.email,
+                    "scope": "https://www.googleapis.com/auth/firebase.messaging",
+                    "aud": self.token_uri,
+                    "iat": now,
+                    "exp": now + 3600,
+                }
+            ).encode()
+        )
+        signing_input = header + b"." + claims
+        signature = subprocess.run(
+            ["openssl", "dgst", "-sha256", "-sign", self.key_path],
+            input=signing_input,
+            capture_output=True,
+            check=True,
+            timeout=10,
+        ).stdout
+        return (signing_input + b"." + self._b64(signature)).decode()
+
+    def access_token(self):
+        with self._lock:
+            if self._token and time.time() < self._expires - 120:
+                return self._token
+            data = urllib.parse.urlencode(
+                {"grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer", "assertion": self._jwt()}
+            ).encode()
+            req = urllib.request.Request(self.token_uri, data=data, method="POST")
+            req.add_header("Content-Type", "application/x-www-form-urlencoded")
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                result = json.loads(resp.read())
+            self._token = result["access_token"]
+            self._expires = time.time() + int(result.get("expires_in", 3600))
+            return self._token
+
+    def send(self, token, data, ttl="60s"):
+        """True: iletildi, False: cihaz anahtarı artık geçersiz, None: geçici hata."""
+        message = {
+            "message": {
+                "token": token,
+                "data": {k: str(v) for k, v in data.items()},
+                "android": {"priority": "HIGH", "ttl": ttl},
+            }
+        }
+        try:
+            req = urllib.request.Request(
+                "%s/v1/projects/%s/messages:send" % (FCM_SEND_BASE, self.project),
+                data=json.dumps(message).encode(),
+                method="POST",
+            )
+            req.add_header("Authorization", "Bearer " + self.access_token())
+            req.add_header("Content-Type", "application/json")
+            with urllib.request.urlopen(req, timeout=15):
+                return True
+        except urllib.error.HTTPError as err:
+            text = err.read().decode(errors="replace")
+            if err.code == 404 or "UNREGISTERED" in text:
+                return False
+            if err.code == 400 and "registration token" in text.lower():
+                return False
+            return None
+        except Exception:
+            return None
+
+
+FCM = None
+
+
+def push_notify(body):
+    """Synapse'in bildirim isteği (Matrix push gateway). Mesaj içeriği gönderilmez, yalnızca oda ve olay kimliği."""
+    notification = body.get("notification") or {}
+    rejected = []
+    devices = notification.get("devices") or []
+    if FCM is None or not notification.get("event_id"):
+        return {"rejected": []}
+    data = {
+        "type": "message",
+        "room_id": notification.get("room_id", ""),
+        "event_id": notification.get("event_id", ""),
+        "unread": (notification.get("counts") or {}).get("unread", 0),
+    }
+    for device in devices:
+        pushkey = device.get("pushkey")
+        if not pushkey:
+            continue
+        if device.get("app_id") != APP_ID:
+            rejected.append(pushkey)
+            continue
+        if FCM.send(pushkey, data) is False:
+            rejected.append(pushkey)
+    return {"rejected": rejected}
+
+
+def push_call(callee, caller, call_id, name, video):
+    """Uygulaması kapalı olan aranan kişiye arama bildirimi gönderir."""
+    if FCM is None:
+        return
+    status, data = synapse("GET", "/_synapse/admin/v1/users/%s/pushers" % quote(callee))
+    if status != 200:
+        return
+    payload = {"type": "call", "call_id": call_id, "from": caller, "name": name, "video": "1" if video else "0"}
+    for pusher in data.get("pushers", []):
+        if pusher.get("app_id") == APP_ID and pusher.get("pushkey"):
+            FCM.send(pusher["pushkey"], payload, ttl="30s")
+
+
+# ---------------------------------------------------------- arama sinyalleşmesi
+# Arama kurulum mesajları (SDP teklifi/yanıtı, ICE adayları) üyeler arasında bu sunucu
+# üzerinden iletilir. Ses ve görüntü cihazlar arasında WebRTC (DTLS-SRTP) ile uçtan uca
+# şifrelidir; aktarma sunucusu (TURN) kullanılsa bile içeriği göremez.
+
+CALL_TYPES = {"invite", "answer", "candidate", "hangup", "reject", "busy"}
+CALL_TTL = 60
+POLL_SECONDS = 25
+_call_cond = threading.Condition()
+_call_queues = {}
+
+
+def call_send(headers, body):
+    caller = member_from_token(headers)
+    to = body.get("to")
+    call_id = body.get("call_id")
+    kind = body.get("type")
+    data = body.get("data") or {}
+    if not isinstance(to, str) or not re.match(r"^@[a-z0-9._-]+:" + re.escape(DOMAIN) + "$", to) or to == caller:
+        raise ApiError(400, "GECERSIZ_KULLANICI", "Geçersiz kullanıcı.")
+    if not isinstance(call_id, str) or not re.match(r"^[A-Za-z0-9_-]{8,64}$", call_id):
+        raise ApiError(400, "GECERSIZ_ISTEK", "Geçersiz arama.")
+    if kind not in CALL_TYPES or not isinstance(data, dict):
+        raise ApiError(400, "GECERSIZ_ISTEK", "Geçersiz arama.")
+    now = time.time()
+    event = {"from": caller, "call_id": call_id, "type": kind, "data": data, "ts": now}
+    with _call_cond:
+        queue = [e for e in _call_queues.get(to, []) if now - e["ts"] < CALL_TTL]
+        if len(queue) > 300:
+            queue = queue[-300:]
+        queue.append(event)
+        _call_queues[to] = queue
+        _call_cond.notify_all()
+    if kind == "invite":
+        name = str(data.get("name", ""))[:40]
+        threading.Thread(
+            target=push_call, args=(to, caller, call_id, name, bool(data.get("video"))), daemon=True
+        ).start()
+    return {"ok": True}
+
+
+def call_poll(headers):
+    uid = member_from_token(headers)
+    deadline = time.time() + POLL_SECONDS
+    with _call_cond:
+        while True:
+            now = time.time()
+            queue = [e for e in _call_queues.get(uid, []) if now - e["ts"] < CALL_TTL]
+            if queue:
+                _call_queues[uid] = []
+                return {"events": queue}
+            remaining = deadline - now
+            if remaining <= 0:
+                _call_queues.pop(uid, None)
+                return {"events": []}
+            _call_cond.wait(remaining)
+
+
+def turn_server(headers):
+    """Synapse'in ürettiği kısa ömürlü TURN bilgilerini istemciye iletir."""
+    auth = headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        raise ApiError(401, "YETKISIZ", "Oturum gerekli.")
+    status, data = synapse("GET", "/_matrix/client/v3/voip/turnServer", token=auth[7:].strip())
+    if status != 200:
+        return {"uris": []}
+    return data
 
 
 def target_user(body, caller):
@@ -267,12 +484,12 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(raw)
 
-    def _body(self):
+    def _body(self, limit=MAX_BODY):
         try:
             length = int(self.headers.get("Content-Length", "0"))
         except ValueError:
             length = 0
-        if length <= 0 or length > MAX_BODY:
+        if length <= 0 or length > limit:
             raise ApiError(400, "GECERSIZ_ISTEK", "Geçersiz istek.")
         try:
             body = json.loads(self.rfile.read(length))
@@ -301,6 +518,17 @@ class Handler(BaseHTTPRequestHandler):
             elif method == "POST" and path == "/bayx/presence":
                 length = self.headers.get("Content-Length", "0")
                 self._send(200, presence(self.headers, self._body() if length not in ("", "0") else {}))
+            elif method == "POST" and path == "/_matrix/push/v1/notify":
+                # Yalnızca aynı sunucudaki Synapse çağırabilir; nginx bu yolu dışarı açmaz.
+                if self.client_address[0] != "127.0.0.1" or self.headers.get("X-Real-IP"):
+                    raise ApiError(404, "BULUNAMADI", "Bulunamadı.")
+                self._send(200, push_notify(self._body(MAX_CALL_BODY)))
+            elif method == "POST" and path == "/bayx/call/send":
+                self._send(200, call_send(self.headers, self._body(MAX_CALL_BODY)))
+            elif method == "POST" and path == "/bayx/call/poll":
+                self._send(200, call_poll(self.headers))
+            elif method == "GET" and path == "/bayx/turn":
+                self._send(200, turn_server(self.headers))
             elif method == "GET" and path == "/bayx/admin/members":
                 require_admin(self.headers)
                 members = list_members()
@@ -323,6 +551,12 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
+    global FCM
+    if FCM_CREDENTIALS and os.path.exists(FCM_CREDENTIALS):
+        try:
+            FCM = Fcm(FCM_CREDENTIALS)
+        except Exception:
+            FCM = None
     server = ThreadingHTTPServer((LISTEN_HOST, LISTEN_PORT), Handler)
     server.serve_forever()
 

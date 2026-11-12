@@ -197,6 +197,14 @@ internal fun rememberToast(): (String) -> Unit {
     return remember(context) { { message: String -> Toast.makeText(context, message, Toast.LENGTH_SHORT).show() } }
 }
 
+/** Uygulamanın Android bildirim ayarlarını açar. */
+internal fun openNotificationSettings(context: android.content.Context) {
+    val intent = android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+        .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
+        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+    runCatching { context.startActivity(intent) }
+}
+
 internal fun formatTime(millis: Long): String {
     if (millis <= 0L) return ""
     val now = Calendar.getInstance()
@@ -415,6 +423,7 @@ fun ChatListScreen(me: AuthState.LoggedIn, onOpenChat: (String) -> Unit, onProfi
     var opening by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val toast = rememberToast()
+    val context = LocalContext.current
     val tabs = listOf(
         "Sohbetler" to Icons.Outlined.ChatBubbleOutline,
         "Kişiler" to Icons.Outlined.Group,
@@ -452,10 +461,10 @@ fun ChatListScreen(me: AuthState.LoggedIn, onOpenChat: (String) -> Unit, onProfi
                 Image(painterResource(R.drawable.ic_logo), contentDescription = null, modifier = Modifier.size(44.dp))
                 Spacer(Modifier.width(10.dp))
                 Box(Modifier.weight(1f)) { Wordmark(nameSize = 23.sp, subSize = 18.sp, centered = false) }
-                IconButton(onClick = { toast("Arama sonraki sürümde eklenecek.") }) {
+                IconButton(onClick = { toast("Sohbetlerde arama özelliği sonraki sürümde eklenecek.") }) {
                     Icon(Icons.Outlined.Search, "Ara", tint = Ink, modifier = Modifier.size(26.dp))
                 }
-                IconButton(onClick = { toast("Bildirimler sonraki sürümde eklenecek.") }) {
+                IconButton(onClick = { openNotificationSettings(context) }) {
                     Icon(Icons.Outlined.Notifications, "Bildirimler", tint = Ink, modifier = Modifier.size(26.dp))
                 }
                 IconButton(onClick = onProfile) { Icon(Icons.Filled.MoreVert, "Menü", tint = Ink) }
@@ -540,7 +549,9 @@ fun ChatListScreen(me: AuthState.LoggedIn, onOpenChat: (String) -> Unit, onProfi
             ) {
                 Row {
                     NavItem("Sohbetler", Icons.Filled.Sms, selected = true) { tab = 0 }
-                    NavItem("Aramalar", Icons.Outlined.Call, selected = false) { toast("Aramalar sonraki sürümde eklenecek.") }
+                    NavItem("Aramalar", Icons.Outlined.Call, selected = false) {
+                        toast("Aramak için bir sohbet aç ve üstteki telefon ya da kamera simgesine dokun.")
+                    }
                     NavItem("Medya", Icons.Outlined.PermMedia, selected = false) { toast("Medya sonraki sürümde eklenecek.") }
                     NavItem("Ayarlar", Icons.Outlined.Settings, selected = false, onClick = onProfile)
                 }

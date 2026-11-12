@@ -14,7 +14,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeoutOrNull
+import com.google.firebase.messaging.FirebaseMessaging
 import org.json.JSONObject
 import org.matrix.rustcomponents.sdk.AssetType
 import org.matrix.rustcomponents.sdk.AudioInfo
@@ -30,7 +32,11 @@ import org.matrix.rustcomponents.sdk.MediaSource
 import org.matrix.rustcomponents.sdk.Membership
 import org.matrix.rustcomponents.sdk.MessageType
 import org.matrix.rustcomponents.sdk.MsgLikeKind
+import org.matrix.rustcomponents.sdk.HttpPusherData
 import org.matrix.rustcomponents.sdk.ProfileDetails
+import org.matrix.rustcomponents.sdk.PushFormat
+import org.matrix.rustcomponents.sdk.PusherIdentifiers
+import org.matrix.rustcomponents.sdk.PusherKind
 import org.matrix.rustcomponents.sdk.ReceiptType
 import org.matrix.rustcomponents.sdk.Room
 import org.matrix.rustcomponents.sdk.RoomListEntriesDynamicFilterKind
@@ -147,7 +153,52 @@ object Bayx {
         if (::appContext.isInitialized) return
         appContext = context.applicationContext
         store = SecureStore(appContext)
+        Calls.init(appContext)
+        Notifier.createChannels(appContext)
         scope.launch { restore() }
+    }
+
+    /** Uygulama ekranda mı? (Bildirim gösterip göstermemeye karar vermek için.) */
+    val isForeground: Boolean
+        get() = foreground
+
+    /** Bildirime dokunularak açılması istenen sohbet. */
+    val pendingRoom = MutableStateFlow<String?>(null)
+
+    fun roomName(roomId: String): String? = rooms.value.firstOrNull { it.id == roomId }?.name
+
+    // -------------------------------------------------------------- bildirim
+
+    private const val PUSH_APP_ID = "com.tayfa.chat"
+
+    /** Synapse bildirimleri aynı sunucudaki Tayfa servisine iletir; servis de Firebase'e. */
+    private const val PUSH_URL = "http://127.0.0.1:8010/_matrix/push/v1/notify"
+
+    fun onPushToken(token: String) {
+        scope.launch { registerPush(token) }
+    }
+
+    private suspend fun registerPush(knownToken: String? = null) {
+        val c = client ?: return
+        val token = knownToken ?: runCatching { FirebaseMessaging.getInstance().token.await() }.getOrNull() ?: return
+        runCatching {
+            c.setPusher(
+                PusherIdentifiers(token, PUSH_APP_ID),
+                PusherKind.Http(HttpPusherData(PUSH_URL, PushFormat.EVENT_ID_ONLY, null)),
+                "Tayfa",
+                android.os.Build.MODEL ?: "Android",
+                null,
+                "tr",
+                false,
+            )
+        }
+    }
+
+    /** Bu cihazın bildirim kaydını siler; çıkıştan sonra eski hesabın bildirimleri gelmez. */
+    private suspend fun unregisterPush(c: Client?) {
+        val token = runCatching { FirebaseMessaging.getInstance().token.await() }.getOrNull()
+        if (c != null && token != null) runCatching { c.deletePusher(PusherIdentifiers(token, PUSH_APP_ID)) }
+        runCatching { FirebaseMessaging.getInstance().deleteToken().await() }
     }
 
     val accessToken: String?
@@ -278,10 +329,13 @@ object Bayx {
         authMutex.withLock {
             val c = client
             val sync = syncService
+            Calls.shutdown()
+            runCatching { withTimeoutOrNull(5_000) { unregisterPush(c) } }
             runCatching { withTimeoutOrNull(5_000) { sync?.stop() } }
             runCatching { withTimeoutOrNull(8_000) { c?.logout() } }
             teardown()
             wipeLocal()
+            Notifier.cancelAll(appContext)
             auth.value = AuthState.LoggedOut
         }
     }
@@ -289,8 +343,11 @@ object Bayx {
     private fun forceLocalLogout() {
         scope.launch {
             authMutex.withLock {
+                Calls.shutdown()
+                runCatching { withTimeoutOrNull(5_000) { unregisterPush(null) } }
                 teardown()
                 wipeLocal()
+                Notifier.cancelAll(appContext)
                 auth.value = AuthState.LoggedOut
             }
         }
@@ -348,6 +405,7 @@ object Bayx {
         roomListResult = result
         sync.start()
         startPresence()
+        scope.launch { registerPush() }
     }
 
     // ------------------------------------------------------ çevrimiçi durumu
@@ -368,6 +426,7 @@ object Bayx {
     /** Uygulama öne geldiğinde ya da arka plana geçtiğinde çağrılır. */
     fun setForeground(active: Boolean) {
         foreground = active
+        Calls.onForeground(active)
         val token = accessToken ?: return
         scope.launch {
             runCatching { Api.presence(token, active) }.onSuccess { if (active) online.value = it }
@@ -498,6 +557,7 @@ object Bayx {
         val room = c.getRoom(roomId) ?: runCatching { syncService?.roomListService()?.room(roomId) }.getOrNull()
             ?: return@withContext null
         val session = ChatSession(roomId)
+        Notifier.cancelRoom(appContext, roomId)
         runCatching {
             val info = room.roomInfo()
             session.title.value = info.displayName.orEmpty()

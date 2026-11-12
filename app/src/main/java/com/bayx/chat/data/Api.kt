@@ -17,12 +17,18 @@ object Api {
     const val HOMESERVER = "https://sohbet.acioglu.tr"
     const val SERVER_NAME = "sohbet.acioglu.tr"
 
-    private fun request(method: String, path: String, body: JSONObject? = null, token: String? = null): JSONObject {
+    private fun request(
+        method: String,
+        path: String,
+        body: JSONObject? = null,
+        token: String? = null,
+        readTimeoutMs: Int = 20_000,
+    ): JSONObject {
         val conn = URL(HOMESERVER + path).openConnection() as HttpURLConnection
         try {
             conn.requestMethod = method
             conn.connectTimeout = 15_000
-            conn.readTimeout = 20_000
+            conn.readTimeout = readTimeoutMs
             conn.setRequestProperty("Accept", "application/json")
             if (token != null) conn.setRequestProperty("Authorization", "Bearer $token")
             if (body != null) {
@@ -99,6 +105,27 @@ object Api {
         val array = json.optJSONArray("online")
         if (array == null) emptySet() else (0 until array.length()).map { array.getString(it) }.toSet()
     }
+
+    // ------------------------------------------------------------ arama
+
+    suspend fun callSend(token: String, to: String, callId: String, type: String, data: JSONObject) = io {
+        request(
+            "POST",
+            "/bayx/call/send",
+            JSONObject().put("to", to).put("call_id", callId).put("type", type).put("data", data),
+            token,
+        )
+        Unit
+    }
+
+    /** Uzun yoklama: sunucu en fazla 25 saniye bekletir. */
+    suspend fun callPoll(token: String): List<JSONObject> = io {
+        val json = request("POST", "/bayx/call/poll", JSONObject(), token, readTimeoutMs = 40_000)
+        val array = json.optJSONArray("events")
+        if (array == null) emptyList() else (0 until array.length()).map { array.getJSONObject(it) }
+    }
+
+    suspend fun turn(token: String): JSONObject = io { request("GET", "/bayx/turn", token = token) }
 
     suspend fun adminMembers(token: String): AdminMembers = io {
         val json = request("GET", "/bayx/admin/members", token = token)

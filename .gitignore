@@ -6,4 +6,3 @@ local.properties
 .kotlin/
 *.jks
 *.keystore
-google-services.json

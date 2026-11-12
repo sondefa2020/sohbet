@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -12,8 +13,8 @@ android {
         applicationId = "com.tayfa.chat"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "0.5.0"
+        versionCode = 6
+        versionName = "0.6.0"
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }
@@ -68,4 +69,10 @@ dependencies {
     // Matrix Rust SDK: denetlenmiş uçtan uca şifreleme (vodozemac) dahil.
     implementation("org.matrix.rustcomponents:sdk-android:26.11.11-nightly")
     implementation("net.java.dev.jna:jna:5.19.1@aar")
+    // Bildirimler (yalnızca uyandırma; mesaj içeriği Google'dan geçmez)
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+    implementation("com.google.firebase:firebase-messaging")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
+    // Sesli/görüntülü arama
+    implementation("io.getstream:stream-webrtc-android:1.3.9")
 }

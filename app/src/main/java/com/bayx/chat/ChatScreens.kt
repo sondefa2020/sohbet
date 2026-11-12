@@ -63,6 +63,7 @@ import com.bayx.chat.data.Api
 import com.bayx.chat.data.ApiException
 import com.bayx.chat.data.AuthState
 import com.bayx.chat.data.Bayx
+import com.bayx.chat.data.Calls
 import com.bayx.chat.data.ChatMessage
 import com.bayx.chat.data.ChatSession
 import com.bayx.chat.data.Member
@@ -123,6 +124,15 @@ private fun ChatContent(session: ChatSession, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     val toast = rememberToast()
     val context = LocalContext.current
+    val askCallPermissions = rememberCallPermissions { toast("Arama için mikrofon (ve görüntülü aramada kamera) izni gerekli.") }
+    fun placeCall(video: Boolean) {
+        val peer = partner
+        when {
+            !session.isDirect -> toast("Grup araması henüz yok; birebir sohbetten arayabilirsin.")
+            peer == null -> toast("Bu sohbette arama yapılamıyor.")
+            else -> askCallPermissions(video) { Calls.startCall(peer, title.ifBlank { peer }, video) }
+        }
+    }
 
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) listState.scrollToItem(messages.size - 1)
@@ -256,10 +266,10 @@ private fun ChatContent(session: ChatSession, onBack: () -> Unit) {
             }) {
                 Icon(Icons.Outlined.Vibration, "Titreşim gönder", tint = Color(0xFF8A4B00))
             }
-            IconButton(onClick = { toast("Sesli arama sonraki sürümde eklenecek.") }) {
+            IconButton(onClick = { placeCall(false) }) {
                 Icon(Icons.Outlined.Call, "Sesli ara", tint = Ink)
             }
-            IconButton(onClick = { toast("Görüntülü arama sonraki sürümde eklenecek.") }) {
+            IconButton(onClick = { placeCall(true) }) {
                 Icon(Icons.Outlined.Videocam, "Görüntülü ara", tint = Ink, modifier = Modifier.size(28.dp))
             }
         }
@@ -499,6 +509,7 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
     var info by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val toast = rememberToast()
+    val context = LocalContext.current
     val name = me.displayName.ifEmpty { me.userId.substringBefore(":").removePrefix("@") }
 
     Column(
@@ -546,7 +557,7 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
                         "yaptığında tamamen silinir."
                 }
                 HorizontalDivider(color = Line)
-                SettingRow(Icons.Outlined.Notifications, "Bildirimler") { toast("Bildirimler sonraki sürümde eklenecek.") }
+                SettingRow(Icons.Outlined.Notifications, "Bildirimler") { openNotificationSettings(context) }
                 HorizontalDivider(color = Line)
                 SettingRow(Icons.Outlined.Storage, "Depolama ve Medya") { toast("Medya sonraki sürümde eklenecek.") }
                 HorizontalDivider(color = Line)

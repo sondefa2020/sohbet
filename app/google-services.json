@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "986217661809",
+    "project_id": "tayfa-42781",
+    "storage_bucket": "tayfa-42781.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:986217661809:android:2bb1acbe15c000feb062d0",
+        "android_client_info": {
+          "package_name": "com.tayfa.chat"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCbmOWUkbrMNncmZdgZaX2EC6uGLzp5G60"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
