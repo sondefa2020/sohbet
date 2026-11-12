@@ -1,13 +1,38 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <!-- Arkadaki beyaz balon -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M38,35h32a8,8 0,0 1,8 8v16a8,8 0,0 1,-8 8h-16l-10,9v-9h-6a8,8 0,0 1,-8 -8v-16a8,8 0,0 1,8 -8z" />
+        android:pathData="M37,29h24a8,8 0,0 1,8 8v14a8,8 0,0 1,-8 8h-16l-9,8v-8.2a8,8 0,0 1,-7 -7.8v-14a8,8 0,0 1,8 -8z" />
+    <!-- Öndeki yeşil balonun çevresindeki ayırıcı boşluk -->
     <path
         android:fillColor="#1565E0"
-        android:pathData="M41,51a3,3 0,1 0,6 0a3,3 0,1 0,-6 0zM51,51a3,3 0,1 0,6 0a3,3 0,1 0,-6 0zM61,51a3,3 0,1 0,6 0a3,3 0,1 0,-6 0z" />
+        android:pathData="M49,42h24a11,11 0,0 1,11 11v13a11,11 0,0 1,-7 10.300v8.700a2.500,2.500 0,0 1,-4.200 1.900l-8.900,-9.900h-14.900a11,11 0,0 1,-11 -11v-13a11,11 0,0 1,11 -11z" />
+    <!-- Öndeki yeşil balon -->
+    <path android:pathData="M49,45h24a8,8 0,0 1,8 8v13a8,8 0,0 1,-7 7.900v8.100l-9,-8h-16a8,8 0,0 1,-8 -8v-13a8,8 0,0 1,8 -8z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="61"
+                android:startY="45"
+                android:endX="61"
+                android:endY="78"
+                android:startColor="#7BEFA8"
+                android:endColor="#1FA866" />
+        </aapt:attr>
+    </path>
+    <!-- Balonun üstündeki parlaklık -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.30"
+        android:pathData="M49,47.500h24a5.500,5.500 0,0 1,5.500 5.500v2c-10,-3.500 -25,-3.500 -35,0v-2a5.500,5.500 0,0 1,5.500 -5.500z" />
+    <!-- Üç nokta -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M49.400,61a2.600,2.600 0,1 0,5.200 0a2.600,2.600 0,1 0,-5.200 0zM58.400,61a2.600,2.600 0,1 0,5.200 0a2.600,2.600 0,1 0,-5.200 0zM67.400,61a2.600,2.600 0,1 0,5.200 0a2.600,2.600 0,1 0,-5.200 0z" />
 </vector>

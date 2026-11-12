@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="64dp"
+    android:height="64dp"
+    android:viewportWidth="64"
+    android:viewportHeight="64">
+    <group
+        android:translateX="-23"
+        android:translateY="-24">
+        <!-- Arkadaki mavi balon -->
+        <path android:pathData="M37,29h24a8,8 0,0 1,8 8v14a8,8 0,0 1,-8 8h-16l-9,8v-8.2a8,8 0,0 1,-7 -7.8v-14a8,8 0,0 1,8 -8z">
+            <aapt:attr name="android:fillColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="49"
+                    android:startY="29"
+                    android:endX="49"
+                    android:endY="64"
+                    android:startColor="#4A9BFB"
+                    android:endColor="#0F5BD8" />
+            </aapt:attr>
+        </path>
+        <path
+            android:fillColor="#FFFFFF"
+            android:fillAlpha="0.26"
+            android:pathData="M37,31.500h24a5.500,5.500 0,0 1,5.500 5.500v2c-10,-3.500 -25,-3.500 -35,0v-2a5.500,5.500 0,0 1,5.500 -5.500z" />
+        <!-- Öndeki yeşil balonun beyaz çerçevesi -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M49,42h24a11,11 0,0 1,11 11v13a11,11 0,0 1,-7 10.300v8.700a2.500,2.500 0,0 1,-4.200 1.900l-8.900,-9.900h-14.900a11,11 0,0 1,-11 -11v-13a11,11 0,0 1,11 -11z" />
+        <!-- Öndeki yeşil balon -->
+        <path android:pathData="M49,45h24a8,8 0,0 1,8 8v13a8,8 0,0 1,-7 7.900v8.100l-9,-8h-16a8,8 0,0 1,-8 -8v-13a8,8 0,0 1,8 -8z">
+            <aapt:attr name="android:fillColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="61"
+                    android:startY="45"
+                    android:endX="61"
+                    android:endY="78"
+                    android:startColor="#7BEFA8"
+                    android:endColor="#1FA866" />
+            </aapt:attr>
+        </path>
+        <path
+            android:fillColor="#FFFFFF"
+            android:fillAlpha="0.30"
+            android:pathData="M49,47.500h24a5.500,5.500 0,0 1,5.500 5.500v2c-10,-3.500 -25,-3.500 -35,0v-2a5.500,5.500 0,0 1,5.500 -5.500z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M49.400,61a2.600,2.600 0,1 0,5.200 0a2.600,2.600 0,1 0,-5.200 0zM58.400,61a2.600,2.600 0,1 0,5.200 0a2.600,2.600 0,1 0,-5.200 0zM67.400,61a2.600,2.600 0,1 0,5.200 0a2.600,2.600 0,1 0,-5.200 0z" />
+    </group>
+</vector>

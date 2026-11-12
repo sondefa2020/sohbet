@@ -1,6 +1,7 @@
 package com.bayx.chat
 
 import android.widget.Toast
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -41,6 +42,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -214,7 +216,7 @@ fun SplashScreen() {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Icon(Icons.Outlined.Sms, contentDescription = null, tint = Blue, modifier = Modifier.size(96.dp))
+        Image(painterResource(R.drawable.ic_logo), contentDescription = null, modifier = Modifier.size(96.dp))
         Spacer(Modifier.height(8.dp))
         Wordmark(nameSize = 36.sp, subSize = 30.sp, centered = true)
         Spacer(Modifier.height(28.dp))
@@ -231,7 +233,7 @@ fun OfflineScreen() {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Icon(Icons.Outlined.Sms, contentDescription = null, tint = Blue, modifier = Modifier.size(80.dp))
+        Image(painterResource(R.drawable.ic_logo), contentDescription = null, modifier = Modifier.size(80.dp))
         Spacer(Modifier.height(16.dp))
         Text("Bağlantı kurulamadı", color = Ink, fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
@@ -288,7 +290,7 @@ private fun LoginScreen(onRegister: () -> Unit) {
 
     AuthPage {
         Spacer(Modifier.height(64.dp))
-        Icon(Icons.Outlined.Sms, contentDescription = "Tayfa logosu", tint = Blue, modifier = Modifier.size(104.dp))
+        Image(painterResource(R.drawable.ic_logo), contentDescription = "Tayfa logosu", modifier = Modifier.size(104.dp))
         Spacer(Modifier.height(10.dp))
         Wordmark(nameSize = 40.sp, subSize = 34.sp, centered = true)
         Spacer(Modifier.height(44.dp))
@@ -447,7 +449,7 @@ fun ChatListScreen(me: AuthState.LoggedIn, onOpenChat: (String) -> Unit, onProfi
                 Modifier.fillMaxWidth().padding(start = 20.dp, end = 6.dp, top = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Outlined.Sms, contentDescription = null, tint = Blue, modifier = Modifier.size(44.dp))
+                Image(painterResource(R.drawable.ic_logo), contentDescription = null, modifier = Modifier.size(44.dp))
                 Spacer(Modifier.width(10.dp))
                 Box(Modifier.weight(1f)) { Wordmark(nameSize = 23.sp, subSize = 18.sp, centered = false) }
                 IconButton(onClick = { toast("Arama sonraki sürümde eklenecek.") }) {
