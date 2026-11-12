@@ -111,7 +111,7 @@ internal fun Avatar(name: String, size: Dp, online: Boolean = false) {
 @Composable
 internal fun Wordmark(nameSize: TextUnit, subSize: TextUnit, centered: Boolean) {
     Column(horizontalAlignment = if (centered) Alignment.CenterHorizontally else Alignment.Start) {
-        Text("Bayx", fontSize = nameSize, fontWeight = FontWeight.ExtraBold, fontStyle = FontStyle.Italic, color = Ink)
+        Text("Tayfa", fontSize = nameSize, fontWeight = FontWeight.ExtraBold, fontStyle = FontStyle.Italic, color = Ink)
         Text("Chat", fontSize = subSize, fontWeight = FontWeight.Bold, fontStyle = FontStyle.Italic, color = SoftBlue)
     }
 }
@@ -288,7 +288,7 @@ private fun LoginScreen(onRegister: () -> Unit) {
 
     AuthPage {
         Spacer(Modifier.height(64.dp))
-        Icon(Icons.Outlined.Sms, contentDescription = "Bayx logosu", tint = Blue, modifier = Modifier.size(104.dp))
+        Icon(Icons.Outlined.Sms, contentDescription = "Tayfa logosu", tint = Blue, modifier = Modifier.size(104.dp))
         Spacer(Modifier.height(10.dp))
         Wordmark(nameSize = 40.sp, subSize = 34.sp, centered = true)
         Spacer(Modifier.height(44.dp))

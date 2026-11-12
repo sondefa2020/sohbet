@@ -165,7 +165,7 @@ object Bayx {
             .homeserverUrl(Api.HOMESERVER)
             .sqliteStore(SqliteStoreBuilder(dataDir().absolutePath, cacheDir().absolutePath).passphrase(passphrase))
             .autoEnableCrossSigning(true)
-            .userAgent("Bayx Android")
+            .userAgent("Tayfa Android")
         if (forLogin) builder = builder.slidingSyncVersionBuilder(SlidingSyncVersionBuilder.NATIVE)
         return builder.build()
     }
@@ -221,7 +221,7 @@ object Bayx {
             var c: Client? = null
             try {
                 c = buildClient(passphrase, forLogin = true)
-                c.login(username.trim().lowercase(), password, "Bayx Android", null)
+                c.login(username.trim().lowercase(), password, "Tayfa Android", null)
                 val session = c.session()
                 when (Api.accountProblem(session.accessToken)) {
                     null -> Unit

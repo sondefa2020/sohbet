@@ -19,5 +19,5 @@ dependencyResolutionManagement {
         }
     }
 }
-rootProject.name = "Bayx"
+rootProject.name = "Tayfa"
 include(":app")
