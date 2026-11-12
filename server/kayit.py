@@ -3,7 +3,7 @@
 
 Synapse'in önünde duran küçük bir yardımcı servis:
   * Yeni kayıtları KİLİTLİ hesap olarak açar; yönetici onaylayana kadar kullanılamaz.
-  * Üye sayısını sınırlar (varsayılan 10).
+  * Üye sayısını sınırlar (varsayılan 50).
   * Yöneticinin onaylama, reddetme, üye çıkarma ve şifre sıfırlama işlemlerini yapar.
 
 Yalnızca Python standart kütüphanesini kullanır. Ayarlar ortam değişkenlerinden okunur.
@@ -23,7 +23,7 @@ SYNAPSE = os.environ.get("BAYX_SYNAPSE_URL", "http://127.0.0.1:8008").rstrip("/"
 DOMAIN = os.environ["BAYX_DOMAIN"]
 ADMIN_TOKEN = os.environ["BAYX_ADMIN_TOKEN"]
 BOT_USER = os.environ.get("BAYX_BOT_USER", "bayx-yonetim")
-MAX_MEMBERS = int(os.environ.get("BAYX_MAX_MEMBERS", "10"))
+MAX_MEMBERS = int(os.environ.get("BAYX_MAX_MEMBERS", "50"))
 LISTEN_HOST = os.environ.get("BAYX_LISTEN_HOST", "127.0.0.1")
 LISTEN_PORT = int(os.environ.get("BAYX_LISTEN_PORT", "8010"))
 
