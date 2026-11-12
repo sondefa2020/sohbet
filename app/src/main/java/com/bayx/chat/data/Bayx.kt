@@ -101,6 +101,9 @@ object Bayx {
     private val roomEntries = ArrayList<Room>()
     private var refreshJob: Job? = null
 
+    /** SDK platform başlatması başarısız olduysa nedeni; giriş hatalarında gösterilir. */
+    @Volatile var platformError: String? = null
+
     val auth = MutableStateFlow<AuthState>(AuthState.Loading)
     val rooms = MutableStateFlow<List<ChatSummary>>(emptyList())
 
@@ -224,7 +227,14 @@ object Bayx {
         e is ClientException.MatrixApi && e.code == "M_USER_DEACTIVATED" -> "Bu hesap kapatılmış."
         e is ClientException.MatrixApi && e.code == "M_LIMIT_EXCEEDED" -> "Çok fazla deneme yapıldı. Biraz sonra tekrar dene."
         e is ApiException -> e.message ?: "Giriş yapılamadı."
-        else -> "Sunucuya bağlanılamadı. İnternet bağlantını kontrol edip tekrar dene."
+        else -> "Sunucuya bağlanılamadı. İnternet bağlantını kontrol edip tekrar dene." + errorDetail(e)
+    }
+
+    /** Sorun giderme için hatanın teknik özeti (şifre ya da anahtar içermez). */
+    private fun errorDetail(e: Exception): String {
+        val text = (e::class.simpleName ?: "Hata") + ": " + (e.message ?: "").take(300)
+        val platform = platformError?.let { "\nPlatform: " + it.take(200) } ?: ""
+        return "\n\nAyrıntı: $text$platform"
     }
 
     /** Oturumu sunucuda sonlandırır ve bu cihazdaki tüm anahtarları, mesajları ve önbelleği siler. */
