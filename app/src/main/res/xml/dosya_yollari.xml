@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Kamera çekimleri yalnızca uygulamanın özel önbelleğine yazılır; galeriye kaydedilmez. -->
+    <cache-path name="cekim" path="cekim/" />
+</paths>

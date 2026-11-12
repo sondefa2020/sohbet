@@ -202,7 +202,7 @@ internal fun formatTime(millis: Long): String {
     val sameDay = now.get(Calendar.YEAR) == then.get(Calendar.YEAR) &&
         now.get(Calendar.DAY_OF_YEAR) == then.get(Calendar.DAY_OF_YEAR)
     val pattern = if (sameDay) "HH:mm" else "dd.MM.yy"
-    return SimpleDateFormat(pattern, Locale.getDefault()).format(Date(millis))
+    return SimpleDateFormat(pattern, Locale.forLanguageTag("tr")).format(Date(millis))
 }
 
 // ---------- Açılış, çevrimdışı ----------

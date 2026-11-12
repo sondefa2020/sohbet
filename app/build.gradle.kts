@@ -12,14 +12,33 @@ android {
         applicationId = "com.bayx.chat"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0"
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }
     }
 
+    // CI'da kalıcı imzalama anahtarı verilmişse onu kullan; böylece güncellemeler eski sürümün
+    // üzerine kurulabilir. Verilmemişse varsayılan debug anahtarıyla imzalanır.
+    val keystoreFile = System.getenv("BAYX_KEYSTORE_FILE")
+    val keystorePass = System.getenv("BAYX_KEYSTORE_PASS")
+    val hasKeystore = !keystoreFile.isNullOrEmpty() && !keystorePass.isNullOrEmpty()
+    signingConfigs {
+        if (hasKeystore) {
+            create("bayx") {
+                storeFile = file(keystoreFile!!)
+                storePassword = keystorePass
+                keyAlias = "bayx"
+                keyPassword = keystorePass
+            }
+        }
+    }
+
     buildTypes {
+        debug {
+            if (hasKeystore) signingConfig = signingConfigs.getByName("bayx")
+        }
         release {
             isMinifyEnabled = false
         }

@@ -1,5 +1,20 @@
 package com.bayx.chat
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
+import com.bayx.chat.data.MediaTools
+import com.bayx.chat.data.VoiceRecorder
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import java.io.File
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -92,12 +107,106 @@ private fun ChatContent(session: ChatSession, onBack: () -> Unit) {
     val messages by session.messages.collectAsState()
     val title by session.title.collectAsState()
     var draft by remember { mutableStateOf("") }
+    var showAttach by remember { mutableStateOf(false) }
+    var sending by remember { mutableStateOf(false) }
+    var viewer by remember { mutableStateOf<ChatMessage?>(null) }
+    var recording by remember { mutableStateOf(false) }
+    var recordSeconds by remember { mutableIntStateOf(0) }
+    var cameraFile by remember { mutableStateOf<File?>(null) }
+    val recorder = remember { VoiceRecorder() }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val toast = rememberToast()
+    val context = LocalContext.current
 
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) listState.scrollToItem(messages.size - 1)
+    }
+    LaunchedEffect(recording) {
+        while (recording) {
+            delay(150)
+            recorder.sample()
+            recordSeconds = recorder.elapsedSeconds()
+        }
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            recorder.cancel()
+            VoicePlayer.stop()
+        }
+    }
+
+    /** Medyayı hazırlayıp gönderir; [block] başarısızsa [failMessage] gösterilir. */
+    fun sendMedia(failMessage: String, block: suspend () -> Boolean) {
+        sending = true
+        scope.launch {
+            val ok = runCatching { block() }.getOrDefault(false)
+            sending = false
+            if (!ok) toast(failMessage)
+        }
+    }
+
+    fun startRecording() {
+        VoicePlayer.stop()
+        if (recorder.start(context)) {
+            recordSeconds = 0
+            recording = true
+        } else {
+            toast("Kayıt başlatılamadı.")
+        }
+    }
+
+    val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) {
+            sendMedia("Fotoğraf gönderilemedi.") {
+                val image = withContext(Dispatchers.IO) { MediaTools.prepareImage(context, uri) }
+                if (image == null) false else Bayx.sendImage(session, image.bytes, image.width, image.height)
+            }
+        }
+    }
+    val pickVideo = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) {
+            sendMedia("Video gönderilemedi. En fazla 50 MB'lık videolar gönderilebilir.") {
+                val video = withContext(Dispatchers.IO) { MediaTools.prepareVideo(context, uri) }
+                if (video == null) {
+                    false
+                } else {
+                    Bayx.sendVideo(
+                        session, video.bytes, video.mime, video.width, video.height, video.durationMs,
+                        video.thumbnail, video.thumbWidth, video.thumbHeight,
+                    )
+                }
+            }
+        }
+    }
+    val takePicture = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { taken ->
+        val file = cameraFile
+        cameraFile = null
+        if (taken && file != null) {
+            sendMedia("Fotoğraf gönderilemedi.") {
+                val image = withContext(Dispatchers.IO) {
+                    val prepared = MediaTools.prepareImage(context, Uri.fromFile(file))
+                    file.delete()
+                    prepared
+                }
+                if (image == null) false else Bayx.sendImage(session, image.bytes, image.width, image.height)
+            }
+        } else {
+            file?.delete()
+        }
+    }
+    val locationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+        if (result.values.any { it }) {
+            sendMedia("Konum alınamadı. Konum servisinin açık olduğunu kontrol et.") {
+                val location = MediaTools.currentLocation(context)
+                if (location == null) false else Bayx.sendLocation(session, location.latitude, location.longitude)
+            }
+        } else {
+            toast("Konum izni verilmedi.")
+        }
+    }
+    val microphonePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) startRecording() else toast("Mikrofon izni verilmedi.")
     }
 
     Column(Modifier.fillMaxSize().background(Bg).systemBarsPadding().imePadding()) {
@@ -136,76 +245,136 @@ private fun ChatContent(session: ChatSession, onBack: () -> Unit) {
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            items(messages, key = { it.key }) { msg -> MessageRow(msg, showSender = !session.isDirect) }
+            items(messages, key = { it.key }) { msg ->
+                MessageRow(msg, showSender = !session.isDirect, onOpen = { viewer = it })
+            }
         }
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Surface(shape = CircleShape, color = Color.White, shadowElevation = 4.dp, modifier = Modifier.size(48.dp)) {
-                IconButton(onClick = { toast("Fotoğraf, video ve konum sonraki sürümde eklenecek.") }) {
-                    Icon(Icons.Filled.Add, "Ekle", tint = Ink)
-                }
-            }
-            Spacer(Modifier.width(10.dp))
-            Surface(
-                shape = RoundedCornerShape(28.dp),
-                color = Color.White,
-                shadowElevation = 4.dp,
-                modifier = Modifier.weight(1f),
-            ) {
-                TextField(
-                    value = draft,
-                    onValueChange = { draft = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("Mesaj yaz...", color = Muted) },
-                    maxLines = 4,
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent,
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                    ),
-                )
-            }
-            Spacer(Modifier.width(10.dp))
-            Box(
-                Modifier
-                    .size(56.dp)
-                    .shadow(8.dp, CircleShape, ambientColor = Blue, spotColor = Blue)
-                    .clip(CircleShape)
-                    .background(BlueBrush)
-                    .clickable {
-                        val text = draft.trim()
-                        if (text.isEmpty()) {
-                            toast("Sesli mesaj sonraki sürümde eklenecek.")
-                        } else {
-                            draft = ""
-                            scope.launch {
-                                if (!Bayx.sendText(session, text)) toast("Mesaj gönderilemedi.")
-                            }
+        if (sending) {
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth().height(3.dp), color = Blue, trackColor = Line)
+        }
+        if (recording) {
+            RecordingBar(
+                seconds = recordSeconds,
+                onCancel = {
+                    recorder.cancel()
+                    recording = false
+                },
+                onSend = {
+                    val result = recorder.stop()
+                    recording = false
+                    if (result == null) {
+                        toast("Kayıt çok kısa.")
+                    } else {
+                        sendMedia("Sesli mesaj gönderilemedi.") {
+                            Bayx.sendVoice(session, result.bytes, result.mime, result.durationMs, result.waveform)
                         }
-                    },
-                contentAlignment = Alignment.Center,
+                    }
+                },
+            )
+        } else {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (draft.isBlank()) {
-                    Icon(Icons.Filled.Mic, "Sesli mesaj kaydet", tint = Color.White, modifier = Modifier.size(26.dp))
-                } else {
-                    Icon(Icons.AutoMirrored.Filled.Send, "Gönder", tint = Color.White)
+                Surface(shape = CircleShape, color = Color.White, shadowElevation = 4.dp, modifier = Modifier.size(48.dp)) {
+                    IconButton(onClick = { showAttach = true }) { Icon(Icons.Filled.Add, "Ekle", tint = Ink) }
+                }
+                Spacer(Modifier.width(10.dp))
+                Surface(
+                    shape = RoundedCornerShape(28.dp),
+                    color = Color.White,
+                    shadowElevation = 4.dp,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    TextField(
+                        value = draft,
+                        onValueChange = { draft = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Mesaj yaz...", color = Muted) },
+                        maxLines = 4,
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                        ),
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
+                Box(
+                    Modifier
+                        .size(56.dp)
+                        .shadow(8.dp, CircleShape, ambientColor = Blue, spotColor = Blue)
+                        .clip(CircleShape)
+                        .background(BlueBrush)
+                        .clickable {
+                            val text = draft.trim()
+                            if (text.isNotEmpty()) {
+                                draft = ""
+                                scope.launch {
+                                    if (!Bayx.sendText(session, text)) toast("Mesaj gönderilemedi.")
+                                }
+                            } else if (
+                                ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+                                PackageManager.PERMISSION_GRANTED
+                            ) {
+                                startRecording()
+                            } else {
+                                microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
+                            }
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (draft.isBlank()) {
+                        Icon(Icons.Filled.Mic, "Sesli mesaj kaydet", tint = Color.White, modifier = Modifier.size(26.dp))
+                    } else {
+                        Icon(Icons.AutoMirrored.Filled.Send, "Gönder", tint = Color.White)
+                    }
                 }
             }
         }
     }
+
+    if (showAttach) {
+        AttachSheet(
+            onDismiss = { showAttach = false },
+            onPhoto = {
+                showAttach = false
+                pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+            },
+            onCamera = {
+                showAttach = false
+                val launched = runCatching {
+                    val file = MediaTools.newCameraFile(context)
+                    cameraFile = file
+                    takePicture.launch(FileProvider.getUriForFile(context, context.packageName + ".dosya", file))
+                }.isSuccess
+                if (!launched) toast("Kamera açılamadı.")
+            },
+            onVideo = {
+                showAttach = false
+                pickVideo.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
+            },
+            onLocation = {
+                showAttach = false
+                locationPermission.launch(
+                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
+                )
+            },
+        )
+    }
+
+    viewer?.let { msg -> MediaViewerDialog(msg) { viewer = null } }
 }
 
 private fun formatDay(millis: Long): String =
-    SimpleDateFormat("d MMMM yyyy", Locale("tr")).format(Date(millis))
+    SimpleDateFormat("d MMMM yyyy", Locale.forLanguageTag("tr")).format(Date(millis))
 
 private fun formatClock(millis: Long): String =
-    SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(millis))
+    SimpleDateFormat("HH:mm", Locale.forLanguageTag("tr")).format(Date(millis))
 
 @Composable
-private fun MessageRow(msg: ChatMessage, showSender: Boolean) {
+private fun MessageRow(msg: ChatMessage, showSender: Boolean, onOpen: (ChatMessage) -> Unit) {
     if (msg.kind == MsgKind.DATE) {
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             Text(
@@ -228,6 +397,7 @@ private fun MessageRow(msg: ChatMessage, showSender: Boolean) {
     )
     val fg = if (msg.mine) Color.White else Ink
     val sub = if (msg.mine) Color.White else Muted
+    val visual = msg.kind == MsgKind.IMAGE || msg.kind == MsgKind.VIDEO
     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (msg.mine) Arrangement.End else Arrangement.Start) {
         Surface(
             shape = shape,
@@ -235,14 +405,29 @@ private fun MessageRow(msg: ChatMessage, showSender: Boolean) {
             shadowElevation = 3.dp,
             modifier = Modifier.widthIn(max = 310.dp),
         ) {
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+            Column(
+                Modifier.padding(horizontal = if (visual) 6.dp else 16.dp, vertical = if (visual) 6.dp else 10.dp),
+            ) {
                 if (showSender && !msg.mine) {
-                    Text(msg.sender, color = Blue, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        msg.sender,
+                        color = Blue,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = if (visual) 8.dp else 0.dp),
+                    )
                     Spacer(Modifier.height(2.dp))
                 }
-                Text(msg.text, color = fg, fontSize = 16.sp)
+                if (msg.kind == MsgKind.TEXT || msg.media == null) {
+                    Text(msg.text, color = fg, fontSize = 16.sp)
+                } else {
+                    MediaContent(msg, tint = fg, onOpen = onOpen)
+                }
                 Spacer(Modifier.height(2.dp))
-                Row(Modifier.align(Alignment.End), verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    Modifier.align(Alignment.End).padding(horizontal = if (visual) 8.dp else 0.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     Text(formatClock(msg.time), color = sub, fontSize = 12.sp)
                     val stateIcon = when (msg.state) {
                         MsgState.SENDING -> Icons.Outlined.Schedule to "Gönderiliyor"

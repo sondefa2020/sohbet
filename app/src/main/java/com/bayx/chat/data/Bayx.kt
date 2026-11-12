@@ -1,6 +1,7 @@
 package com.bayx.chat.data
 
 import android.content.Context
+import android.util.LruCache
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -13,13 +14,17 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
+import org.matrix.rustcomponents.sdk.AssetType
+import org.matrix.rustcomponents.sdk.AudioInfo
 import org.matrix.rustcomponents.sdk.Client
 import org.matrix.rustcomponents.sdk.ClientBuilder
 import org.matrix.rustcomponents.sdk.ClientDelegate
 import org.matrix.rustcomponents.sdk.ClientException
 import org.matrix.rustcomponents.sdk.CreateRoomParameters
 import org.matrix.rustcomponents.sdk.EventSendState
+import org.matrix.rustcomponents.sdk.ImageInfo
 import org.matrix.rustcomponents.sdk.LatestEventValue
+import org.matrix.rustcomponents.sdk.MediaSource
 import org.matrix.rustcomponents.sdk.Membership
 import org.matrix.rustcomponents.sdk.MessageType
 import org.matrix.rustcomponents.sdk.MsgLikeKind
@@ -37,16 +42,22 @@ import org.matrix.rustcomponents.sdk.SlidingSyncVersionBuilder
 import org.matrix.rustcomponents.sdk.SqliteStoreBuilder
 import org.matrix.rustcomponents.sdk.SyncService
 import org.matrix.rustcomponents.sdk.TaskHandle
+import org.matrix.rustcomponents.sdk.ThumbnailInfo
 import org.matrix.rustcomponents.sdk.Timeline
 import org.matrix.rustcomponents.sdk.TimelineDiff
 import org.matrix.rustcomponents.sdk.TimelineItem
 import org.matrix.rustcomponents.sdk.TimelineItemContent
 import org.matrix.rustcomponents.sdk.TimelineListener
+import org.matrix.rustcomponents.sdk.UploadParameters
+import org.matrix.rustcomponents.sdk.UploadSource
+import org.matrix.rustcomponents.sdk.VideoInfo
 import org.matrix.rustcomponents.sdk.VirtualTimelineItem
 import org.matrix.rustcomponents.sdk.messageEventContentFromMarkdown
 import uniffi.matrix_sdk_common.BackgroundTaskFailureReason
 import java.io.File
 import java.security.SecureRandom
+import java.time.Duration
+import java.util.Locale
 
 sealed interface AuthState {
     data object Loading : AuthState
@@ -64,8 +75,19 @@ data class ChatSummary(
     val isDirect: Boolean,
 )
 
-enum class MsgKind { TEXT, DATE }
+enum class MsgKind { TEXT, DATE, IMAGE, VIDEO, VOICE, LOCATION }
 enum class MsgState { NONE, SENDING, SENT, FAILED }
+
+/** Bir mesaja bağlı medya: şifreli kaynak adresi ve gösterim için gereken bilgiler. */
+class MediaRef(
+    val source: MediaSource?,
+    val thumbnail: MediaSource?,
+    val mime: String,
+    val durationMs: Long,
+    val width: Int,
+    val height: Int,
+    val geoUri: String?,
+)
 
 data class ChatMessage(
     val key: String,
@@ -75,6 +97,7 @@ data class ChatMessage(
     val sender: String,
     val time: Long,
     val state: MsgState,
+    val media: MediaRef? = null,
 )
 
 /** Açık bir sohbetin canlı durumu. */
@@ -137,7 +160,7 @@ object Bayx {
     private fun randomPassphrase(): String {
         val bytes = ByteArray(32)
         SecureRandom().nextBytes(bytes)
-        return bytes.joinToString("") { "%02x".format(it) }
+        return bytes.joinToString("") { String.format(Locale.ROOT, "%02x", it) }
     }
 
     private suspend fun restore() = authMutex.withLock {
@@ -272,6 +295,7 @@ object Bayx {
         client = null
         synchronized(roomEntries) { roomEntries.clear() }
         rooms.value = emptyList()
+        mediaCache.evictAll()
     }
 
     /** Bu cihazda oturuma ait her şeyi siler: şifreli oturum kaydı, yerel veritabanı, medya ve önbellek. */
@@ -467,6 +491,7 @@ object Bayx {
         }
         val event = item.asEvent() ?: return null
         val text = describe(event.content) ?: return null
+        val media = mediaOf(event.content)
         val state = when (event.localSendState) {
             is EventSendState.NotSentYet -> MsgState.SENDING
             is EventSendState.SendingFailed -> MsgState.FAILED
@@ -475,8 +500,144 @@ object Bayx {
         }
         val profile = event.senderProfile
         val sender = if (profile is ProfileDetails.Ready) profile.displayName ?: event.sender else event.sender
-        return ChatMessage(key, MsgKind.TEXT, text, event.isOwn, sender, event.timestamp.toLong(), state)
+        return ChatMessage(
+            key, media?.first ?: MsgKind.TEXT, text, event.isOwn, sender, event.timestamp.toLong(), state, media?.second,
+        )
     }
+
+    private fun mediaOf(content: TimelineItemContent): Pair<MsgKind, MediaRef>? {
+        if (content !is TimelineItemContent.MsgLike) return null
+        val message = content.content.kind as? MsgLikeKind.Message ?: return null
+        return when (val type = message.content.msgType) {
+            is MessageType.Image -> {
+                val info = type.content.info
+                MsgKind.IMAGE to MediaRef(
+                    type.content.source, info?.thumbnailSource, info?.mimetype ?: "image/jpeg", 0L,
+                    info?.width?.toInt() ?: 0, info?.height?.toInt() ?: 0, null,
+                )
+            }
+            is MessageType.Video -> {
+                val info = type.content.info
+                MsgKind.VIDEO to MediaRef(
+                    type.content.source, info?.thumbnailSource, info?.mimetype ?: "video/mp4",
+                    info?.duration?.toMillis() ?: 0L, info?.width?.toInt() ?: 0, info?.height?.toInt() ?: 0, null,
+                )
+            }
+            is MessageType.Audio -> {
+                val info = type.content.info
+                MsgKind.VOICE to MediaRef(
+                    type.content.source, null, info?.mimetype ?: "audio/ogg",
+                    info?.duration?.toMillis() ?: type.content.audio?.duration?.toMillis() ?: 0L, 0, 0, null,
+                )
+            }
+            is MessageType.Location -> MsgKind.LOCATION to MediaRef(null, null, "", 0L, 0, 0, type.content.geoUri)
+            else -> null
+        }
+    }
+
+    // ----------------------------------------------------------------- medya
+
+    /** Çözülmüş medya yalnızca bellekte tutulur; diske düz (şifresiz) dosya yazılmaz. */
+    private val mediaCache = object : LruCache<String, ByteArray>(64 * 1024 * 1024) {
+        override fun sizeOf(key: String, value: ByteArray): Int = value.size
+    }
+
+    /** Medyayı indirir ve şifresini çözer. Kalıcı kopya SDK'nın şifreli veritabanında durur. */
+    suspend fun loadMedia(source: MediaSource): ByteArray? = withContext(Dispatchers.IO) {
+        val c = client ?: return@withContext null
+        val key = runCatching { source.url() }.getOrNull() ?: return@withContext null
+        mediaCache.get(key)?.let { return@withContext it }
+        val bytes = runCatching { c.getMediaContent(source) }.getOrNull() ?: return@withContext null
+        if (bytes.size < 32 * 1024 * 1024) mediaCache.put(key, bytes)
+        bytes
+    }
+
+    private fun upload(bytes: ByteArray, filename: String) = UploadParameters(
+        source = UploadSource.Data(bytes, filename),
+        caption = null,
+        formattedCaption = null,
+        mentions = null,
+        inReplyTo = null,
+    )
+
+    suspend fun sendImage(session: ChatSession, bytes: ByteArray, width: Int, height: Int): Boolean =
+        withContext(Dispatchers.IO) {
+            val timeline = session.timeline ?: return@withContext false
+            runCatching {
+                timeline.sendImage(
+                    upload(bytes, "foto.jpg"),
+                    null,
+                    ImageInfo(
+                        height = height.toULong(),
+                        width = width.toULong(),
+                        mimetype = "image/jpeg",
+                        size = bytes.size.toULong(),
+                        thumbnailInfo = null,
+                        thumbnailSource = null,
+                        blurhash = null,
+                        isAnimated = false,
+                    ),
+                ).join()
+            }.isSuccess
+        }
+
+    suspend fun sendVideo(
+        session: ChatSession,
+        bytes: ByteArray,
+        mime: String,
+        width: Int,
+        height: Int,
+        durationMs: Long,
+        thumbnail: ByteArray?,
+        thumbWidth: Int,
+        thumbHeight: Int,
+    ): Boolean = withContext(Dispatchers.IO) {
+        val timeline = session.timeline ?: return@withContext false
+        runCatching {
+            timeline.sendVideo(
+                upload(bytes, "video.mp4"),
+                thumbnail?.let { UploadSource.Data(it, "kapak.jpg") },
+                VideoInfo(
+                    duration = Duration.ofMillis(durationMs),
+                    height = height.toULong(),
+                    width = width.toULong(),
+                    mimetype = mime,
+                    size = bytes.size.toULong(),
+                    thumbnailInfo = thumbnail?.let {
+                        ThumbnailInfo(thumbHeight.toULong(), thumbWidth.toULong(), "image/jpeg", it.size.toULong())
+                    },
+                    thumbnailSource = null,
+                    blurhash = null,
+                ),
+            ).join()
+        }.isSuccess
+    }
+
+    suspend fun sendVoice(
+        session: ChatSession,
+        bytes: ByteArray,
+        mime: String,
+        durationMs: Long,
+        waveform: List<Float>,
+    ): Boolean = withContext(Dispatchers.IO) {
+        val timeline = session.timeline ?: return@withContext false
+        runCatching {
+            timeline.sendVoiceMessage(
+                upload(bytes, if (mime == "audio/ogg") "sesli-mesaj.ogg" else "sesli-mesaj.m4a"),
+                AudioInfo(Duration.ofMillis(durationMs), bytes.size.toULong(), mime),
+                waveform,
+            ).join()
+        }.isSuccess
+    }
+
+    suspend fun sendLocation(session: ChatSession, latitude: Double, longitude: Double): Boolean =
+        withContext(Dispatchers.IO) {
+            val timeline = session.timeline ?: return@withContext false
+            val coordinates = String.format(Locale.US, "%.6f,%.6f", latitude, longitude)
+            runCatching {
+                timeline.sendLocation("Konum: $coordinates", "geo:$coordinates", null, null, AssetType.SENDER, null)
+            }.isSuccess
+        }
 
     suspend fun sendText(session: ChatSession, text: String): Boolean = withContext(Dispatchers.IO) {
         val timeline = session.timeline ?: return@withContext false
