@@ -27,7 +27,21 @@ fail() { printf '\n\033[1;31mHATA: %s\033[0m\n' "$*" >&2; exit 1; }
 [ "$(id -u)" -eq 0 ] || fail "Bu komut root olarak çalıştırılmalı."
 [ -x "$NGINX_BIN" ] || fail "Panelin nginx'i bulunamadı: $NGINX_BIN"
 [ -f "$NGINX_CONF" ] || fail "Panelin nginx ayarı bulunamadı: $NGINX_CONF"
-[ -d "$INCLUDE_DIR" ] || fail "Alt alan adı ayar klasörü bulunamadı: $INCLUDE_DIR"
+# Panel bu klasörü yalnızca özel ayar eklendiğinde oluşturur; yoksa var olan en yakın
+# üst klasörün sahipliğiyle oluştur.
+if [ ! -d "$INCLUDE_DIR" ]; then
+    ANCESTOR="$INCLUDE_DIR"
+    while [ ! -d "$ANCESTOR" ]; do ANCESTOR="$(dirname "$ANCESTOR")"; done
+    case "$ANCESTOR" in
+        /home/*/*) ;;
+        *) fail "Alan adı klasörü bulunamadı: $INCLUDE_DIR (var olan en yakın klasör: $ANCESTOR)" ;;
+    esac
+    mkdir -p "$INCLUDE_DIR"
+    NEW_TOP="$INCLUDE_DIR"
+    while [ "$(dirname "$NEW_TOP")" != "$ANCESTOR" ]; do NEW_TOP="$(dirname "$NEW_TOP")"; done
+    chown -R --reference="$ANCESTOR" "$NEW_TOP"
+    chmod -R u=rwX,go=rX "$NEW_TOP"
+fi
 
 port_in_use() { ss -tln 2>/dev/null | grep -qE "[:.]$1 "; }
 
