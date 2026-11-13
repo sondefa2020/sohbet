@@ -11,6 +11,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import com.bayx.chat.data.Notifier
+import com.bayx.chat.data.Sounds
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.widget.Toast
@@ -115,19 +116,16 @@ fun BayxApp() {
     val context = LocalContext.current
     val shake = remember { Animatable(0f) }
 
-    // Gelen titreşim: telefonu titret, ekranı kısa süre salla ve kimden geldiğini göster.
+    // Titreşim (gelen ya da gönderilen): telefonu titret, vızıltı sesi çal ve ekranı salla.
     LaunchedEffect(Unit) {
-        Bayx.nudges.collect { sender ->
-            runCatching {
-                context.getSystemService(Vibrator::class.java)
-                    ?.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 140, 80, 140, 80, 220), -1))
+        Bayx.nudges.collect { event ->
+            Sounds.nudge()
+            if (!event.mine) Toast.makeText(context, "${event.sender} sana titreşim gönderdi!", Toast.LENGTH_SHORT).show()
+            repeat(6) {
+                shake.animateTo(18f, tween(40))
+                shake.animateTo(-18f, tween(40))
             }
-            Toast.makeText(context, "$sender sana titreşim gönderdi!", Toast.LENGTH_SHORT).show()
-            repeat(4) {
-                shake.animateTo(16f, tween(45))
-                shake.animateTo(-16f, tween(45))
-            }
-            shake.animateTo(0f, tween(45))
+            shake.animateTo(0f, tween(40))
         }
     }
 

@@ -21,7 +21,7 @@ import com.bayx.chat.R
  * (cihazda biliniyorsa) ve yeni mesaj olduğu gösterilir.
  */
 object Notifier {
-    private const val CH_MESSAGES = "mesajlar"
+    private const val CH_MESSAGES = "mesajlar_v2"
     private const val CH_CALLS = "aramalar"
     private const val CALL_NOTIFICATION_ID = 1001
     const val EXTRA_ROOM_ID = "tayfa_room_id"
@@ -29,9 +29,20 @@ object Notifier {
     fun createChannels(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
+        // Kanal ayarları oluşturulduktan sonra değişmediği için yeni ses yeni kanal ister.
+        manager.deleteNotificationChannel("mesajlar")
         manager.createNotificationChannel(
             NotificationChannel(CH_MESSAGES, "Mesajlar", NotificationManager.IMPORTANCE_HIGH).apply {
                 description = "Yeni mesaj bildirimleri"
+                setSound(
+                    android.net.Uri.parse("android.resource://${context.packageName}/${R.raw.tayfa_gelen}"),
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build(),
+                )
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 35, 60, 35)
                 setShowBadge(true)
                 lockscreenVisibility = android.app.Notification.VISIBILITY_PRIVATE
             },

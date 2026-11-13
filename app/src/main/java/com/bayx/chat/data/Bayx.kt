@@ -82,6 +82,7 @@ data class ChatSummary(
     val unread: Int,
     val isDirect: Boolean,
     val dmUserId: String? = null,
+    val lastFromMe: Boolean = false,
 )
 
 enum class MsgKind { TEXT, DATE, IMAGE, VIDEO, VOICE, LOCATION, NUDGE }
@@ -141,7 +142,13 @@ object Bayx {
     val online = MutableStateFlow<Set<String>>(emptySet())
 
     /** Gelen titreşimler: gönderenin görünen adı. */
-    val nudges = MutableSharedFlow<String>(extraBufferCapacity = 4)
+    val nudges = MutableSharedFlow<NudgeEvent>(extraBufferCapacity = 4)
+
+    /** Gelen ya da gönderilen titreşim. */
+    data class NudgeEvent(val sender: String, val mine: Boolean)
+
+    /** İlk oda listesi yüklenene kadar "yeni mesaj" sesi çalınmaz. */
+    @Volatile private var roomsPrimed = false
 
     /** SDK platform başlatması başarısız olduysa nedeni; giriş hatalarında gösterilir. */
     @Volatile var platformError: String? = null
@@ -154,6 +161,7 @@ object Bayx {
         appContext = context.applicationContext
         store = SecureStore(appContext)
         Calls.init(appContext)
+        Sounds.init(appContext)
         Notifier.createChannels(appContext)
         scope.launch { restore() }
     }
@@ -357,6 +365,7 @@ object Bayx {
         refreshJob?.cancel()
         presenceJob?.cancel()
         presenceJob = null
+        roomsPrimed = false
         online.value = emptySet()
         synchronized(nudgeSeen) { nudgeSeen.clear() }
         runCatching { roomListResult?.entriesStream()?.cancel() }
@@ -444,10 +453,14 @@ object Bayx {
     private fun noticeNudge(senderId: String, senderName: String, time: Long) {
         if (System.currentTimeMillis() - time > 20_000) return
         val fresh = synchronized(nudgeSeen) { nudgeSeen.add("$senderId:$time") }
-        if (fresh) nudges.tryEmit(senderName)
+        if (fresh) nudges.tryEmit(NudgeEvent(senderName, mine = false))
     }
 
-    suspend fun sendNudge(session: ChatSession): Boolean = sendText(session, NUDGE_BODY)
+    suspend fun sendNudge(session: ChatSession): Boolean {
+        val ok = sendText(session, NUDGE_BODY)
+        if (ok) nudges.tryEmit(NudgeEvent("", mine = true))
+        return ok
+    }
 
     private fun applyRoomUpdates(updates: List<RoomListEntriesUpdate>) {
         synchronized(roomEntries) {
@@ -478,7 +491,19 @@ object Bayx {
         refreshJob = scope.launch {
             delay(120)
             val snapshot = synchronized(roomEntries) { roomEntries.toList() }
-            rooms.value = snapshot.mapNotNull { room -> runCatching { summarize(room) }.getOrNull() }
+            val previous = rooms.value.associateBy { it.id }
+            val next = snapshot.mapNotNull { room -> runCatching { summarize(room) }.getOrNull() }
+            if (roomsPrimed && foreground) {
+                val now = System.currentTimeMillis()
+                val incoming = next.any { r ->
+                    val old = previous[r.id]
+                    !r.lastFromMe && r.lastMessage != NUDGE_LABEL && r.time > (old?.time ?: 0L) &&
+                        now - r.time < 30_000
+                }
+                if (incoming) Sounds.incoming()
+            }
+            rooms.value = next
+            if (next.isNotEmpty()) roomsPrimed = true
         }
     }
 
@@ -490,10 +515,12 @@ object Bayx {
         }
         var text = ""
         var time = 0L
+        var fromMe = false
         when (val latest = runCatching { room.latestEvent() }.getOrNull()) {
             is LatestEventValue.Remote -> {
                 text = describe(latest.content).orEmpty()
                 time = latest.timestamp.toLong()
+                fromMe = latest.isOwn
                 if (!latest.isOwn && text == NUDGE_LABEL) {
                     val profile = latest.profile
                     val name = if (profile is ProfileDetails.Ready) profile.displayName ?: latest.sender else latest.sender
@@ -503,6 +530,7 @@ object Bayx {
             is LatestEventValue.Local -> {
                 text = describe(latest.content).orEmpty()
                 time = latest.timestamp.toLong()
+                fromMe = true
             }
             is LatestEventValue.RemoteInvite -> {
                 text = "Sohbete davet edildin"
@@ -517,6 +545,7 @@ object Bayx {
             time = time,
             unread = info.numUnreadMessages.toInt(),
             isDirect = info.isDirect,
+            lastFromMe = fromMe,
             dmUserId = if (info.isDirect) dmPartner(room) else null,
         )
     }
@@ -775,7 +804,9 @@ object Bayx {
 
     suspend fun sendText(session: ChatSession, text: String): Boolean = withContext(Dispatchers.IO) {
         val timeline = session.timeline ?: return@withContext false
-        runCatching { timeline.send(messageEventContentFromMarkdown(text)) }.isSuccess
+        val ok = runCatching { timeline.send(messageEventContentFromMarkdown(text)) }.isSuccess
+        if (ok && text != NUDGE_BODY) Sounds.play(Sounds.Kind.OUTGOING)
+        ok
     }
 
     /** Kişiyle birebir sohbeti bulur ya da uçtan uca şifreli yeni bir sohbet açar; oda kimliğini döndürür. */
