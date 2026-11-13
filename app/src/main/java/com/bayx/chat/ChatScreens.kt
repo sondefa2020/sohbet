@@ -140,6 +140,8 @@ private fun ChatContent(session: ChatSession, onBack: () -> Unit) {
     var showGallery by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<ChatMessage?>(null) }
     if (session.secret) SecureWindow()
+    var lastNudge by remember { mutableLongStateOf(0L) }
+    var draft by remember { mutableStateOf("") }
     LaunchedEffect(draft) {
         if (draft.isNotBlank()) {
             Bayx.setTyping(session, true)
@@ -149,8 +151,6 @@ private fun ChatContent(session: ChatSession, onBack: () -> Unit) {
             Bayx.setTyping(session, false)
         }
     }
-    var lastNudge by remember { mutableLongStateOf(0L) }
-    var draft by remember { mutableStateOf("") }
     var showAttach by remember { mutableStateOf(false) }
     var sending by remember { mutableStateOf(false) }
     var viewer by remember { mutableStateOf<ChatMessage?>(null) }
@@ -573,6 +573,7 @@ private fun formatDay(millis: Long): String =
 private fun formatClock(millis: Long): String =
     SimpleDateFormat("HH:mm", Locale.forLanguageTag("tr")).format(Date(millis))
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun MessageRow(
     msg: ChatMessage,

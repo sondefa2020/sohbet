@@ -11,6 +11,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.InlineTextContent
+import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -152,7 +153,7 @@ fun Emoticon(emo: Emo, modifier: Modifier = Modifier, size: Dp? = null) {
 private val FaceTop = Color(0xFFFFE55C)
 private val FaceBottom = Color(0xFFF5B400)
 private val FaceLine = Color(0xFFB7791F)
-private val Ink = Color(0xFF3B2A00)
+private val FaceInk = Color(0xFF3B2A00)
 
 private fun DrawScope.faceBase(fill: List<Color> = listOf(FaceTop, FaceBottom)) {
     val r = size.minDimension / 2f
@@ -173,14 +174,14 @@ private fun DrawScope.eyes(r: Float, c: Offset, openLeft: Float = 1f, openRight:
     val w = r * 0.15f
     val h = r * 0.26f
     if (openLeft > 0.2f) {
-        drawOval(Ink, Offset(c.x - ex - w / 2, ey - h * openLeft / 2), Size(w, h * openLeft))
+        drawOval(FaceInk, Offset(c.x - ex - w / 2, ey - h * openLeft / 2), Size(w, h * openLeft))
     } else {
-        drawLine(Ink, Offset(c.x - ex - w, ey), Offset(c.x - ex + w, ey), strokeWidth = r * 0.07f, cap = StrokeCap.Round)
+        drawLine(FaceInk, Offset(c.x - ex - w, ey), Offset(c.x - ex + w, ey), strokeWidth = r * 0.07f, cap = StrokeCap.Round)
     }
     if (openRight > 0.2f) {
-        drawOval(Ink, Offset(c.x + ex - w / 2, ey - h * openRight / 2), Size(w, h * openRight))
+        drawOval(FaceInk, Offset(c.x + ex - w / 2, ey - h * openRight / 2), Size(w, h * openRight))
     } else {
-        drawLine(Ink, Offset(c.x + ex - w, ey), Offset(c.x + ex + w, ey), strokeWidth = r * 0.07f, cap = StrokeCap.Round)
+        drawLine(FaceInk, Offset(c.x + ex - w, ey), Offset(c.x + ex + w, ey), strokeWidth = r * 0.07f, cap = StrokeCap.Round)
     }
 }
 
@@ -191,7 +192,7 @@ private fun DrawScope.smileArc(r: Float, c: Offset, depth: Float = 0.25f, width:
         moveTo(c.x - r * width, c.y + r * 0.18f + dy)
         quadraticTo(c.x, c.y + r * (0.18f + depth * 2) + dy, c.x + r * width, c.y + r * 0.18f + dy)
     }
-    drawPath(p, Ink, style = Stroke(width = r * 0.09f, cap = StrokeCap.Round))
+    drawPath(p, FaceInk, style = Stroke(width = r * 0.09f, cap = StrokeCap.Round))
 }
 
 private fun DrawScope.drawFace(emo: Emo, t: Float) {
@@ -214,7 +215,7 @@ private fun DrawScope.drawFace(emo: Emo, t: Float) {
                     quadraticTo(c.x, c.y + r * 0.95f, c.x - r * 0.48f, c.y + r * 0.12f)
                     close()
                 }
-                drawPath(p, Ink)
+                drawPath(p, FaceInk)
                 drawOval(Color(0xFFE5484D), Offset(c.x - r * 0.2f, c.y + r * 0.42f), Size(r * 0.4f, r * 0.18f))
             }
         }
@@ -244,7 +245,7 @@ private fun DrawScope.drawFace(emo: Emo, t: Float) {
                 moveTo(c.x - r * 0.38f, c.y + r * 0.55f)
                 quadraticTo(c.x, c.y + r * 0.2f, c.x + r * 0.38f, c.y + r * 0.55f)
             }
-            drawPath(p, Ink, style = Stroke(width = r * 0.09f, cap = StrokeCap.Round))
+            drawPath(p, FaceInk, style = Stroke(width = r * 0.09f, cap = StrokeCap.Round))
         }
         Emo.CRY -> {
             faceBase()
@@ -253,7 +254,7 @@ private fun DrawScope.drawFace(emo: Emo, t: Float) {
                 moveTo(c.x - r * 0.35f, c.y + r * 0.55f)
                 quadraticTo(c.x, c.y + r * 0.25f, c.x + r * 0.35f, c.y + r * 0.55f)
             }
-            drawPath(p, Ink, style = Stroke(width = r * 0.09f, cap = StrokeCap.Round))
+            drawPath(p, FaceInk, style = Stroke(width = r * 0.09f, cap = StrokeCap.Round))
             // Düşen gözyaşları
             for (side in listOf(-1f, 1f)) {
                 val phase = (t + if (side > 0) 0.5f else 0f) % 1f
@@ -270,7 +271,7 @@ private fun DrawScope.drawFace(emo: Emo, t: Float) {
             eyes(r, c, 1.15f, 1.15f)
             val pulse = 1f + sin(t * 4 * PI).toFloat() * 0.12f
             drawOval(
-                Ink,
+                FaceInk,
                 Offset(c.x - r * 0.14f * pulse, c.y + r * 0.22f),
                 Size(r * 0.28f * pulse, r * 0.36f * pulse),
             )
@@ -279,9 +280,9 @@ private fun DrawScope.drawFace(emo: Emo, t: Float) {
             faceBase()
             // Güneş gözlüğü
             val gy = c.y - r * 0.28f
-            drawRoundRect(Ink, Offset(c.x - r * 0.68f, gy), Size(r * 0.6f, r * 0.34f), CornerRadius(r * 0.12f))
-            drawRoundRect(Ink, Offset(c.x + r * 0.08f, gy), Size(r * 0.6f, r * 0.34f), CornerRadius(r * 0.12f))
-            drawLine(Ink, Offset(c.x - r * 0.1f, gy + r * 0.08f), Offset(c.x + r * 0.1f, gy + r * 0.08f), r * 0.08f)
+            drawRoundRect(FaceInk, Offset(c.x - r * 0.68f, gy), Size(r * 0.6f, r * 0.34f), CornerRadius(r * 0.12f))
+            drawRoundRect(FaceInk, Offset(c.x + r * 0.08f, gy), Size(r * 0.6f, r * 0.34f), CornerRadius(r * 0.12f))
+            drawLine(FaceInk, Offset(c.x - r * 0.1f, gy + r * 0.08f), Offset(c.x + r * 0.1f, gy + r * 0.08f), r * 0.08f)
             // Kayan parıltı
             val sx = c.x - r * 0.7f + t * r * 1.6f
             drawLine(
@@ -297,13 +298,13 @@ private fun DrawScope.drawFace(emo: Emo, t: Float) {
             val heat = (sin(t * 2 * PI).toFloat() + 1f) / 2f
             faceBase(listOf(Color(0xFFFF8A65).copy(alpha = 0.6f + heat * 0.4f).over(FaceTop), Color(0xFFE53935)))
             eyes(r, c, 0.7f, 0.7f, dy = r * 0.05f)
-            drawLine(Ink, Offset(c.x - r * 0.55f, c.y - r * 0.45f), Offset(c.x - r * 0.15f, c.y - r * 0.28f), r * 0.09f, StrokeCap.Round)
-            drawLine(Ink, Offset(c.x + r * 0.55f, c.y - r * 0.45f), Offset(c.x + r * 0.15f, c.y - r * 0.28f), r * 0.09f, StrokeCap.Round)
+            drawLine(FaceInk, Offset(c.x - r * 0.55f, c.y - r * 0.45f), Offset(c.x - r * 0.15f, c.y - r * 0.28f), r * 0.09f, StrokeCap.Round)
+            drawLine(FaceInk, Offset(c.x + r * 0.55f, c.y - r * 0.45f), Offset(c.x + r * 0.15f, c.y - r * 0.28f), r * 0.09f, StrokeCap.Round)
             val p = Path().apply {
                 moveTo(c.x - r * 0.35f, c.y + r * 0.5f)
                 quadraticTo(c.x, c.y + r * 0.3f, c.x + r * 0.35f, c.y + r * 0.5f)
             }
-            drawPath(p, Ink, style = Stroke(width = r * 0.09f, cap = StrokeCap.Round))
+            drawPath(p, FaceInk, style = Stroke(width = r * 0.09f, cap = StrokeCap.Round))
         }
         Emo.BLUSH -> {
             faceBase()
@@ -317,7 +318,7 @@ private fun DrawScope.drawFace(emo: Emo, t: Float) {
                     lineTo(c.x + side * r * 0.32f, c.y - r * 0.26f)
                     lineTo(c.x + side * r * 0.32f + r * 0.13f, c.y - r * 0.12f)
                 }
-                drawPath(p, Ink, style = Stroke(width = r * 0.08f, cap = StrokeCap.Round))
+                drawPath(p, FaceInk, style = Stroke(width = r * 0.08f, cap = StrokeCap.Round))
             }
             smileArc(r, c, depth = 0.1f, width = 0.25f, dy = r * 0.08f)
         }
