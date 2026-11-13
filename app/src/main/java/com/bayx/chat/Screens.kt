@@ -1,5 +1,6 @@
 package com.bayx.chat
 
+import androidx.compose.material.icons.outlined.PersonAddAlt
 import androidx.compose.material.icons.outlined.PersonSearch
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.graphics.asImageBitmap
@@ -313,6 +314,7 @@ fun ChatListScreen(
     onProfile: () -> Unit,
     onSecret: () -> Unit = {},
     onMedia: () -> Unit = {},
+    onRequests: () -> Unit = {},
 ) {
     var tab by remember { mutableIntStateOf(0) }
     val allRooms by Bayx.rooms.collectAsState()
@@ -393,6 +395,16 @@ fun ChatListScreen(
                     Text("Tayfa", color = Ink, fontSize = 25.sp, fontWeight = FontWeight.ExtraBold)
                     Text(me.displayName.ifEmpty { "Sohbet" }, color = Muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
+                Box {
+                    ChipIcon(Icons.Outlined.PersonAddAlt, "Arkadaş istekleri", size = 44.dp, onClick = onRequests)
+                    if (contacts.incoming.isNotEmpty()) {
+                        Box(
+                            Modifier.align(Alignment.TopEnd).size(18.dp).clip(CircleShape).background(Color(0xFFE5484D)),
+                            contentAlignment = Alignment.Center,
+                        ) { Text("${contacts.incoming.size}", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                    }
+                }
+                Spacer(Modifier.width(10.dp))
                 ChipIcon(Icons.Outlined.Search, "Ara", size = 44.dp) { searching = !searching; if (!searching) query = "" }
                 Spacer(Modifier.width(10.dp))
                 ChipIcon(Icons.Outlined.Settings, "Profil ve ayarlar", size = 44.dp, onClick = onProfile)
@@ -705,6 +717,57 @@ private fun FindResultCard(r: Api.ContactFind, onRequest: () -> Unit, onOpen: (S
                 "incoming" -> Button(onClick = onRequest, modifier = Modifier.height(40.dp)) { Text("Kabul et") }
                 "self" -> Text("Bu sensin", color = Muted, fontSize = 13.sp)
                 else -> Button(onClick = onRequest, modifier = Modifier.height(40.dp)) { Text("İstek gönder") }
+            }
+        }
+    }
+}
+
+/** Arkadaş istekleri ekranı: gelen istekleri kabul et/yok de, gönderilenleri geri çek. */
+@Composable
+fun RequestsScreen(onBack: () -> Unit, onOpenChat: (String) -> Unit) {
+    val contacts by Bayx.contacts.collectAsState()
+    val scope = rememberCoroutineScope()
+    val toast = rememberToast()
+    LaunchedEffect(Unit) { Bayx.refreshContacts() }
+
+    fun handle(username: String, accept: Boolean, name: String) {
+        scope.launch {
+            if (accept) {
+                if (Bayx.acceptContact(username)) toast("$name artık kişilerinde.")
+            } else {
+                Bayx.rejectContact(username)
+            }
+        }
+    }
+
+    Column(Modifier.fillMaxSize().background(PageBrush).systemBarsPadding()) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Geri", tint = Ink) }
+            Text("Arkadaş istekleri", color = Ink, fontSize = 21.sp, fontWeight = FontWeight.ExtraBold)
+        }
+        if (contacts.incoming.isEmpty() && contacts.outgoing.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    "Şu an bekleyen istek yok.\nKişiler sekmesinden kullanıcı adıyla birini bulup istek gönderebilirsin.",
+                    color = Muted, textAlign = TextAlign.Center, lineHeight = 22.sp, modifier = Modifier.padding(32.dp),
+                )
+            }
+        } else {
+            LazyColumn {
+                if (contacts.incoming.isNotEmpty()) {
+                    item { SectionLabel("Gelen istekler (${contacts.incoming.size})") }
+                    items(contacts.incoming, key = { "in-" + it.userId }) { m ->
+                        val u = m.userId.substringBefore(":").removePrefix("@")
+                        RequestRow(m, incoming = true, onAccept = { handle(u, true, m.displayName) }, onReject = { handle(u, false, m.displayName) })
+                    }
+                }
+                if (contacts.outgoing.isNotEmpty()) {
+                    item { SectionLabel("Gönderilen istekler (${contacts.outgoing.size})") }
+                    items(contacts.outgoing, key = { "out-" + it.userId }) { m ->
+                        val u = m.userId.substringBefore(":").removePrefix("@")
+                        RequestRow(m, incoming = false, onAccept = {}, onReject = { handle(u, false, m.displayName) })
+                    }
+                }
             }
         }
     }

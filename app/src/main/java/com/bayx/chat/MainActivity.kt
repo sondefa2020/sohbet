@@ -81,6 +81,7 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
+        intent?.getStringExtra("tayfa_open")?.let { Bayx.pendingOpen.value = it }
         val roomId = intent?.getStringExtra(Notifier.EXTRA_ROOM_ID) ?: return
         intent.removeExtra(Notifier.EXTRA_ROOM_ID)
         Bayx.pendingRoom.value = roomId
@@ -193,6 +194,13 @@ private fun MainNav(me: AuthState.LoggedIn) {
         Bayx.pendingRoom.value = null
         nav.navigate("chat/" + Uri.encode(roomId)) { launchSingleTop = true }
     }
+    val pendingOpen by Bayx.pendingOpen.collectAsState()
+    LaunchedEffect(pendingOpen) {
+        if (pendingOpen == "requests") {
+            Bayx.pendingOpen.value = null
+            nav.navigate("requests") { launchSingleTop = true }
+        }
+    }
 
     NavHost(navController = nav, startDestination = "chats") {
         composable("chats") {
@@ -202,6 +210,13 @@ private fun MainNav(me: AuthState.LoggedIn) {
                 onProfile = { nav.navigate("profile") },
                 onSecret = { nav.navigate("secret") },
                 onMedia = { nav.navigate("media") },
+                onRequests = { nav.navigate("requests") },
+            )
+        }
+        composable("requests") {
+            RequestsScreen(
+                onBack = { nav.popBackStack() },
+                onOpenChat = { roomId -> nav.navigate("chat/" + Uri.encode(roomId)) },
             )
         }
         composable("secret") {

@@ -205,6 +205,7 @@ object Bayx {
 
     /** Bildirime dokunularak açılması istenen sohbet. */
     val pendingRoom = MutableStateFlow<String?>(null)
+    val pendingOpen = MutableStateFlow<String?>(null)
 
     fun roomName(roomId: String): String? =
         rooms.value.firstOrNull { it.id == roomId }?.takeIf { !it.secret }?.name

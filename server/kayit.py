@@ -355,6 +355,9 @@ def contact_request(headers, body):
         if me not in theirs["incoming"]:
             theirs["incoming"].append(me)
         GIRIS.save()
+    info = active_user(me)
+    sender_name = (info.get("displayname") if info else None) or username_of(me)
+    threading.Thread(target=push_contact, args=(other, sender_name), daemon=True).start()
     return {"ok": True, "relation": "outgoing"}
 
 
@@ -847,6 +850,19 @@ def push_notify(body):
         if FCM.send(pushkey, data) is False:
             rejected.append(pushkey)
     return {"rejected": rejected}
+
+
+def push_contact(target, sender_name):
+    """Arkadaşlık isteği gelen kişiye bildirim gönderir (uygulaması kapalıyken de)."""
+    if FCM is None:
+        return
+    status, data = synapse("GET", "/_synapse/admin/v1/users/%s/pushers" % quote(target))
+    if status != 200:
+        return
+    payload = {"type": "contact_request", "name": sender_name or "Biri"}
+    for pusher in data.get("pushers", []):
+        if pusher.get("app_id") == APP_ID and pusher.get("pushkey"):
+            FCM.send(pusher["pushkey"], payload)
 
 
 def push_call(callee, caller, call_id, name, video):

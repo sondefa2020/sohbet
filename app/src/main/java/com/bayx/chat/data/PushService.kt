@@ -1,6 +1,9 @@
 package com.bayx.chat.data
 
 import com.google.firebase.messaging.FirebaseMessagingService
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import com.google.firebase.messaging.RemoteMessage
 
 /**
@@ -28,6 +31,12 @@ class PushService : FirebaseMessagingService() {
                 Notifier.showIncomingCall(applicationContext, name, data["video"] == "1")
                 // Uygulama arka plandaysa davetin kendisini almak için yoklamayı başlat.
                 Calls.ensurePolling()
+            }
+            "contact_request" -> {
+                val name = data["name"].orEmpty().ifBlank { "Biri" }
+                if (!Bayx.isForeground) Notifier.showContactRequest(applicationContext, name)
+                // Uygulama açıksa kişi listesini tazele ki istek hemen görünsün.
+                CoroutineScope(Dispatchers.IO).launch { runCatching { Bayx.refreshContacts() } }
             }
         }
     }

@@ -71,6 +71,34 @@ object Notifier {
     }
 
     /** Ekran paylaşımı ön plan servisi için sessiz, düşük öncelikli bildirim. */
+    private const val CONTACT_ID = 5200
+
+    /** Arkadaşlık isteği bildirimi. */
+    fun showContactRequest(context: Context, name: String) {
+        if (!canNotify(context)) return
+        val open = android.content.Intent(context, Class.forName("com.bayx.chat.MainActivity")).apply {
+            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            putExtra("tayfa_open", "requests")
+        }
+        val pi = android.app.PendingIntent.getActivity(
+            context, 3, open,
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE,
+        )
+        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            android.app.Notification.Builder(context, CH_MESSAGES)
+        } else {
+            @Suppress("DEPRECATION") android.app.Notification.Builder(context)
+        }
+        val n = builder
+            .setContentTitle("Yeni arkadaş isteği")
+            .setContentText("$name seni eklemek istiyor")
+            .setSmallIcon(R.drawable.ic_stat_tayfa)
+            .setAutoCancel(true)
+            .setContentIntent(pi)
+            .build()
+        context.getSystemService(NotificationManager::class.java)?.notify(CONTACT_ID, n)
+    }
+
     fun screenShareNotification(context: Context): android.app.Notification {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) createChannels(context)
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
