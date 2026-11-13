@@ -132,7 +132,7 @@ fun ChatScreen(roomId: String, onBack: () -> Unit) {
 }
 
 @Composable
-private fun ChatContent(session: ChatSession, onBack: () -> Unit) {
+internal fun ChatContent(session: ChatSession, onBack: () -> Unit) {
     val messages by session.messages.collectAsState()
     val title by session.title.collectAsState()
     val partner by session.dmUserId.collectAsState()

@@ -35,6 +35,15 @@ jobs:
         env:
           BAYX_KEYSTORE_PASS: ${{ secrets.BAYX_KEYSTORE_PASS }}
         run: gradle :app:assembleDebug --stacktrace
+      - name: Ekran görüntüleri (tasarım kontrolü)
+        continue-on-error: true
+        run: gradle :app:recordRoborazziDebug --stacktrace
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tayfa-ekranlar
+          path: app/build/outputs/roborazzi
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         with:
           name: tayfa-debug-apk
