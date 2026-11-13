@@ -1,5 +1,10 @@
 package com.bayx.chat
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.AlertDialog
 import com.bayx.chat.data.Calls
 import androidx.compose.runtime.DisposableEffect
 import android.graphics.Color as AndroidColor
@@ -202,6 +207,29 @@ private fun MainNav(me: AuthState.LoggedIn) {
         }
     }
 
+    // Modüler ayar: sunucudan duyuru ve güncelleme bilgisi (admin panelinden yönetilir).
+    var config by remember { mutableStateOf<com.bayx.chat.data.Api.AppConfig?>(null) }
+    var updateDismissed by remember { mutableStateOf(false) }
+    var announcement by remember { mutableStateOf<String?>(null) }
+    val myVersion = remember {
+        runCatching {
+            val pi = context.packageManager.getPackageInfo(context.packageName, 0)
+            if (Build.VERSION.SDK_INT >= 28) pi.longVersionCode.toInt() else @Suppress("DEPRECATION") pi.versionCode
+        }.getOrDefault(0)
+    }
+    LaunchedEffect(Unit) {
+        val token = Bayx.accessToken ?: return@LaunchedEffect
+        val cfg = runCatching { com.bayx.chat.data.Api.getConfig(token) }.getOrNull() ?: return@LaunchedEffect
+        config = cfg
+        if (cfg.announcement.isNotBlank()) {
+            val prefs = context.getSharedPreferences("tayfa_giris", android.content.Context.MODE_PRIVATE)
+            if (prefs.getString("son_duyuru", "") != cfg.announcement) {
+                announcement = cfg.announcement
+                prefs.edit().putString("son_duyuru", cfg.announcement).apply()
+            }
+        }
+    }
+
     NavHost(navController = nav, startDestination = "chats") {
         composable("chats") {
             ChatListScreen(
@@ -245,5 +273,34 @@ private fun MainNav(me: AuthState.LoggedIn) {
         composable("admin") {
             AdminScreen(me = me, onBack = { nav.popBackStack() })
         }
+    }
+
+    config?.let { cfg ->
+        if (!updateDismissed && cfg.latestVersion > myVersion && cfg.apkUrl.isNotBlank()) {
+            AlertDialog(
+                onDismissRequest = { updateDismissed = true },
+                title = { Text("Yeni sürüm var") },
+                text = { Text("Tayfa'nın yeni bir sürümü yayınlandı. Güncellemek için indir ve kur.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        updateDismissed = true
+                        runCatching {
+                            context.startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse(cfg.apkUrl)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                            )
+                        }
+                    }) { Text("Güncelle") }
+                },
+                dismissButton = { TextButton(onClick = { updateDismissed = true }) { Text("Sonra") } },
+            )
+        }
+    }
+    announcement?.let { text ->
+        AlertDialog(
+            onDismissRequest = { announcement = null },
+            title = { Text("Duyuru") },
+            text = { Text(text) },
+            confirmButton = { TextButton(onClick = { announcement = null }) { Text("Tamam") } },
+        )
     }
 }

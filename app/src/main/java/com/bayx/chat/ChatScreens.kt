@@ -1,5 +1,6 @@
 package com.bayx.chat
 
+import androidx.compose.material.icons.outlined.Wallpaper
 import androidx.compose.material.icons.outlined.AlternateEmail
 import androidx.compose.material.icons.outlined.PersonAdd
 import androidx.compose.material.icons.outlined.GroupAdd
@@ -274,7 +275,11 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit) {
         if (granted) startRecording() else toast("Mikrofon izni verilmedi.")
     }
 
-    Column(Modifier.fillMaxSize().background(PageBrush).systemBarsPadding().imePadding()) {
+    val wallpaper by Wallpaper.selected.collectAsState()
+    var showWallpaper by remember { mutableStateOf(false) }
+    Box(Modifier.fillMaxSize()) {
+      ChatBackground(wallpaper)
+      Column(Modifier.fillMaxSize().systemBarsPadding().imePadding()) {
         Row(
             Modifier.fillMaxWidth().padding(start = 4.dp, end = 10.dp, top = 8.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -340,6 +345,11 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit) {
                         text = { Text("Fotoğraf ve videolar") },
                         leadingIcon = { Icon(Icons.Outlined.PermMedia, contentDescription = null) },
                         onClick = { menuOpen = false; showGallery = true },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Arka plan") },
+                        leadingIcon = { Icon(Icons.Outlined.Wallpaper, contentDescription = null) },
+                        onClick = { menuOpen = false; showWallpaper = true },
                     )
                 }
             }
@@ -529,8 +539,10 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit) {
         )
     }
 
+    }
     viewer?.let { msg -> MediaViewerDialog(msg) { viewer = null } }
     if (showGallery) MediaGalleryDialog(session) { showGallery = false }
+    if (showWallpaper) WallpaperPicker(context, wallpaper) { showWallpaper = false }
     deleteTarget?.let { target ->
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
@@ -1155,6 +1167,7 @@ fun AdminScreen(me: AuthState.LoggedIn, onBack: () -> Unit) {
                             }
                         }
                     }
+                    item { AppConfigCard() }
                     item {
                         OutlinedTextField(
                             value = query,
@@ -1346,4 +1359,73 @@ private fun EmailDialog(
             }
         },
     )
+}
+
+/** Admin paneli: duyuru ve güncelleme bilgisini sunucudan yönet (modüler). */
+@Composable
+private fun AppConfigCard() {
+    val scope = rememberCoroutineScope()
+    val toast = rememberToast()
+    var announcement by remember { mutableStateOf("") }
+    var apkUrl by remember { mutableStateOf("") }
+    var version by remember { mutableStateOf("") }
+    var loaded by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        val token = Bayx.accessToken ?: return@LaunchedEffect
+        runCatching { Api.getConfig(token) }.getOrNull()?.let {
+            announcement = it.announcement
+            apkUrl = it.apkUrl
+            version = if (it.latestVersion > 0) it.latestVersion.toString() else ""
+            loaded = true
+        }
+    }
+    Surface(shape = RoundedCornerShape(20.dp), color = Color.White, shadowElevation = 3.dp) {
+        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+            Text("Duyuru ve güncelleme", color = Ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+            Text(
+                "Buradan yazdığın duyuru tüm üyelere anında gösterilir. Yeni APK yayınlayınca bağlantısını ve sürüm " +
+                    "numarasını gir; eski sürümdeki üyeler \"Yeni sürüm var\" uyarısı alır.",
+                color = Muted, fontSize = 12.5.sp,
+            )
+            Spacer(Modifier.height(12.dp))
+            OutlinedTextField(
+                value = announcement,
+                onValueChange = { announcement = it.take(500) },
+                label = { Text("Duyuru (boş bırakılırsa gösterilmez)") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 2,
+            )
+            Spacer(Modifier.height(10.dp))
+            OutlinedTextField(
+                value = apkUrl,
+                onValueChange = { apkUrl = it.trim() },
+                singleLine = true,
+                label = { Text("APK bağlantısı (https://)") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(10.dp))
+            OutlinedTextField(
+                value = version,
+                onValueChange = { v -> version = v.filter { it.isDigit() }.take(6) },
+                singleLine = true,
+                label = { Text("En son sürüm numarası (versionCode)") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(12.dp))
+            SandButton("Kaydet", busy = busy) {
+                val token = Bayx.accessToken ?: return@SandButton
+                busy = true
+                scope.launch {
+                    try {
+                        Api.setConfig(token, announcement.trim(), version.toIntOrNull() ?: 0, apkUrl.trim())
+                        toast("Kaydedildi.")
+                    } catch (e: ApiException) {
+                        toast(e.message ?: "Kaydedilemedi.")
+                    }
+                    busy = false
+                }
+            }
+        }
+    }
 }

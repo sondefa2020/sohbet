@@ -250,6 +250,33 @@ def validate_profile(body):
 GIRIS = None
 
 
+DEFAULT_CONFIG = {"announcement": "", "latest_version": 0, "apk_url": ""}
+
+
+def get_config():
+    cfg = GIRIS.data.setdefault("config", {})
+    return {k: cfg.get(k, v) for k, v in DEFAULT_CONFIG.items()}
+
+
+def set_config(body):
+    with GIRIS.lock:
+        cfg = GIRIS.data.setdefault("config", {})
+        if "announcement" in body:
+            cfg["announcement"] = str(body.get("announcement") or "")[:500]
+        if "apk_url" in body:
+            url = str(body.get("apk_url") or "")
+            if url and not url.startswith("https://"):
+                raise ApiError(400, "GECERSIZ_URL", "APK bağlantısı https:// ile başlamalı.")
+            cfg["apk_url"] = url[:400]
+        if "latest_version" in body:
+            try:
+                cfg["latest_version"] = max(0, int(body.get("latest_version")))
+            except (TypeError, ValueError):
+                raise ApiError(400, "GECERSIZ_SURUM", "Sürüm numarası sayı olmalı.")
+        GIRIS.save()
+    return get_config()
+
+
 def _contacts():
     return GIRIS.data.setdefault("contacts", {})
 
@@ -1058,6 +1085,12 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if method == "GET" and path == "/bayx/health":
                 self._send(200, {"ok": True})
+            elif method == "POST" and path == "/bayx/config":
+                member_from_token(self.headers)
+                self._send(200, get_config())
+            elif method == "POST" and path == "/bayx/admin/config":
+                require_admin(self.headers)
+                self._send(200, set_config(self._body()))
             elif method == "POST" and path == "/bayx/v3/contacts":
                 self._send(200, contact_overview(self.headers, time.time()))
             elif method == "POST" and path == "/bayx/v3/contacts/find":

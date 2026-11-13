@@ -155,6 +155,20 @@ object Api {
         request("POST", "/bayx/v2/web/password", JSONObject(), token).optString("password")
     }
 
+    // ------------------------------------------------- uygulama ayarı (modüler)
+
+    data class AppConfig(val announcement: String, val latestVersion: Int, val apkUrl: String)
+
+    private fun appConfig(json: JSONObject) =
+        AppConfig(json.optString("announcement"), json.optInt("latest_version"), json.optString("apk_url"))
+
+    suspend fun getConfig(token: String) = io { appConfig(request("POST", "/bayx/config", JSONObject(), token)) }
+
+    suspend fun setConfig(token: String, announcement: String, latestVersion: Int, apkUrl: String) = io {
+        appConfig(request("POST", "/bayx/admin/config", JSONObject()
+            .put("announcement", announcement).put("latest_version", latestVersion).put("apk_url", apkUrl), token))
+    }
+
     suspend fun createInvite(token: String, uses: Int, days: Int) = io {
         codeReply(request("POST", "/bayx/admin/invite", JSONObject().put("uses", uses).put("days", days), token))
     }
