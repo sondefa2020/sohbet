@@ -361,17 +361,29 @@ internal fun AttachSheet(
     onLocation: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color(0xFFFBF8F4)) {
-        Column(Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, bottom = 28.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                SatinTile("Galeri", Icons.Outlined.Image, Satin.Steel, Modifier.weight(1f), onClick = onPhoto)
-                SatinTile("Kamera", Icons.Outlined.PhotoCamera, Satin.Lavender, Modifier.weight(1f), onClick = onCamera)
-            }
-            Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                SatinTile("Video", Icons.Outlined.Videocam, Satin.Sand, Modifier.weight(1f), onClick = onVideo)
-                SatinTile("Konum", Icons.Outlined.LocationOn, Satin.Mauve, Modifier.weight(1f), onClick = onLocation)
+        Column(Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, bottom = 30.dp, top = 4.dp)) {
+            Text("Paylaş", color = Muted, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(16.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                AttachCircle(Icons.Outlined.Image, "Galeri", listOf(Color(0xFF7C4DFF), Color(0xFF5E35B1)), onPhoto)
+                AttachCircle(Icons.Outlined.PhotoCamera, "Kamera", listOf(Color(0xFFEC407A), Color(0xFFC2185B)), onCamera)
+                AttachCircle(Icons.Outlined.Videocam, "Video", listOf(Color(0xFFEF6C00), Color(0xFFE65100)), onVideo)
+                AttachCircle(Icons.Outlined.LocationOn, "Konum", listOf(Color(0xFF26A69A), Color(0xFF00897B)), onLocation)
             }
         }
+    }
+}
+
+/** WhatsApp tarzı: renkli yuvarlak ikon ve altında etiket. */
+@Composable
+private fun AttachCircle(icon: ImageVector, label: String, colors: List<Color>, onClick: () -> Unit) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable(onClick = onClick)) {
+        Box(
+            Modifier.size(62.dp).clip(CircleShape).background(Brush.verticalGradient(colors)),
+            contentAlignment = Alignment.Center,
+        ) { Icon(icon, contentDescription = label, tint = Color.White, modifier = Modifier.size(28.dp)) }
+        Spacer(Modifier.height(8.dp))
+        Text(label, color = Ink, fontSize = 13.sp)
     }
 }
 

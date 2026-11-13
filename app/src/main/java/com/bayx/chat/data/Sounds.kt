@@ -65,3 +65,44 @@ object Sounds {
         vibrate(longArrayOf(0, 35, 60, 35))
     }
 }
+
+/** Arama sesleri: arayanda geri çalma tonu, arananda zil sesi. */
+object CallTones {
+    private var tone: android.media.ToneGenerator? = null
+    private var ringtone: android.media.Ringtone? = null
+
+    /** Arayan taraf: karşı taraf çevrimiçiyse "çalıyor" tonu, değilse "aranıyor" tonu. */
+    fun ringback(online: Boolean) {
+        stop()
+        runCatching {
+            tone = android.media.ToneGenerator(AudioManager.STREAM_VOICE_CALL, 70).also {
+                it.startTone(
+                    if (online) android.media.ToneGenerator.TONE_SUP_RINGTONE
+                    else android.media.ToneGenerator.TONE_SUP_DIAL,
+                )
+            }
+        }
+    }
+
+    /** Aranan taraf (uygulama açıkken): telefonun zil sesi. Sessiz/titreşim modunda çalmaz. */
+    fun incomingRing(context: Context) {
+        stop()
+        val am = context.getSystemService(AudioManager::class.java)
+        if (am?.ringerMode != AudioManager.RINGER_MODE_NORMAL) return
+        runCatching {
+            val uri = android.media.RingtoneManager.getActualDefaultRingtoneUri(context, android.media.RingtoneManager.TYPE_RINGTONE)
+                ?: return
+            ringtone = android.media.RingtoneManager.getRingtone(context, uri)?.also { r ->
+                if (android.os.Build.VERSION.SDK_INT >= 28) r.isLooping = true
+                r.play()
+            }
+        }
+    }
+
+    fun stop() {
+        runCatching { tone?.stopTone(); tone?.release() }
+        tone = null
+        runCatching { ringtone?.stop() }
+        ringtone = null
+    }
+}

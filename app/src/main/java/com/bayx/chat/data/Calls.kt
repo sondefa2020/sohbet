@@ -1,6 +1,7 @@
 package com.bayx.chat.data
 
 import android.content.Context
+import android.content.Intent
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.media.Ringtone
@@ -36,7 +37,9 @@ import org.webrtc.RtpReceiver
 import org.webrtc.RtpTransceiver
 import org.webrtc.SdpObserver
 import org.webrtc.SessionDescription
+import org.webrtc.ScreenCapturerAndroid
 import org.webrtc.SurfaceTextureHelper
+import org.webrtc.VideoCapturer
 import org.webrtc.VideoSource
 import org.webrtc.VideoTrack
 import org.webrtc.audio.JavaAudioDeviceModule
@@ -58,6 +61,9 @@ data class CallState(
     val cameraOn: Boolean = true,
     val startedAt: Long = 0L,
     val endReason: String? = null,
+    val peerOnline: Boolean = true,
+    val held: Boolean = false,
+    val screenSharing: Boolean = false,
 )
 
 /**
@@ -90,6 +96,9 @@ object Calls {
     private var videoTrack: VideoTrack? = null
     private var capturer: CameraVideoCapturer? = null
     private var surfaceHelper: SurfaceTextureHelper? = null
+    private var screenCapturer: VideoCapturer? = null
+    /** Arama ekranındaki "Ekranı paylaş" düğmesinin Activity'den ekran yakalama izni istemesini sağlar. */
+    @Volatile var screenShareRequester: (() -> Unit)? = null
 
     private var pendingOffer: String? = null
     private val pendingCandidates = ArrayList<IceCandidate>()
@@ -213,7 +222,8 @@ object Calls {
     fun startCall(peerId: String, peerName: String, video: Boolean) {
         if (state.value?.let { it.phase != CallPhase.ENDED } == true) return
         val callId = newCallId()
-        state.value = CallState(callId, peerId, peerName, video, CallPhase.OUTGOING, speaker = video, cameraOn = video)
+        val online = Bayx.online.value.contains(peerId)
+        state.value = CallState(callId, peerId, peerName, video, CallPhase.OUTGOING, speaker = video, cameraOn = video, peerOnline = online)
         ensurePolling()
         scope.launch {
             withContext(rtc) {
@@ -297,6 +307,17 @@ object Calls {
         scope.launch(rtc) { audioTrack?.setEnabled(!muted) }
     }
 
+    /** Beklemeye al: mikrofonu ve karşıdan geleni sustur; "Beklemede" göster. */
+    fun toggleHold() {
+        val current = state.value ?: return
+        val held = !current.held
+        state.value = current.copy(held = held)
+        scope.launch(rtc) {
+            audioTrack?.setEnabled(!held && !current.muted)
+            runCatching { remoteAudioEnabled(!held) }
+        }
+    }
+
     fun toggleSpeaker() {
         val current = state.value ?: return
         val speaker = !current.speaker
@@ -317,6 +338,64 @@ object Calls {
 
     fun switchCamera() {
         scope.launch(rtc) { runCatching { capturer?.switchCamera(null) } }
+    }
+
+    /** Ekran paylaşımını aç/kapat. Açarken Activity'den izin ister. */
+    fun toggleScreenShare() {
+        val current = state.value ?: return
+        if (!current.video) return
+        if (current.screenSharing) stopScreenShare() else screenShareRequester?.invoke()
+    }
+
+    /** Activity, ekran yakalama izni sonucunu buraya iletir. */
+    fun onScreenCaptureResult(data: Intent?) {
+        if (data == null) return
+        val current = state.value ?: return
+        if (!current.video) return
+        ScreenShareService.start(app)
+        scope.launch(rtc) {
+            try {
+                val src = videoSource ?: return@launch
+                val helper = surfaceHelper ?: return@launch
+                runCatching { capturer?.stopCapture() }
+                val screen = ScreenCapturerAndroid(data, object : android.media.projection.MediaProjection.Callback() {
+                    override fun onStop() {
+                        scope.launch(rtc) { stopScreenShare() }
+                    }
+                })
+                screen.initialize(helper, app, src.capturerObserver)
+                screen.startCapture(1280, 720, 30)
+                screenCapturer = screen
+                state.value = state.value?.copy(screenSharing = true, cameraOn = true)
+            } catch (e: Exception) {
+                ScreenShareService.stop(app)
+                stopScreenShare()
+            }
+        }
+    }
+
+    fun stopScreenShare() {
+        scope.launch(rtc) {
+            runCatching { screenCapturer?.stopCapture() }
+            runCatching { screenCapturer?.dispose() }
+            screenCapturer = null
+            ScreenShareService.stop(app)
+            // Ekran paylaşımı bittiğinde kamerayı yeniden başlat.
+            val current = state.value
+            if (current != null && current.video) {
+                runCatching { capturer?.startCapture(1280, 720, 30) }
+            }
+            state.value = state.value?.copy(screenSharing = false)
+        }
+    }
+
+    private fun remoteAudioEnabled(enabled: Boolean) {
+        runCatching {
+            pc?.receivers?.forEach { r ->
+                val track = r.track()
+                if (track is org.webrtc.AudioTrack) track.setEnabled(enabled)
+            }
+        }
     }
 
     // -------------------------------------------------------------- WebRTC
@@ -466,6 +545,10 @@ object Calls {
         runCatching { capturer?.stopCapture() }
         runCatching { capturer?.dispose() }
         runCatching { pc?.dispose() }
+        runCatching { screenCapturer?.stopCapture() }
+        runCatching { screenCapturer?.dispose() }
+        screenCapturer = null
+        runCatching { ScreenShareService.stop(app) }
         runCatching { videoSource?.dispose() }
         runCatching { audioSource?.dispose() }
         runCatching { surfaceHelper?.dispose() }

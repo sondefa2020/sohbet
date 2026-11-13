@@ -1,5 +1,9 @@
 package com.bayx.chat
 
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ScreenShare
+import androidx.compose.material.icons.filled.Dialpad
+import androidx.compose.material.icons.filled.PauseCircle
 import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
@@ -42,6 +46,7 @@ import androidx.core.content.ContextCompat
 import com.bayx.chat.data.CallPhase
 import com.bayx.chat.data.CallState
 import com.bayx.chat.data.Calls
+import com.bayx.chat.data.CallTones
 import kotlinx.coroutines.delay
 import org.webrtc.RendererCommon
 import org.webrtc.SurfaceViewRenderer
@@ -111,6 +116,17 @@ fun CallOverlay() {
     val remote by Calls.remoteVideo.collectAsState()
     val local by Calls.localVideo.collectAsState()
     val showVideo = current.video && current.phase in setOf(CallPhase.CONNECTING, CallPhase.ACTIVE)
+    var dialpad by remember { mutableStateOf(false) }
+
+    // Arama sesleri: arayanda geri çalma tonu, arananda zil sesi.
+    LaunchedEffect(current.phase, current.peerOnline) {
+        when (current.phase) {
+            CallPhase.OUTGOING -> CallTones.ringback(current.peerOnline)
+            CallPhase.INCOMING -> CallTones.incomingRing(context)
+            else -> CallTones.stop()
+        }
+    }
+    DisposableEffect(Unit) { onDispose { CallTones.stop() } }
 
     // Arkadaki ekranlara dokunuş geçmesin.
     val blocker = remember { MutableInteractionSource() }
@@ -155,35 +171,66 @@ fun CallOverlay() {
                         .clickable { Calls.dismissEnded() }
                         .padding(horizontal = 28.dp, vertical = 12.dp),
                 )
-                else -> Row(
-                    Modifier.fillMaxWidth().padding(bottom = 32.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically,
+                else -> Column(
+                    Modifier.fillMaxWidth().padding(bottom = 30.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    RoundAction(
-                        if (current.muted) Icons.Filled.MicOff else Icons.Filled.Mic,
-                        if (current.muted) "Mikrofonu aç" else "Sessize al",
-                        if (current.muted) Color.White else Color(0x33FFFFFF),
-                        tint = if (current.muted) Color(0xFF0A1A33) else Color.White,
-                    ) { Calls.toggleMute() }
-                    RoundAction(
-                        if (current.speaker) Icons.AutoMirrored.Filled.VolumeUp else Icons.AutoMirrored.Filled.VolumeOff,
-                        if (current.speaker) "Hoparlörü kapat" else "Hoparlörü aç",
-                        if (current.speaker) Color.White else Color(0x33FFFFFF),
-                        tint = if (current.speaker) Color(0xFF0A1A33) else Color.White,
-                    ) { Calls.toggleSpeaker() }
-                    if (current.video) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         RoundAction(
-                            if (current.cameraOn) Icons.Filled.Videocam else Icons.Filled.VideocamOff,
-                            if (current.cameraOn) "Kamerayı kapat" else "Kamerayı aç",
-                            Color(0x33FFFFFF),
-                        ) { Calls.toggleCamera() }
-                        RoundAction(Icons.Filled.Cameraswitch, "Kamerayı çevir", Color(0x33FFFFFF)) { Calls.switchCamera() }
+                            if (current.muted) Icons.Filled.MicOff else Icons.Filled.Mic,
+                            if (current.muted) "Mikrofonu aç" else "Sessize al",
+                            if (current.muted) Color.White else Color(0x22FFFFFF),
+                            tint = if (current.muted) Color(0xFF0A1A33) else Color.White,
+                            size = 56,
+                        ) { Calls.toggleMute() }
+                        RoundAction(
+                            if (current.speaker) Icons.AutoMirrored.Filled.VolumeUp else Icons.AutoMirrored.Filled.VolumeOff,
+                            if (current.speaker) "Hoparlörü kapat" else "Hoparlörü aç",
+                            if (current.speaker) Color.White else Color(0x22FFFFFF),
+                            tint = if (current.speaker) Color(0xFF0A1A33) else Color.White,
+                            size = 56,
+                        ) { Calls.toggleSpeaker() }
+                        RoundAction(
+                            Icons.Filled.PauseCircle,
+                            if (current.held) "Beklemeden çıkar" else "Beklet",
+                            if (current.held) Color.White else Color(0x22FFFFFF),
+                            tint = if (current.held) Color(0xFF0A1A33) else Color.White,
+                            size = 56,
+                        ) { Calls.toggleHold() }
+                        RoundAction(Icons.Filled.Dialpad, "Tuş takımı", Color(0x22FFFFFF), size = 56) { dialpad = true }
                     }
-                    RoundAction(Icons.Filled.CallEnd, "Kapat", Danger, size = 68) { Calls.hangup() }
+                    if (current.video) {
+                        Spacer(Modifier.height(14.dp))
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RoundAction(
+                                if (current.cameraOn) Icons.Filled.Videocam else Icons.Filled.VideocamOff,
+                                if (current.cameraOn) "Kamerayı kapat" else "Kamerayı aç",
+                                Color(0x22FFFFFF), size = 56,
+                            ) { Calls.toggleCamera() }
+                            RoundAction(Icons.Filled.Cameraswitch, "Kamerayı çevir", Color(0x22FFFFFF), size = 56) { Calls.switchCamera() }
+                            RoundAction(
+                                Icons.Filled.ScreenShare,
+                                if (current.screenSharing) "Paylaşımı durdur" else "Ekranı paylaş",
+                                if (current.screenSharing) Color.White else Color(0x22FFFFFF),
+                                tint = if (current.screenSharing) Color(0xFF0A1A33) else Color.White,
+                                size = 56,
+                            ) { Calls.toggleScreenShare() }
+                        }
+                    }
+                    Spacer(Modifier.height(22.dp))
+                    RoundAction(Icons.Filled.CallEnd, "Kapat", Danger, size = 74) { Calls.hangup() }
                 }
             }
         }
+        if (dialpad) DialpadOverlay(onDismiss = { dialpad = false })
         if (showVideo && local != null && current.cameraOn) {
             VideoView(
                 local!!,
@@ -210,12 +257,17 @@ private fun statusText(call: CallState): String {
         }
     }
     return when (call.phase) {
-        CallPhase.OUTGOING -> if (call.video) "Görüntülü arama · aranıyor…" else "Aranıyor…"
+        CallPhase.OUTGOING -> when {
+            !call.peerOnline -> "Çevrimdışı · aranıyor…"
+            call.video -> "Görüntülü arama · çalıyor…"
+            else -> "Çalıyor…"
+        }
         CallPhase.INCOMING -> if (call.video) "Görüntülü arama geliyor" else "Sesli arama geliyor"
         CallPhase.CONNECTING -> "Bağlanıyor…"
         CallPhase.ACTIVE -> {
             val seconds = ((now - call.startedAt) / 1000).coerceAtLeast(0)
-            "%02d:%02d".format(seconds / 60, seconds % 60)
+            val time = "%02d:%02d".format(seconds / 60, seconds % 60)
+            if (call.held) "Beklemede · $time" else time
         }
         CallPhase.ENDED -> call.endReason ?: "Arama sona erdi"
     }
@@ -262,5 +314,52 @@ private fun VideoView(track: VideoTrack, mirror: Boolean, overlay: Boolean, modi
     DisposableEffect(track, target) {
         if (target != null) runCatching { track.addSink(target) }
         onDispose { if (target != null) runCatching { track.removeSink(target) } }
+    }
+}
+
+/** Profesyonel arama tuş takımı: basınca DTMF tonu çalar. */
+@Composable
+private fun DialpadOverlay(onDismiss: () -> Unit) {
+    val keys = listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#")
+    val tones = mapOf(
+        "1" to android.media.ToneGenerator.TONE_DTMF_1, "2" to android.media.ToneGenerator.TONE_DTMF_2,
+        "3" to android.media.ToneGenerator.TONE_DTMF_3, "4" to android.media.ToneGenerator.TONE_DTMF_4,
+        "5" to android.media.ToneGenerator.TONE_DTMF_5, "6" to android.media.ToneGenerator.TONE_DTMF_6,
+        "7" to android.media.ToneGenerator.TONE_DTMF_7, "8" to android.media.ToneGenerator.TONE_DTMF_8,
+        "9" to android.media.ToneGenerator.TONE_DTMF_9, "0" to android.media.ToneGenerator.TONE_DTMF_0,
+        "*" to android.media.ToneGenerator.TONE_DTMF_S, "#" to android.media.ToneGenerator.TONE_DTMF_P,
+    )
+    val gen = remember { runCatching { android.media.ToneGenerator(android.media.AudioManager.STREAM_VOICE_CALL, 80) }.getOrNull() }
+    DisposableEffect(Unit) { onDispose { runCatching { gen?.release() } } }
+    var typed by remember { mutableStateOf("") }
+    Box(
+        Modifier.fillMaxSize().background(Color(0xE6071023)).clickable(
+            interactionSource = remember { MutableInteractionSource() }, indication = null,
+        ) { },
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.systemBarsPadding().padding(24.dp)) {
+            Text(typed.ifEmpty { "Tuş takımı" }, color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(24.dp))
+            keys.chunked(3).forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                    row.forEach { key ->
+                        Box(
+                            Modifier.size(74.dp).clip(CircleShape).background(Color(0x22FFFFFF)).clickable {
+                                typed += key
+                                runCatching { tones[key]?.let { gen?.startTone(it, 160) } }
+                            },
+                            contentAlignment = Alignment.Center,
+                        ) { Text(key, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Medium) }
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
+            }
+            Spacer(Modifier.height(12.dp))
+            Box(
+                Modifier.size(62.dp).clip(CircleShape).background(Color(0x33FFFFFF)).clickable(onClick = onDismiss),
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icons.Filled.Close, "Kapat", tint = Color.White, modifier = Modifier.size(28.dp)) }
+        }
     }
 }

@@ -1,5 +1,7 @@
 package com.bayx.chat
 
+import com.bayx.chat.data.Calls
+import androidx.compose.runtime.DisposableEffect
 import android.graphics.Color as AndroidColor
 import android.net.Uri
 import android.Manifest
@@ -121,6 +123,20 @@ fun BayxApp() {
     val auth by Bayx.auth.collectAsState()
     val context = LocalContext.current
     val shake = remember { Animatable(0f) }
+
+    // Arama ekranından ekran paylaşımı: Activity'den ekran yakalama izni iste.
+    val screenShareLauncher = rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) Calls.onScreenCaptureResult(result.data)
+    }
+    DisposableEffect(Unit) {
+        val mpm = context.getSystemService(android.media.projection.MediaProjectionManager::class.java)
+        Calls.screenShareRequester = {
+            runCatching { mpm?.createScreenCaptureIntent()?.let { screenShareLauncher.launch(it) } }
+        }
+        onDispose { Calls.screenShareRequester = null }
+    }
 
     // Titreşim (gelen ya da gönderilen): telefonu titret, vızıltı sesi çal ve ekranı salla.
     LaunchedEffect(Unit) {

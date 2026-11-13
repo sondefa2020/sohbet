@@ -23,6 +23,7 @@ import com.bayx.chat.R
 object Notifier {
     private const val CH_MESSAGES = "mesajlar_v2"
     private const val CH_CALLS = "aramalar"
+    private const val CH_SCREEN = "ekran_paylasimi"
     private const val CALL_NOTIFICATION_ID = 1001
     const val EXTRA_ROOM_ID = "tayfa_room_id"
 
@@ -61,6 +62,28 @@ object Notifier {
                 vibrationPattern = longArrayOf(0, 600, 400, 600, 400, 600)
             },
         )
+        manager.createNotificationChannel(
+            NotificationChannel(CH_SCREEN, "Ekran paylaşımı", NotificationManager.IMPORTANCE_LOW).apply {
+                description = "Ekran paylaşımı sürerken gösterilir"
+                setShowBadge(false)
+            },
+        )
+    }
+
+    /** Ekran paylaşımı ön plan servisi için sessiz, düşük öncelikli bildirim. */
+    fun screenShareNotification(context: Context): android.app.Notification {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) createChannels(context)
+        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            android.app.Notification.Builder(context, CH_SCREEN)
+        } else {
+            @Suppress("DEPRECATION") android.app.Notification.Builder(context)
+        }
+        return builder
+            .setContentTitle("Tayfa ekran paylaşımı")
+            .setContentText("Ekranın karşı tarafla paylaşılıyor")
+            .setSmallIcon(R.drawable.ic_stat_tayfa)
+            .setOngoing(true)
+            .build()
     }
 
     private fun canNotify(context: Context): Boolean {
