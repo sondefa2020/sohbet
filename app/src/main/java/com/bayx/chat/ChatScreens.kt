@@ -806,7 +806,7 @@ private fun MessageRow(
 // ---------- Profil ----------
 
 @Composable
-fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Unit) {
+fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Unit, onWebLink: () -> Unit) {
     var confirmLogout by remember { mutableStateOf(false) }
     var loggingOut by remember { mutableStateOf(false) }
     var info by remember { mutableStateOf<String?>(null) }
@@ -1008,17 +1008,7 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
                     },
                 ) { showEmail = true }
                 HorizontalDivider(color = Line)
-                SettingRow(Icons.Outlined.Computer, "Web'de aç") {
-                    withToken { token ->
-                        val reply = Api.webCode(token)
-                        shareDialog = Triple(
-                            "Tayfa Web",
-                            "Bilgisayarda ${reply.url.ifEmpty { "web adresindeki giris.html" }} adresini aç ve bu kodu yaz. " +
-                                "5 dakika geçerli, tek kullanımlık.",
-                            Api.CodeReply(reply.code, ""),
-                        )
-                    }
-                }
+                SettingRow(Icons.Outlined.Computer, "Web'e bağlan", onClick = onWebLink)
                 HorizontalDivider(color = Line)
                 SettingRow(Icons.Outlined.Password, "Web için geçici şifre") {
                     withToken { token ->

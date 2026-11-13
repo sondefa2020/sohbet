@@ -25,6 +25,7 @@ LINK_SELF_SECONDS = 5 * 60
 LINK_ADMIN_SECONDS = 24 * 3600
 LINK_LOCAL_SECONDS = 30 * 60
 WEB_CODE_SECONDS = 5 * 60
+WEB_PAIR_SECONDS = 2 * 60
 INVITE_DAYS_DEFAULT = 7
 PBKDF2_ROUNDS = 120_000
 
@@ -242,6 +243,69 @@ class Store:
         for h in [h for h, v in self._web_codes.items() if v["expires"] < now]:
             del self._web_codes[h]
         return self._web_codes
+
+    # -------------------------------------------- WhatsApp Web tarzı eşleştirme
+    # Web sayfası QR + 6 haneli kod gösterir, telefon onaylar.
+
+    def create_pairing(self):
+        """Web tarafı çağırır: bekleyen bir eşleştirme oluşturur."""
+        pairing_id = secrets.token_urlsafe(18)
+        code = "".join(secrets.choice("0123456789") for _ in range(6))
+        with self.lock:
+            pairs = self._pairings()
+            pairs[pairing_id] = {
+                "code": code,
+                "token": None,
+                "expires": time.time() + WEB_PAIR_SECONDS,
+            }
+        return {"pairing_id": pairing_id, "code": code}
+
+    def pairing_by_code(self, code):
+        """Telefonun girdiği 6 haneli koda karşılık gelen eşleştirme kimliği."""
+        if not isinstance(code, str):
+            return None
+        code = "".join(ch for ch in code if ch.isdigit())
+        if len(code) != 6:
+            return None
+        with self.lock:
+            for pid, p in self._pairings().items():
+                if p.get("code") == code and not p.get("token"):
+                    return pid
+        return None
+
+    def approve_pairing(self, pairing_id, login_token):
+        """Telefon onaylar: web'in bekleyen eşleştirmesine giriş jetonu bağlanır."""
+        if not isinstance(pairing_id, str):
+            return False
+        with self.lock:
+            p = self._pairings().get(pairing_id)
+            if not p or p.get("token") or p.get("expires", 0) <= time.time():
+                return False
+            p["token"] = login_token
+            return True
+
+    def poll_pairing(self, pairing_id):
+        """Web yoklar: onaylandıysa jetonu döndürür ('ready'); değilse 'pending'/'gone'."""
+        if not isinstance(pairing_id, str):
+            return ("gone", None)
+        with self.lock:
+            pairs = self._pairings()
+            p = pairs.get(pairing_id)
+            if not p or p.get("expires", 0) <= time.time():
+                pairs.pop(pairing_id, None)
+                return ("gone", None)
+            if p.get("token"):
+                pairs.pop(pairing_id, None)
+                return ("ready", p["token"])
+            return ("pending", None)
+
+    def _pairings(self):
+        if not hasattr(self, "_pair_store"):
+            self._pair_store = {}
+        now = time.time()
+        for pid in [pid for pid, v in self._pair_store.items() if v["expires"] < now]:
+            del self._pair_store[pid]
+        return self._pair_store
 
 
 class Attempts:

@@ -14,8 +14,8 @@ android {
         applicationId = "com.tayfa.chat"
         minSdk = 26
         targetSdk = 35
-        versionCode = 18
-        versionName = "0.18.0"
+        versionCode = 19
+        versionName = "0.19.0"
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }
@@ -86,6 +86,12 @@ dependencies {
     implementation("androidx.biometric:biometric:1.1.0")
     implementation("androidx.fragment:fragment-ktx:1.8.5")
     implementation("com.google.zxing:core:3.5.3")
+
+    // Web bağlama için QR tarayıcı (CameraX)
+    implementation("androidx.camera:camera-core:1.4.1")
+    implementation("androidx.camera:camera-camera2:1.4.1")
+    implementation("androidx.camera:camera-lifecycle:1.4.1")
+    implementation("androidx.camera:camera-view:1.4.1")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.14.1")

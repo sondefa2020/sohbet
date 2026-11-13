@@ -157,6 +157,15 @@ object Api {
         request("POST", "/bayx/v2/web/password", JSONObject(), token).optString("password")
     }
 
+    /** WhatsApp Web tarzı: telefon, web'deki QR'ı (pairing_id) ya da 6 haneli kodu onaylar. */
+    suspend fun webApprove(token: String, pairingId: String?, code: String?): Unit = io {
+        val body = JSONObject()
+        if (!pairingId.isNullOrBlank()) body.put("pairing_id", pairingId)
+        if (!code.isNullOrBlank()) body.put("code", code)
+        request("POST", "/bayx/v3/web/approve", body, token)
+        Unit
+    }
+
     // ------------------------------------------------- uygulama ayarı (modüler)
 
     data class AppConfig(val announcement: String, val latestVersion: Int, val apkUrl: String)

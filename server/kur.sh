@@ -440,28 +440,8 @@ if [ -d "$WEB_DIR" ]; then
   }
 }
 WEBCONF
-    cat > "$WEB_DIR/giris.html" <<'WEBGIRIS'
-<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="robots" content="noindex"><title>Tayfa Web'e giriş</title><style>
-body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:linear-gradient(#fbf8f4,#f2ebe2);color:#1f1b18}
-.k{background:#fff;border-radius:28px;box-shadow:0 18px 50px rgba(90,60,30,.12);padding:34px 30px;max-width:380px;width:86%;text-align:center}
-h1{margin:0 0 6px;font-size:26px}p{color:#6e655c;line-height:1.45;margin:6px 0 18px}
-input{width:100%;box-sizing:border-box;padding:16px;border-radius:16px;border:1px solid #e6ddd2;background:#faf6f1;font-size:24px;letter-spacing:4px;text-align:center;text-transform:uppercase}
-button{width:100%;margin-top:14px;padding:15px;border:0;border-radius:18px;background:linear-gradient(#e2c3a1,#c99d74);color:#2a1c10;font-weight:700;font-size:17px;cursor:pointer}
-#h{color:#b4232a;min-height:22px;margin-top:12px;font-size:14px}</style></head><body><div class="k">
-<h1>Tayfa Web</h1><p>Telefonda <b>Profil › Web'de aç</b> bölümündeki 8 haneli kodu yaz.</p>
-<input id="c" maxlength="9" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX">
-<button id="b">Giriş yap</button><div id="h"></div></div><script>
-const HS="https://__DOMAIN__";
-async function go(){const h=document.getElementById("h");h.textContent="";
-const code=document.getElementById("c").value;
-try{const r=await fetch(HS+"/bayx/v2/web/redeem",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({code})});
-const d=await r.json();if(!r.ok){h.textContent=d.message||"Giriş yapılamadı.";return}
-localStorage.setItem("mx_sso_hs_url",d.homeserver);localStorage.removeItem("mx_sso_is_url");
-location.replace("/?loginToken="+encodeURIComponent(d.login_token));}catch(e){h.textContent="Sunucuya ulaşılamadı.";}}
-document.getElementById("b").onclick=go;document.getElementById("c").addEventListener("keydown",e=>{if(e.key==="Enter")go()});
-</script></body></html>
-WEBGIRIS
+    curl -fsSL -o "$WEB_DIR/giris.html" "$RAW_BASE/web/giris.html" || fail "giris.html indirilemedi."
+    curl -fsSL -o "$WEB_DIR/qrcode.js" "$RAW_BASE/web/qrcode.js" || fail "qrcode.js indirilemedi."
     sed -i "s|__DOMAIN__|$DOMAIN|" "$WEB_DIR/giris.html"
     echo "$WEB_TAG" > "$WEB_DIR/.tayfa-web"
     chown -R --reference="$(dirname "$WEB_DIR")" "$WEB_DIR"

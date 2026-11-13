@@ -591,6 +591,7 @@ def ticket_check(body):
 
 _recover_attempts = giris.Attempts(limit=8)
 _code_attempts = giris.Attempts(limit=20)
+_pair_attempts = giris.Attempts(limit=30)
 
 
 def recover(body, ip):
@@ -649,6 +650,59 @@ def web_redeem(body, ip):
         _code_attempts.fail("web:" + ip)
         raise ApiError(403, "KOD_HATALI", "Kod geçersiz ya da süresi dolmuş. Telefonda yeni kod al.")
     return {"login_token": token, "homeserver": PUBLIC_BASE}
+
+
+# -------------------------------------------- WhatsApp Web tarzı cihaz bağlama
+# Akış: Web açılır -> start (QR + 6 haneli kod) -> telefon QR okutur/kod girer
+# -> approve (telefon oturumu web jetonunu basar) -> web poll ile jetonu alır.
+
+def web_pair_start(ip):
+    """Web tarafı: bekleyen bir eşleştirme başlatır, QR yükü + 6 haneli kod döndürür."""
+    if _pair_attempts.blocked("start:" + ip):
+        raise ApiError(429, "COK_FAZLA_DENEME", "Çok fazla istek. Biraz sonra tekrar dene.")
+    _pair_attempts.fail("start:" + ip)
+    pairing = GIRIS.create_pairing()
+    return {
+        "pairing_id": pairing["pairing_id"],
+        "code": pairing["code"],
+        "qr": "tayfaweb:" + pairing["pairing_id"],
+        "expires_in": giris.WEB_PAIR_SECONDS,
+    }
+
+
+def web_pair_approve(headers, body):
+    """Telefon (giriş yapmış): QR'dan pairing_id veya elle 6 haneli kod ile onaylar."""
+    uid = member_from_token(headers)
+    if _pair_attempts.blocked("approve:" + uid):
+        raise ApiError(429, "COK_FAZLA_DENEME", "Çok fazla deneme. Biraz bekle.")
+    pairing_id = body.get("pairing_id")
+    raw = pairing_id if isinstance(pairing_id, str) else ""
+    # QR yükü tüm olarak gelebilir ("tayfaweb:<id>").
+    if raw.startswith("tayfaweb:"):
+        raw = raw[len("tayfaweb:"):]
+    if not raw:
+        raw = GIRIS.pairing_by_code(str(body.get("code", ""))) or ""
+    if not raw:
+        _pair_attempts.fail("approve:" + uid)
+        raise ApiError(404, "ESLESME_YOK", "Kod geçersiz ya da süresi dolmuş. Web'de yeni kod al.")
+    token = headers.get("Authorization", "")[7:].strip()
+    status, data = synapse("POST", "/_matrix/client/v1/login/get_token", {}, token=token)
+    if status != 200 or not data.get("login_token"):
+        raise ApiError(502, "WEB_KAPALI", "Web girişi sunucuda açık değil. Sunucu komutunu yeniden çalıştır.")
+    if not GIRIS.approve_pairing(raw, data["login_token"]):
+        _pair_attempts.fail("approve:" + uid)
+        raise ApiError(404, "ESLESME_YOK", "Kod geçersiz ya da süresi dolmuş. Web'de yeni kod al.")
+    return {"ok": True}
+
+
+def web_pair_poll(body):
+    """Web tarafı: eşleştirme onaylandıysa giriş jetonunu döndürür."""
+    status, token = GIRIS.poll_pairing(body.get("pairing_id"))
+    if status == "ready":
+        return {"status": "ready", "login_token": token, "homeserver": PUBLIC_BASE}
+    if status == "pending":
+        return {"status": "pending"}
+    return {"status": "gone"}
 
 
 LANDING = """<!doctype html><html lang="tr"><head><meta charset="utf-8">
@@ -1072,7 +1126,8 @@ class Handler(BaseHTTPRequestHandler):
     def _cors(self):
         origin = self.headers.get("Origin", "")
         path = self.path.split("?", 1)[0].rstrip("/")
-        if WEB_ORIGIN and origin == WEB_ORIGIN and path == "/bayx/v2/web/redeem":
+        web_paths = ("/bayx/v2/web/redeem", "/bayx/v3/web/start", "/bayx/v3/web/poll")
+        if WEB_ORIGIN and origin == WEB_ORIGIN and path in web_paths:
             self.send_header("Access-Control-Allow-Origin", WEB_ORIGIN)
             self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
             self.send_header("Access-Control-Allow-Headers", "Content-Type")
@@ -1237,6 +1292,12 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, web_code(self.headers))
             elif method == "POST" and path == "/bayx/v2/web/redeem":
                 self._send(200, web_redeem(self._body(), self._ip()))
+            elif method == "POST" and path == "/bayx/v3/web/start":
+                self._send(200, web_pair_start(self._ip()))
+            elif method == "POST" and path == "/bayx/v3/web/approve":
+                self._send(200, web_pair_approve(self.headers, self._body()))
+            elif method == "POST" and path == "/bayx/v3/web/poll":
+                self._send(200, web_pair_poll(self._body()))
             elif method == "POST" and path == "/bayx/v2/local/link":
                 # Yalnızca sunucudaki tayfa-giris komutu çağırabilir (nginx üzerinden gelen istek reddedilir).
                 if self.client_address[0] != "127.0.0.1" or self.headers.get("X-Real-IP"):

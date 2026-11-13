@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Tayfa Web'e giriş</title>
+<style>
+  :root{--kahve:#c99d74;--kahve2:#e2c3a1;--metin:#1f1b18;--soluk:#6e655c;--yesil:#2e8b6e}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    background:linear-gradient(#fbf8f4,#f2ebe2);color:var(--metin);padding:20px}
+  .k{background:#fff;border-radius:28px;box-shadow:0 18px 50px rgba(90,60,30,.12);
+    padding:34px 32px;max-width:460px;width:100%;text-align:center}
+  .logo{width:60px;height:60px;border-radius:18px;margin:0 auto 10px;
+    background:linear-gradient(135deg,#34a07f,#1f6b52);display:flex;align-items:center;justify-content:center;
+    box-shadow:0 8px 20px rgba(46,139,110,.3)}
+  .logo b{color:#fff;font-size:30px;font-weight:800}
+  h1{margin:4px 0 2px;font-size:25px}
+  .alt{color:var(--soluk);line-height:1.5;margin:4px 0 20px;font-size:15px}
+  .qrbox{display:flex;justify-content:center;margin:6px 0 10px}
+  #qr{width:230px;height:230px;border:1px solid #efe7dd;border-radius:18px;padding:12px;background:#fff}
+  #qr svg,#qr img{width:100%;height:100%;display:block}
+  .adimlar{text-align:left;margin:16px auto 6px;max-width:320px;color:var(--soluk);font-size:14.5px;line-height:1.7}
+  .adimlar b{color:var(--metin)}
+  .ayrac{display:flex;align-items:center;gap:12px;color:#b8ad9f;margin:18px 0 10px;font-size:13px}
+  .ayrac::before,.ayrac::after{content:"";flex:1;height:1px;background:#ece3d8}
+  .kod{font-size:34px;letter-spacing:10px;font-weight:800;margin:4px 0 2px;
+    font-variant-numeric:tabular-nums;color:var(--metin)}
+  .kodnot{color:var(--soluk);font-size:13.5px;margin:0 0 6px}
+  #durum{min-height:22px;margin-top:14px;font-size:14px;color:var(--soluk)}
+  #durum.hata{color:#b4232a}
+  #durum.ok{color:var(--yesil);font-weight:700}
+  .yenile{margin-top:12px;border:0;background:transparent;color:var(--kahve);
+    font-weight:700;font-size:14px;cursor:pointer;text-decoration:underline;padding:6px;display:none}
+</style>
+</head>
+<body>
+<div class="k">
+  <div class="logo"><b>T</b></div>
+  <h1>Tayfa Web</h1>
+  <p class="alt">Telefonunla bağlan — birkaç saniye sürer.</p>
+
+  <div class="qrbox"><div id="qr"></div></div>
+
+  <div class="adimlar">
+    <div>1. Telefonda Tayfa'yı aç</div>
+    <div>2. <b>Profil › Web'e bağlan</b>'a dokun</div>
+    <div>3. Bu <b>QR kodu</b> okut</div>
+  </div>
+
+  <div class="ayrac">ya da kodu elle gir</div>
+  <div class="kod" id="kod">— — — — — —</div>
+  <p class="kodnot">Telefonda “Kodu elle gir” deyip bu 6 haneyi yaz.</p>
+
+  <div id="durum">Kod hazırlanıyor…</div>
+  <button class="yenile" id="yenile">Yeni kod al</button>
+</div>
+
+<script src="/qrcode.js"></script>
+<script>
+const HS = "https://__DOMAIN__";
+const qrBox = document.getElementById("qr");
+const kodEl = document.getElementById("kod");
+const durum = document.getElementById("durum");
+const yenile = document.getElementById("yenile");
+let pairingId = null, pollTimer = null, expireTimer = null, stopped = false;
+
+function setDurum(t, cls){ durum.textContent = t; durum.className = cls || ""; }
+function gruplaKod(c){ return c ? (c.slice(0,3) + " " + c.slice(3)) : "— — — — — —"; }
+
+function cizQr(payload){
+  qrBox.innerHTML = "";
+  try{
+    const qr = qrcode(0, "M");
+    qr.addData(payload);
+    qr.make();
+    qrBox.innerHTML = qr.createSvgTag({ cellSize: 6, margin: 0, scalable: true });
+  }catch(e){
+    qrBox.textContent = "QR çizilemedi";
+  }
+}
+
+async function baslat(){
+  stopped = false;
+  clearTimeout(pollTimer); clearTimeout(expireTimer);
+  yenile.style.display = "none";
+  setDurum("Kod hazırlanıyor…");
+  kodEl.textContent = "— — — — — —";
+  qrBox.innerHTML = "";
+  try{
+    const r = await fetch(HS + "/bayx/v3/web/start", { method:"POST" });
+    const d = await r.json();
+    if(!r.ok){ setDurum(d.message || "Kod alınamadı.", "hata"); yenile.style.display="inline-block"; return; }
+    pairingId = d.pairing_id;
+    cizQr(d.qr);
+    kodEl.textContent = gruplaKod(d.code);
+    setDurum("Telefonda okutmanı bekliyorum…");
+    const sure = (d.expires_in || 120) * 1000;
+    expireTimer = setTimeout(suresiDoldu, sure);
+    yokla();
+  }catch(e){ setDurum("Sunucuya ulaşılamadı.", "hata"); yenile.style.display="inline-block"; }
+}
+
+async function yokla(){
+  if(stopped) return;
+  try{
+    const r = await fetch(HS + "/bayx/v3/web/poll", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ pairing_id: pairingId })
+    });
+    const d = await r.json();
+    if(d.status === "ready"){ girisYap(d); return; }
+    if(d.status === "gone"){ suresiDoldu(); return; }
+  }catch(e){ /* ağ titremesi: yoklamaya devam */ }
+  pollTimer = setTimeout(yokla, 2000);
+}
+
+function girisYap(d){
+  stopped = true;
+  clearTimeout(expireTimer);
+  setDurum("Onaylandı! Açılıyor…", "ok");
+  try{
+    localStorage.setItem("mx_sso_hs_url", d.homeserver);
+    localStorage.removeItem("mx_sso_is_url");
+  }catch(e){}
+  location.replace("/?loginToken=" + encodeURIComponent(d.login_token));
+}
+
+function suresiDoldu(){
+  stopped = true;
+  clearTimeout(pollTimer);
+  setDurum("Kodun süresi doldu.", "hata");
+  kodEl.textContent = "— — — — — —";
+  qrBox.innerHTML = "";
+  yenile.style.display = "inline-block";
+}
+
+yenile.onclick = baslat;
+baslat();
+</script>
+</body>
+</html>

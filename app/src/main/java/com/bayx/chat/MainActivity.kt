@@ -268,7 +268,11 @@ private fun MainNav(me: AuthState.LoggedIn) {
                 me = me,
                 onBack = { nav.popBackStack() },
                 onAdmin = { nav.navigate("admin") },
+                onWebLink = { nav.navigate("weblink") },
             )
+        }
+        composable("weblink") {
+            WebLinkScreen(onBack = { nav.popBackStack() })
         }
         composable("admin") {
             AdminScreen(me = me, onBack = { nav.popBackStack() })

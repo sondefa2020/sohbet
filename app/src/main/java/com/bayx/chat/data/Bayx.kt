@@ -1004,6 +1004,19 @@ object Bayx {
         return runCatching { Api.contactFind(token, username) }.getOrNull()
     }
 
+    /** Web oturumunu onaylar (QR pairing_id ya da 6 haneli kod). Hata varsa mesaj döner. */
+    suspend fun approveWeb(pairingId: String?, code: String?): String? {
+        val token = accessToken ?: return "Oturum yok."
+        return try {
+            Api.webApprove(token, pairingId, code)
+            null
+        } catch (e: ApiException) {
+            e.message
+        } catch (e: Exception) {
+            "Sunucuya ulaşılamadı."
+        }
+    }
+
     /** Kişi isteği gönderir; hata varsa mesajı döndürür. */
     suspend fun sendContactRequest(username: String): String? {
         val token = accessToken ?: return "Oturum yok."
