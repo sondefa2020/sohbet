@@ -5,6 +5,7 @@ import androidx.compose.material.icons.outlined.GroupAdd
 import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.material.icons.outlined.Computer
 import androidx.compose.material.icons.outlined.Key
+import androidx.compose.material.icons.outlined.Password
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -919,6 +920,16 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
                             "Bilgisayarda ${reply.url.ifEmpty { "web adresindeki giris.html" }} adresini aç ve bu kodu yaz. " +
                                 "5 dakika geçerli, tek kullanımlık.",
                             Api.CodeReply(reply.code, ""),
+                        )
+                    }
+                }
+                HorizontalDivider(color = Line)
+                SettingRow(Icons.Outlined.Password, "Web için geçici şifre") {
+                    withToken { token ->
+                        shareDialog = Triple(
+                            "Web için geçici şifre",
+                            "Tayfa Web bir güvenlik adımında şifre sorarsa bunu yaz (tireler dahil). 5 dakika sonra geçersiz olur.",
+                            Api.CodeReply(Api.webPassword(token), ""),
                         )
                     }
                 }

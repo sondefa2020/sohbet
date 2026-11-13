@@ -120,6 +120,10 @@ object Api {
         request("POST", "/bayx/v2/recovery/new", JSONObject(), token).optString("recovery_code")
     }
 
+    suspend fun webPassword(token: String): String = io {
+        request("POST", "/bayx/v2/web/password", JSONObject(), token).optString("password")
+    }
+
     suspend fun seal(token: String) = io { request("POST", "/bayx/v2/seal", JSONObject(), token); Unit }
 
     suspend fun createInvite(token: String, uses: Int, days: Int) = io {

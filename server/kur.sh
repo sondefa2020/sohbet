@@ -211,6 +211,23 @@ print("Bu bilgiyi kimseyle paylaşma; ekran görüntüsü alırsan bu satırlar�
 GIRISCMD
 chmod 755 /usr/local/bin/tayfa-giris
 
+# Tayfa Web şifre sorarsa: sudo tayfa-sifre <kullanıcı_adı>  (5 dakikalık geçici şifre)
+cat > /usr/local/bin/tayfa-sifre <<'SIFRECMD'
+#!/bin/bash
+set -euo pipefail
+U="${1:-}"
+if [ -z "$U" ] && [ -f /etc/bayx/yonetici-olusturuldu ]; then U="$(cat /etc/bayx/yonetici-olusturuldu)"; fi
+[ -n "$U" ] || { echo "Kullanım: sudo tayfa-sifre <kullanıcı_adı>"; exit 1; }
+OUT="$(curl -fsS -X POST http://127.0.0.1:8010/bayx/v2/local/password -H 'Content-Type: application/json' \
+    -d "{\"username\":\"$U\"}" 2>/dev/null)" || { echo "Şifre üretilemedi: kullanıcı adı yanlış ya da hesap onaylı değil."; exit 1; }
+echo "$OUT" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+print("Geçici şifre (5 dakika): " + d["password"])
+print("Tayfa Web şifre sorduğunda bunu yaz (tireler dahil). 5 dakika sonra kendiliğinden geçersiz olur.")'
+SIFRECMD
+chmod 755 /usr/local/bin/tayfa-sifre
+
 # Bildirimler: Firebase servis hesabı dosyası sunucuya elle konur (gizli anahtar içerir).
 PUSH_OK="hayır (/etc/bayx/firebase.json yok)"
 if [ -s /etc/bayx/firebase.json ]; then

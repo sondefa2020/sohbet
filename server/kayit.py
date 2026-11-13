@@ -177,15 +177,15 @@ def scramble(uid, gen=None):
     set_password(uid, secrets.token_urlsafe(32))
 
 
-def issue_otp(uid):
+def issue_otp(uid, seconds=None, readable=False):
     """Kısa ömürlü tek seferlik şifre: uygulama bununla giriş yapar, sonra şifre yeniden karıştırılır."""
-    otp = secrets.token_urlsafe(24)
+    otp = giris.group(giris.new_code(12)) if readable else secrets.token_urlsafe(24)
     if not set_password(uid, otp):
         raise ApiError(502, "SUNUCU_HATASI", "Oturum hazırlanamadı.")
     with _otp_lock:
         gen = _otp_gen.get(uid, 0) + 1
         _otp_gen[uid] = gen
-    timer = threading.Timer(giris.OTP_SECONDS, scramble, args=(uid, gen))
+    timer = threading.Timer(seconds or giris.OTP_SECONDS, scramble, args=(uid, gen))
     timer.daemon = True
     timer.start()
     return otp
@@ -791,6 +791,17 @@ class Handler(BaseHTTPRequestHandler):
                 uid = member_from_token(self.headers)
                 scramble(uid)
                 self._send(200, {"ok": True})
+            elif method == "POST" and path == "/bayx/v2/web/password":
+                # Tayfa Web (Element) bazı güvenlik adımlarında hesap şifresi sorar: 5 dakikalık geçici şifre.
+                uid = member_from_token(self.headers)
+                self._send(200, {"password": issue_otp(uid, 300, readable=True), "minutes": 5})
+            elif method == "POST" and path == "/bayx/v2/local/password":
+                if self.client_address[0] != "127.0.0.1" or self.headers.get("X-Real-IP"):
+                    raise ApiError(404, "BULUNAMADI", "Bulunamadı.")
+                uid = user_id(str(self._body().get("username", "")).strip().lower())
+                if active_user(uid) is None:
+                    raise ApiError(404, "KULLANICI_YOK", "Böyle onaylı bir üye yok.")
+                self._send(200, {"password": issue_otp(uid, 300, readable=True), "minutes": 5})
             elif method == "POST" and path == "/bayx/v2/web/code":
                 self._send(200, web_code(self.headers))
             elif method == "POST" and path == "/bayx/v2/web/redeem":
