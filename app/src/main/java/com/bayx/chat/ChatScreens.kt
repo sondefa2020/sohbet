@@ -278,7 +278,7 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Geri", tint = Ink) }
-            Avatar(title, 52.dp, url = headerAvatar, mode = partnerPresence?.mode ?: if (partnerOnline) "online" else null)
+            Avatar(title, 44.dp, url = headerAvatar, mode = partnerPresence?.mode ?: if (partnerOnline) "online" else null)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(
@@ -313,7 +313,7 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit) {
                     )
                 }
             }
-            ChipIcon(Icons.Outlined.Vibration, "Titreşim gönder", size = 42.dp, tint = Color(0xFF9A6236)) {
+            ChipIcon(Icons.Outlined.Vibration, "Titreşim gönder", size = 38.dp, tint = Color(0xFF9A6236)) {
                 val now = System.currentTimeMillis()
                 if (now - lastNudge < 5_000) {
                     toast("Biraz bekle; titreşim 5 saniyede bir gönderilebilir.")
@@ -322,10 +322,10 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit) {
                     scope.launch { if (!Bayx.sendNudge(session)) toast("Titreşim gönderilemedi.") }
                 }
             }
-            Spacer(Modifier.width(8.dp))
-            ChipIcon(Icons.Outlined.Call, "Sesli ara", size = 42.dp) { placeCall(false) }
-            Spacer(Modifier.width(8.dp))
-            ChipIcon(Icons.Outlined.Videocam, "Görüntülü ara", size = 42.dp) { placeCall(true) }
+            Spacer(Modifier.width(6.dp))
+            ChipIcon(Icons.Outlined.Call, "Sesli ara", size = 38.dp) { placeCall(false) }
+            Spacer(Modifier.width(6.dp))
+            ChipIcon(Icons.Outlined.Videocam, "Görüntülü ara", size = 38.dp) { placeCall(true) }
             Box {
                 IconButton(onClick = { menuOpen = true }) { Icon(Icons.Filled.MoreVert, "Diğer", tint = Ink) }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
