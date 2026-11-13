@@ -68,7 +68,7 @@ private fun AuthPage(content: @Composable ColumnScope.() -> Unit) {
             .systemBarsPadding()
             .imePadding()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 26.dp),
+            .padding(horizontal = 18.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         content = content,
     )
@@ -86,8 +86,8 @@ private fun LoginScreen(onRegister: () -> Unit, onForgot: () -> Unit) {
         Spacer(Modifier.height(70.dp))
         LogoMark(126.dp)
         Spacer(Modifier.height(14.dp))
-        Text("Tayfa", color = Ink, fontSize = 40.sp, fontWeight = FontWeight.ExtraBold)
-        Text("Özel ve uçtan uca şifreli sohbet", color = Muted, fontSize = 15.sp)
+        Text("Tayfa", color = Ink, fontSize = 44.sp, fontWeight = FontWeight.ExtraBold)
+        Text("Özel ve uçtan uca şifreli sohbet", color = Muted, fontSize = 16.sp)
         Spacer(Modifier.height(40.dp))
         PillField(user, { user = it.lowercase().trim() }, "Kullanıcı adı", Icons.Outlined.Person)
         Spacer(Modifier.height(16.dp))
@@ -135,7 +135,7 @@ private fun RegisterScreen(onBack: () -> Unit) {
         Spacer(Modifier.height(10.dp))
         Text("Hesap oluştur", color = Ink, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
         Spacer(Modifier.height(6.dp))
-        Text("Hemen giriş yaparsın. E-posta isteğe bağlı; şifreni unutursan sıfırlaman için işine yarar.", color = Muted, fontSize = 14.sp, textAlign = TextAlign.Center)
+        Text("Hemen giriş yaparsın. E-posta isteğe bağlı; şifreni unutursan sıfırlaman için işine yarar.", color = Muted, fontSize = 15.sp, textAlign = TextAlign.Center)
         Spacer(Modifier.height(26.dp))
         PillField(user, { user = it.lowercase().trim().take(20) }, "Kullanıcı adı", Icons.Outlined.Person)
         Spacer(Modifier.height(14.dp))
@@ -196,7 +196,7 @@ private fun ForgotScreen(onBack: () -> Unit) {
         Text(
             "Hesabına doğrulanmış e-posta bağlıysa 6 haneli kod gönderilir. E-postası olmayan hesapların şifresini yönetici sıfırlar.",
             color = Muted,
-            fontSize = 13.5.sp,
+            fontSize = 14.5.sp,
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(24.dp))

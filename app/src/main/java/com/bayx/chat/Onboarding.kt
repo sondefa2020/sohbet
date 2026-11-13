@@ -56,25 +56,25 @@ fun OnboardingScreen() {
             .background(PageBrush)
             .systemBarsPadding()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 28.dp),
+            .padding(horizontal = 18.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Spacer(Modifier.height(56.dp))
         LogoMark(120.dp)
         Spacer(Modifier.height(16.dp))
-        Text("Tayfa'ya hoş geldin", color = Ink, fontSize = 27.sp, fontWeight = FontWeight.ExtraBold, textAlign = TextAlign.Center)
+        Text("Tayfa'ya hoş geldin", color = Ink, fontSize = 30.sp, fontWeight = FontWeight.ExtraBold, textAlign = TextAlign.Center)
         Spacer(Modifier.height(8.dp))
         Text(
             "Özel, davetli bir sohbet uygulaması. Devam etmeden önce birkaç kısa noktaya göz at.",
             color = Muted,
-            fontSize = 15.sp,
+            fontSize = 16.sp,
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(32.dp))
         Point(Icons.Outlined.Lock, "Uçtan uca şifreli", "Mesajların yalnızca sen ve karşındaki arasında okunur; gelen medya telefonun galerisine kaydedilmez.")
-        Spacer(Modifier.height(18.dp))
+        Spacer(Modifier.height(20.dp))
         Point(Icons.Outlined.PersonAddAlt, "Kişi onayı ile", "Biri seninle ancak sen kabul edersen sohbet edebilir. Kabul etmediğin kimse profilini göremez.")
-        Spacer(Modifier.height(18.dp))
+        Spacer(Modifier.height(20.dp))
         Point(Icons.Outlined.Shield, "Senin sorumluluğunda", "Hesabını ve paylaştıklarını sen yönetirsin. Yöneticinin kuralları ihlal eden hesapları kısıtlama yetkisi vardır.")
         Spacer(Modifier.weight(1f))
         Spacer(Modifier.height(28.dp))
@@ -85,7 +85,7 @@ fun OnboardingScreen() {
             withStyle(SpanStyle(color = Blue, fontWeight = FontWeight.SemiBold)) { append("Gizlilik Politikası") }
             append("'nı kabul etmiş olursun.")
         }
-        Text(notice, color = Muted, fontSize = 13.sp, textAlign = TextAlign.Center, lineHeight = 19.sp)
+        Text(notice, color = Muted, fontSize = 14.sp, textAlign = TextAlign.Center, lineHeight = 20.sp)
         Row(horizontalArrangement = Arrangement.Center) {
             TextButton(onClick = { legal = "Kullanıcı Sözleşmesi" to Legal.TERMS }) { Text("Sözleşmeyi oku", fontSize = 13.sp) }
             TextButton(onClick = { legal = "Gizlilik Politikası" to Legal.PRIVACY }) { Text("Gizliliği oku", fontSize = 13.sp) }
@@ -113,13 +113,13 @@ fun OnboardingScreen() {
 private fun Point(icon: ImageVector, title: String, body: String) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
         Box(
-            Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFFEAF3E6)),
+            Modifier.size(48.dp).clip(RoundedCornerShape(15.dp)).background(Color(0xFFEAF3E6)),
             contentAlignment = Alignment.Center,
-        ) { Icon(icon, contentDescription = null, tint = Color(0xFF2E8B6E), modifier = Modifier.size(22.dp)) }
+        ) { Icon(icon, contentDescription = null, tint = Color(0xFF2E8B6E), modifier = Modifier.size(24.dp)) }
         Spacer(Modifier.width(16.dp))
         Column {
-            Text(title, color = Ink, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            Text(body, color = Muted, fontSize = 13.5.sp, lineHeight = 19.sp)
+            Text(title, color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text(body, color = Muted, fontSize = 15.sp, lineHeight = 21.sp)
         }
     }
 }

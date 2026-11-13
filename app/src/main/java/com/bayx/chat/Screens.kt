@@ -196,7 +196,8 @@ internal fun PillField(
         modifier = Modifier
             .fillMaxWidth()
             .shadow(6.dp, shape, ambientColor = SoftShadow, spotColor = SoftShadow),
-        placeholder = { Text(placeholder, color = Muted) },
+        placeholder = { Text(placeholder, color = Muted, fontSize = 16.sp) },
+        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 17.sp, color = Ink),
         leadingIcon = { Icon(icon, contentDescription = null, tint = Ink) },
         trailingIcon = if (isPassword) {
             {
