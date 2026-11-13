@@ -8,6 +8,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -38,6 +41,17 @@ jobs:
       - name: Ekran görüntüleri (tasarım kontrolü)
         continue-on-error: true
         run: gradle :app:recordRoborazziDebug --stacktrace
+      - name: Ekran görüntülerini ekranlar dalına koy
+        if: github.event_name == 'push'
+        continue-on-error: true
+        run: |
+          set -e
+          [ -d app/build/outputs/roborazzi ] || exit 0
+          D="$RUNNER_TEMP/ekranlar"; mkdir -p "$D"; cp app/build/outputs/roborazzi/*.png "$D"/
+          cd "$D"; git init -q; git checkout -q -b ekranlar
+          git -c user.name=ci -c user.email=ci@localhost add . 
+          git -c user.name=ci -c user.email=ci@localhost commit -qm "Ekran görüntüleri $GITHUB_SHA"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ekranlar
       - uses: actions/upload-artifact@v4
         if: always()
         with:
