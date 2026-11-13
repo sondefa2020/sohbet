@@ -121,6 +121,11 @@ retention:
       interval: 15m
     - shortest_max_lifetime: 2d
       interval: 6h
+# Telefondan Tayfa Web'e giriş: oturum açık telefon 5 dakikalık tek seferlik giriş jetonu alabilir.
+login_via_existing_session:
+  enabled: true
+  require_ui_auth: false
+  token_timeout: "5m"
 EOF
 chown matrix-synapse:matrix-synapse "$SYNAPSE_CONF"
 chmod 600 "$SYNAPSE_CONF"
@@ -141,10 +146,14 @@ say "Kayıt ve yönetim servisi kuruluyor"
 id bayx >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin bayx
 install -d -m 755 /opt/bayx
 install -d -m 750 -o root -g bayx /etc/bayx
-curl -fsSL -o /opt/bayx/kayit.py.yeni "$RAW_BASE/kayit.py"
-python3 -m py_compile /opt/bayx/kayit.py.yeni || fail "kayit.py indirilemedi ya da bozuk."
-mv /opt/bayx/kayit.py.yeni /opt/bayx/kayit.py
-chmod 644 /opt/bayx/kayit.py
+for f in kayit.py giris.py; do
+    curl -fsSL -o "/opt/bayx/$f.yeni" "$RAW_BASE/$f" || fail "$f indirilemedi."
+    python3 -m py_compile "/opt/bayx/$f.yeni" || fail "$f bozuk indi."
+done
+for f in kayit.py giris.py; do
+    mv "/opt/bayx/$f.yeni" "/opt/bayx/$f"
+    chmod 644 "/opt/bayx/$f"
+done
 rm -rf /opt/bayx/__pycache__
 
 json_field() { python3 -c 'import json,sys; print(json.load(sys.stdin).get(sys.argv[1],""))' "$1"; }
@@ -179,6 +188,28 @@ set_env() {
     fi
 }
 set_env BAYX_APP_ID com.tayfa.chat
+WEB_DOMAIN="${BAYX_WEB_DOMAIN:-web.acioglu.tr}"
+set_env BAYX_PUBLIC_BASE "https://$DOMAIN"
+set_env BAYX_WEB_ORIGIN "https://$WEB_DOMAIN"
+
+# Sunucudan giriş bağlantısı üretme komutu: sudo tayfa-giris <kullanıcı_adı>
+cat > /usr/local/bin/tayfa-giris <<'GIRISCMD'
+#!/bin/bash
+# Tayfa: bir üye için 30 dakikalık, tek kullanımlık giriş bağlantısı üretir.
+set -euo pipefail
+U="${1:-}"
+if [ -z "$U" ] && [ -f /etc/bayx/yonetici-olusturuldu ]; then U="$(cat /etc/bayx/yonetici-olusturuldu)"; fi
+[ -n "$U" ] || { echo "Kullanım: sudo tayfa-giris <kullanıcı_adı>"; exit 1; }
+OUT="$(curl -fsS -X POST http://127.0.0.1:8010/bayx/v2/local/link -H 'Content-Type: application/json' \
+    -d "{\"username\":\"$U\"}" 2>/dev/null)" || { echo "Bağlantı üretilemedi: kullanıcı adı yanlış ya da hesap onaylı değil."; exit 1; }
+echo "$OUT" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+print("Giriş bağlantısı (30 dk, tek kullanımlık): " + d["url"])
+print("ya da uygulamada Giriş kodu: " + d["code"])
+print("Bu bilgiyi kimseyle paylaşma; ekran görüntüsü alırsan bu satırları gizle.")'
+GIRISCMD
+chmod 755 /usr/local/bin/tayfa-giris
 
 # Bildirimler: Firebase servis hesabı dosyası sunucuya elle konur (gizli anahtar içerir).
 PUSH_OK="hayır (/etc/bayx/firebase.json yok)"
@@ -283,7 +314,6 @@ fi
 # ------------------------------------------------- 2c. Tayfa Web (tarayıcı)
 # Element Web, Tayfa adıyla ayrı bir alt alan adında yayınlanır (güvenlik için sohbet
 # sunucusundan ayrı bir adreste olmalı). Alt alan adı panelde oluşturulmamışsa atlanır.
-WEB_DOMAIN="${BAYX_WEB_DOMAIN:-web.acioglu.tr}"
 WEB_DIR="${BAYX_WEB_DIR:-/home/acioglu/acioglu.tr/subdomains/${WEB_DOMAIN%%.*}/public_html}"
 WEB_OK="hayır (panelde $WEB_DOMAIN alt alan adı yok)"
 if [ -d "$WEB_DIR" ]; then
@@ -332,6 +362,29 @@ if [ -d "$WEB_DIR" ]; then
   }
 }
 WEBCONF
+    cat > "$WEB_DIR/giris.html" <<'WEBGIRIS'
+<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex"><title>Tayfa Web'e giriş</title><style>
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:linear-gradient(#fbf8f4,#f2ebe2);color:#1f1b18}
+.k{background:#fff;border-radius:28px;box-shadow:0 18px 50px rgba(90,60,30,.12);padding:34px 30px;max-width:380px;width:86%;text-align:center}
+h1{margin:0 0 6px;font-size:26px}p{color:#6e655c;line-height:1.45;margin:6px 0 18px}
+input{width:100%;box-sizing:border-box;padding:16px;border-radius:16px;border:1px solid #e6ddd2;background:#faf6f1;font-size:24px;letter-spacing:4px;text-align:center;text-transform:uppercase}
+button{width:100%;margin-top:14px;padding:15px;border:0;border-radius:18px;background:linear-gradient(#e2c3a1,#c99d74);color:#2a1c10;font-weight:700;font-size:17px;cursor:pointer}
+#h{color:#b4232a;min-height:22px;margin-top:12px;font-size:14px}</style></head><body><div class="k">
+<h1>Tayfa Web</h1><p>Telefonda <b>Profil › Web'de aç</b> bölümündeki 8 haneli kodu yaz.</p>
+<input id="c" maxlength="9" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX">
+<button id="b">Giriş yap</button><div id="h"></div></div><script>
+const HS="https://__DOMAIN__";
+async function go(){const h=document.getElementById("h");h.textContent="";
+const code=document.getElementById("c").value;
+try{const r=await fetch(HS+"/bayx/v2/web/redeem",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({code})});
+const d=await r.json();if(!r.ok){h.textContent=d.message||"Giriş yapılamadı.";return}
+localStorage.setItem("mx_sso_hs_url",d.homeserver);localStorage.removeItem("mx_sso_is_url");
+location.replace("/?loginToken="+encodeURIComponent(d.login_token));}catch(e){h.textContent="Sunucuya ulaşılamadı.";}}
+document.getElementById("b").onclick=go;document.getElementById("c").addEventListener("keydown",e=>{if(e.key==="Enter")go()});
+</script></body></html>
+WEBGIRIS
+    sed -i "s|__DOMAIN__|$DOMAIN|" "$WEB_DIR/giris.html"
     echo "$WEB_TAG" > "$WEB_DIR/.tayfa-web"
     chown -R --reference="$(dirname "$WEB_DIR")" "$WEB_DIR"
     find "$WEB_DIR" -type d -exec chmod 755 {} +
@@ -348,13 +401,15 @@ if [ ! -f /etc/bayx/yonetici-olusturuldu ]; then
     while ! [[ "$ADMIN_USER" =~ ^[a-z0-9][a-z0-9._-]{2,19}$ ]]; do
         read -r -p "Yönetici kullanıcı adı (küçük harf/rakam, 3-20 karakter): " ADMIN_USER
     done
-    ADMIN_PASS="$(openssl rand -base64 18 | tr -d '/+=' | cut -c1-16)"
-    register_new_matrix_user -u "$ADMIN_USER" -p "$ADMIN_PASS" -a -c "$SYNAPSE_CONF" "$SYNAPSE_URL" >/dev/null \
+    # Şifresiz: hesabın şifresi rastgeledir ve kimseye gösterilmez; giriş bağlantıyla yapılır.
+    register_new_matrix_user -u "$ADMIN_USER" -p "$(openssl rand -hex 32)" -a -c "$SYNAPSE_CONF" "$SYNAPSE_URL" >/dev/null \
         || fail "Yönetici hesabı oluşturulamadı (bu kullanıcı adı alınmış olabilir)."
     echo "$ADMIN_USER" > /etc/bayx/yonetici-olusturuldu
-    ADMIN_NOTE="Yönetici kullanıcı adı : $ADMIN_USER
-Yönetici şifresi       : $ADMIN_PASS
-(Bu şifre yalnızca şimdi gösterilir; bir yere not et.)"
+fi
+if [ -f /etc/bayx/yonetici-olusturuldu ]; then
+    ADMIN_NOTE="Yönetici ($(cat /etc/bayx/yonetici-olusturuldu)) için giriş — telefonda bağlantıyı aç ya da kodu yaz:
+$(/usr/local/bin/tayfa-giris 2>&1 || true)
+Yeni bağlantı gerekirse: sudo tayfa-giris  (başka üye için: sudo tayfa-giris kullanici_adi)"
 fi
 
 # ------------------------------------------------- 4. nginx yönlendirmesi

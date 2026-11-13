@@ -1,53 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Tayfa logosu: koyu lacivert küre içinde neon sohbet balonu (özgün tasarım) -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
-    android:width="64dp"
-    android:height="64dp"
-    android:viewportWidth="64"
-    android:viewportHeight="64">
-    <group
-        android:translateX="-23"
-        android:translateY="-24">
-        <!-- Arkadaki mavi balon -->
-        <path android:pathData="M37,29h24a8,8 0,0 1,8 8v14a8,8 0,0 1,-8 8h-16l-9,8v-8.2a8,8 0,0 1,-7 -7.8v-14a8,8 0,0 1,8 -8z">
-            <aapt:attr name="android:fillColor">
-                <gradient
-                    android:type="linear"
-                    android:startX="49"
-                    android:startY="29"
-                    android:endX="49"
-                    android:endY="64"
-                    android:startColor="#4A9BFB"
-                    android:endColor="#0F5BD8" />
-            </aapt:attr>
-        </path>
-        <path
-            android:fillColor="#FFFFFF"
-            android:fillAlpha="0.26"
-            android:pathData="M37,31.500h24a5.500,5.500 0,0 1,5.500 5.500v2c-10,-3.500 -25,-3.500 -35,0v-2a5.500,5.500 0,0 1,5.500 -5.500z" />
-        <!-- Öndeki yeşil balonun beyaz çerçevesi -->
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M49,42h24a11,11 0,0 1,11 11v13a11,11 0,0 1,-7 10.300v8.700a2.500,2.500 0,0 1,-4.200 1.900l-8.900,-9.900h-14.900a11,11 0,0 1,-11 -11v-13a11,11 0,0 1,11 -11z" />
-        <!-- Öndeki yeşil balon -->
-        <path android:pathData="M49,45h24a8,8 0,0 1,8 8v13a8,8 0,0 1,-7 7.900v8.100l-9,-8h-16a8,8 0,0 1,-8 -8v-13a8,8 0,0 1,8 -8z">
-            <aapt:attr name="android:fillColor">
-                <gradient
-                    android:type="linear"
-                    android:startX="61"
-                    android:startY="45"
-                    android:endX="61"
-                    android:endY="78"
-                    android:startColor="#7BEFA8"
-                    android:endColor="#1FA866" />
-            </aapt:attr>
-        </path>
-        <path
-            android:fillColor="#FFFFFF"
-            android:fillAlpha="0.30"
-            android:pathData="M49,47.500h24a5.500,5.500 0,0 1,5.500 5.500v2c-10,-3.500 -25,-3.500 -35,0v-2a5.500,5.500 0,0 1,5.500 -5.500z" />
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M49.400,61a2.600,2.600 0,1 0,5.200 0a2.600,2.600 0,1 0,-5.200 0zM58.400,61a2.600,2.600 0,1 0,5.200 0a2.600,2.600 0,1 0,-5.200 0zM67.400,61a2.600,2.600 0,1 0,5.200 0a2.600,2.600 0,1 0,-5.200 0z" />
-    </group>
+    android:width="64dp" android:height="64dp" android:viewportWidth="64" android:viewportHeight="64">
+    <path android:pathData="M32,32m-31.5,0a31.5,31.5 0,1 1,63 0a31.5,31.5 0,1 1,-63 0">
+        <aapt:attr name="android:fillColor"><gradient android:type="linear" android:startX="10" android:startY="4" android:endX="54" android:endY="60">
+            <item android:offset="0" android:color="#FFFFFFFF"/><item android:offset="0.5" android:color="#FFEDE3F4"/><item android:offset="1" android:color="#FFD9C7B4"/></gradient></aapt:attr>
+    </path>
+    <path android:pathData="M32,32m-28,0a28,28 0,1 1,56 0a28,28 0,1 1,-56 0">
+        <aapt:attr name="android:fillColor"><gradient android:type="radial" android:centerX="24" android:centerY="20" android:gradientRadius="40">
+            <item android:offset="0" android:color="#FF33447A"/><item android:offset="0.6" android:color="#FF141D3A"/><item android:offset="1" android:color="#FF080D1C"/></gradient></aapt:attr>
+    </path>
+    <path android:pathData="M28,20h8a10,10 0,0 1,10 10a10,10 0,0 1,-10 10h-7l-7,5.5l1.2,-6.6a10,10 0,0 1,-5.2 -8.9a10,10 0,0 1,10 -10z" android:strokeWidth="5" android:strokeAlpha="0.28" android:strokeLineJoin="round" android:fillColor="#00000000"><aapt:attr name="android:strokeColor"><gradient android:type="linear" android:startX="18" android:startY="20" android:endX="46" android:endY="44"><item android:offset="0" android:color="#FF5FE3FF"/><item android:offset="0.55" android:color="#FF8B7BFF"/><item android:offset="1" android:color="#FFC77DFF"/></gradient></aapt:attr></path>
+    <path android:pathData="M28,20h8a10,10 0,0 1,10 10a10,10 0,0 1,-10 10h-7l-7,5.5l1.2,-6.6a10,10 0,0 1,-5.2 -8.9a10,10 0,0 1,10 -10z" android:strokeWidth="2.6" android:strokeLineJoin="round" android:fillColor="#00000000"><aapt:attr name="android:strokeColor"><gradient android:type="linear" android:startX="18" android:startY="20" android:endX="46" android:endY="44"><item android:offset="0" android:color="#FF5FE3FF"/><item android:offset="0.55" android:color="#FF8B7BFF"/><item android:offset="1" android:color="#FFC77DFF"/></gradient></aapt:attr></path>
+    <path android:pathData="M25.5,30m-2.2,0a2.2,2.2 0,1 1,4.4 0a2.2,2.2 0,1 1,-4.4 0M32,30m-2.2,0a2.2,2.2 0,1 1,4.4 0a2.2,2.2 0,1 1,-4.4 0M38.5,30m-2.2,0a2.2,2.2 0,1 1,4.4 0a2.2,2.2 0,1 1,-4.4 0" android:fillColor="#FF9FE8FF"/>
 </vector>

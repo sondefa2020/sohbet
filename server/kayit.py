@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
-"""Bayx kayıt ve yönetim servisi.
+"""Tayfa kayıt ve yönetim servisi.
 
 Synapse'in önünde duran küçük bir yardımcı servis:
-  * Yeni kayıtları KİLİTLİ hesap olarak açar; yönetici onaylayana kadar kullanılamaz.
-  * Üye sayısını sınırlar (varsayılan 50).
-  * Yöneticinin onaylama, reddetme, üye çıkarma ve şifre sıfırlama işlemlerini yapar.
+  * Şifresiz kayıt: davet bağlantısıyla gelen hemen girer, davetsiz gelen KİLİTLİ hesap olarak
+    açılır ve yönetici onaylayana kadar kullanılamaz.
+  * Şifresiz giriş: kurtarma kodu, başka cihazdan giriş kodu ya da yöneticinin giriş bağlantısı
+    (ayrıntılar giris.py'de).
+  * Üye sayısını sınırlar (varsayılan 50), durum/bildirim/arama sinyalleşmesi yapar.
 
 Yalnızca Python standart kütüphanesini kullanır. Ayarlar ortam değişkenlerinden okunur.
-Şifreler hiçbir yere yazılmaz; doğrudan Synapse'e iletilir.
 """
 import base64
 import hashlib
 import json
 import os
 import re
+import secrets
 import subprocess
 import tempfile
 import threading
@@ -22,6 +24,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+import giris
 
 SYNAPSE = os.environ.get("BAYX_SYNAPSE_URL", "http://127.0.0.1:8008").rstrip("/")
 DOMAIN = os.environ["BAYX_DOMAIN"]
@@ -35,10 +39,13 @@ APP_ID = os.environ.get("BAYX_APP_ID", "com.tayfa.chat")
 FCM_CREDENTIALS = os.environ.get("BAYX_FCM_CREDENTIALS", "")
 FCM_SEND_BASE = os.environ.get("BAYX_FCM_SEND_BASE", "https://fcm.googleapis.com").rstrip("/")
 
+PUBLIC_BASE = os.environ.get("BAYX_PUBLIC_BASE", "").rstrip("/") or "https://" + DOMAIN
+WEB_ORIGIN = os.environ.get("BAYX_WEB_ORIGIN", "").rstrip("/")
+
 USERNAME_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{2,19}$")
 MAX_BODY = 8 * 1024
 MAX_CALL_BODY = 64 * 1024  # görüntülü arama teklifleri (SDP) birkaç KB tutabilir
-REGISTRATIONS_PER_HOUR = 5
+REGISTRATIONS_PER_HOUR = 10
 
 PRESENCE_WINDOW = 90  # saniye: bu süre içinde yoklama gönderen üye çevrimiçi sayılır
 TOKEN_CACHE_SECONDS = 300
@@ -65,6 +72,7 @@ def synapse(method, path, body=None, token=None):
     data = None if body is None else json.dumps(body).encode()
     req = urllib.request.Request(SYNAPSE + path, data=data, method=method)
     req.add_header("Authorization", "Bearer " + (token or ADMIN_TOKEN))
+    req.add_header("User-Agent", "TayfaKayit/2")
     if data is not None:
         req.add_header("Content-Type", "application/json")
     try:
@@ -128,14 +136,8 @@ def check_rate(ip):
         _rate[ip] = recent
 
 
-def validate_password(password):
-    if not isinstance(password, str) or not (8 <= len(password) <= 128):
-        raise ApiError(400, "GECERSIZ_SIFRE", "Şifre 8 ile 128 karakter arasında olmalı.")
-
-
-def register(body, ip):
+def validate_profile(body):
     username = body.get("username")
-    password = body.get("password")
     display_name = body.get("display_name") or username
     if not isinstance(username, str) or not USERNAME_RE.match(username) or username == BOT_USER:
         raise ApiError(
@@ -143,35 +145,214 @@ def register(body, ip):
             "GECERSIZ_KULLANICI_ADI",
             "Kullanıcı adı 3-20 karakter olmalı; küçük harf, rakam, nokta, tire ve alt çizgi kullanılabilir.",
         )
-    validate_password(password)
     if not isinstance(display_name, str) or not (1 <= len(display_name.strip()) <= 40):
         raise ApiError(400, "GECERSIZ_AD", "Görünen ad 1 ile 40 karakter arasında olmalı.")
+    return username, display_name.strip()
+
+
+GIRIS = None
+_otp_lock = threading.Lock()
+_otp_gen = {}
+
+
+def username_of(uid):
+    return uid[1:].split(":", 1)[0]
+
+
+def set_password(uid, password):
+    status, _ = synapse(
+        "POST",
+        "/_synapse/admin/v1/reset_password/" + quote(uid),
+        {"new_password": password, "logout_devices": False},
+    )
+    return status == 200
+
+
+def scramble(uid, gen=None):
+    """Hesabın şifresini kimsenin bilmediği rastgele bir değere çevirir."""
+    with _otp_lock:
+        if gen is not None and _otp_gen.get(uid) != gen:
+            return  # bu arada yeni bir tek seferlik şifre verilmiş
+        _otp_gen.pop(uid, None)
+    set_password(uid, secrets.token_urlsafe(32))
+
+
+def issue_otp(uid):
+    """Kısa ömürlü tek seferlik şifre: uygulama bununla giriş yapar, sonra şifre yeniden karıştırılır."""
+    otp = secrets.token_urlsafe(24)
+    if not set_password(uid, otp):
+        raise ApiError(502, "SUNUCU_HATASI", "Oturum hazırlanamadı.")
+    with _otp_lock:
+        gen = _otp_gen.get(uid, 0) + 1
+        _otp_gen[uid] = gen
+    timer = threading.Timer(giris.OTP_SECONDS, scramble, args=(uid, gen))
+    timer.daemon = True
+    timer.start()
+    return otp
+
+
+def active_user(uid, allow_locked=False):
+    status, info = synapse("GET", "/_synapse/admin/v2/users/" + quote(uid))
+    if status == 404 or (status == 200 and info.get("deactivated")):
+        return None
+    if status != 200:
+        raise ApiError(502, "SUNUCU_HATASI", "Hesap kontrol edilemedi.")
+    if info.get("locked") and not allow_locked:
+        return None
+    return info
+
+
+def session_reply(uid, recovery=None):
+    reply = {"status": "ok", "username": username_of(uid), "user_id": uid, "otp": issue_otp(uid)}
+    if recovery:
+        reply["recovery_code"] = giris.group(recovery)
+    return reply
+
+
+def register(body, ip):
+    """Şifresiz kayıt. Davet kodu geçerliyse hesap hemen açılır; değilse yönetici onayı bekler."""
+    username, display_name = validate_profile(body)
+    invite = body.get("invite") or ""
     check_rate(ip)
+    if invite and not GIRIS.invite_valid(invite):
+        raise ApiError(400, "DAVET_GECERSIZ", "Davet kodu geçersiz ya da süresi dolmuş.")
 
     uid = user_id(username)
     with _register_lock:
         status, _ = synapse("GET", "/_synapse/admin/v2/users/" + quote(uid))
         if status == 200:
-            raise ApiError(409, "KULLANICI_ADI_ALINMIS", "Bu kullanıcı adı kullanılamıyor.")
+            raise ApiError(409, "KULLANICI_ADI_ALINMIS", "Bu kullanıcı adı alınmış, başka bir tane dene.")
         if status != 404:
             raise ApiError(502, "SUNUCU_HATASI", "Kullanıcı adı kontrol edilemedi.")
         if len(list_members()) >= MAX_MEMBERS:
             raise ApiError(403, "KAPASITE_DOLU", "Üye sınırına ulaşıldı. Yeni kayıt alınamıyor.")
+        invited_by = GIRIS.use_invite(invite) if invite else None
+        if invite and not invited_by:
+            raise ApiError(400, "DAVET_GECERSIZ", "Davet kodu geçersiz ya da süresi dolmuş.")
+        locked = invited_by is None
 
         status, _ = synapse(
             "PUT",
             "/_synapse/admin/v2/users/" + quote(uid),
-            {"password": password, "displayname": display_name.strip(), "admin": False, "locked": True},
+            {"password": secrets.token_urlsafe(32), "displayname": display_name, "admin": False, "locked": locked},
         )
         if status not in (200, 201):
             raise ApiError(502, "SUNUCU_HATASI", "Hesap oluşturulamadı.")
-        # Kilidin gerçekten uygulandığından emin ol; uygulanmadıysa hesabı hemen kapat.
-        synapse("PUT", "/_synapse/admin/v2/users/" + quote(uid), {"locked": True})
-        status, data = synapse("GET", "/_synapse/admin/v2/users/" + quote(uid))
-        if status != 200 or not data.get("locked"):
-            synapse("POST", "/_synapse/admin/v1/deactivate/" + quote(uid), {"erase": True})
-            raise ApiError(502, "SUNUCU_HATASI", "Hesap onay bekleyen duruma alınamadı.")
-    return {"user_id": uid, "pending": True}
+        if locked:
+            # Kilidin gerçekten uygulandığından emin ol; uygulanmadıysa hesabı hemen kapat.
+            synapse("PUT", "/_synapse/admin/v2/users/" + quote(uid), {"locked": True})
+            status, data = synapse("GET", "/_synapse/admin/v2/users/" + quote(uid))
+            if status != 200 or not data.get("locked"):
+                synapse("POST", "/_synapse/admin/v1/deactivate/" + quote(uid), {"erase": True})
+                raise ApiError(502, "SUNUCU_HATASI", "Hesap onay bekleyen duruma alınamadı.")
+            return {"status": "pending", "username": username, "ticket": GIRIS.create_ticket(uid)}
+    return session_reply(uid, GIRIS.new_recovery(uid))
+
+
+def ticket_check(body):
+    """Onay bekleyen kayıt: onaylandıysa oturum ve kurtarma kodu verir."""
+    ticket = body.get("ticket")
+    uid = GIRIS.ticket_user(ticket)
+    if not uid:
+        raise ApiError(404, "BILET_YOK", "Kayıt isteği bulunamadı.")
+    info = active_user(uid, allow_locked=True)
+    if info is None:
+        GIRIS.drop_ticket(ticket)
+        return {"status": "rejected"}
+    if info.get("locked"):
+        return {"status": "pending", "username": username_of(uid)}
+    GIRIS.drop_ticket(ticket)
+    return session_reply(uid, GIRIS.new_recovery(uid))
+
+
+_recover_attempts = giris.Attempts(limit=8)
+_code_attempts = giris.Attempts(limit=20)
+
+
+def recover(body, ip):
+    """Kurtarma koduyla giriş. Başarılı olunca eski kod geçersiz olur ve yenisi verilir."""
+    username = body.get("username")
+    if isinstance(username, str):
+        username = username.strip().lower().lstrip("@").split(":", 1)[0]
+    if not isinstance(username, str) or not USERNAME_RE.match(username):
+        raise ApiError(400, "GECERSIZ_KULLANICI_ADI", "Kullanıcı adını kontrol et.")
+    uid = user_id(username)
+    if _recover_attempts.blocked("ip:" + ip) or _recover_attempts.blocked("u:" + uid):
+        raise ApiError(429, "COK_FAZLA_DENEME", "Çok fazla hatalı deneme. Bir saat sonra tekrar dene.")
+    info = active_user(uid, allow_locked=True)
+    if info is None or not GIRIS.check_recovery(uid, body.get("recovery_code")):
+        _recover_attempts.fail("ip:" + ip)
+        _recover_attempts.fail("u:" + uid)
+        raise ApiError(403, "KOD_HATALI", "Kullanıcı adı ya da kurtarma kodu hatalı.")
+    if info.get("locked"):
+        raise ApiError(403, "ONAY_BEKLIYOR", "Hesabın henüz onaylanmadı.")
+    return session_reply(uid, GIRIS.new_recovery(uid))
+
+
+def redeem_link(body, ip):
+    """Giriş kodu (başka cihazdan QR ya da yöneticinin giriş bağlantısı)."""
+    if _code_attempts.blocked("ip:" + ip):
+        raise ApiError(429, "COK_FAZLA_DENEME", "Çok fazla hatalı deneme. Bir saat sonra tekrar dene.")
+    uid = GIRIS.use_link(body.get("code"))
+    info = active_user(uid) if uid else None
+    if info is None:
+        _code_attempts.fail("ip:" + ip)
+        raise ApiError(403, "KOD_HATALI", "Giriş kodu geçersiz, kullanılmış ya da süresi dolmuş.")
+    recovery = None if GIRIS.has_recovery(uid) else GIRIS.new_recovery(uid)
+    return session_reply(uid, recovery)
+
+
+def link_url(kind, code):
+    return "%s/bayx/%s/%s" % (PUBLIC_BASE, kind, code)
+
+
+def web_code(headers):
+    """Bilgisayardaki Tayfa Web'e telefondan giriş: 5 dakikalık, tek kullanımlık kod."""
+    member_from_token(headers)
+    token = headers.get("Authorization", "")[7:].strip()
+    status, data = synapse("POST", "/_matrix/client/v1/login/get_token", {}, token=token)
+    if status != 200 or not data.get("login_token"):
+        raise ApiError(502, "WEB_KAPALI", "Web girişi sunucuda açık değil. Sunucu komutunu yeniden çalıştır.")
+    code = GIRIS.create_web_code(data["login_token"])
+    return {"code": giris.group(code), "url": WEB_ORIGIN + "/giris.html" if WEB_ORIGIN else ""}
+
+
+def web_redeem(body, ip):
+    if _code_attempts.blocked("web:" + ip):
+        raise ApiError(429, "COK_FAZLA_DENEME", "Çok fazla hatalı deneme. Bir saat sonra tekrar dene.")
+    token = GIRIS.use_web_code(body.get("code"))
+    if not token:
+        _code_attempts.fail("web:" + ip)
+        raise ApiError(403, "KOD_HATALI", "Kod geçersiz ya da süresi dolmuş. Telefonda yeni kod al.")
+    return {"login_token": token, "homeserver": PUBLIC_BASE}
+
+
+LANDING = """<!doctype html><html lang="tr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
+<title>Tayfa</title><style>
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:linear-gradient(#fbf8f4,#f2ebe2);color:#1f1b18}
+.k{background:#fff;border-radius:28px;box-shadow:0 18px 50px rgba(90,60,30,.12);padding:32px 26px;max-width:360px;width:86%%;text-align:center}
+.l{width:84px;height:84px;border-radius:50%%;margin:0 auto 14px;background:radial-gradient(circle at 35%% 30%%,#2b3a63,#0b1224);
+display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 4px #efe7dd}
+.l span{width:44px;height:34px;border:3px solid #5fe3ff;border-radius:18px;box-shadow:0 0 12px #8b7bff}
+h1{margin:6px 0 4px;font-size:26px}p{color:#6e655c;line-height:1.45}
+a.b{display:block;margin:20px 0 10px;padding:15px;border-radius:18px;background:linear-gradient(#e2c3a1,#c99d74);
+color:#2a1c10;text-decoration:none;font-weight:700;font-size:17px}
+code{display:inline-block;margin-top:6px;padding:8px 14px;border-radius:12px;background:#f4ede5;font-size:20px;letter-spacing:2px}
+</style></head><body><div class="k"><div class="l"><span></span></div><h1>Tayfa</h1><p>%(text)s</p>
+<a class="b" href="intent://%(kind)s/%(code)s#Intent;scheme=tayfa;package=com.tayfa.chat;end">Tayfa'da aç</a>
+<p style="font-size:14px">Açılmazsa uygulamada <b>%(label)s</b> alanına bu kodu yaz:<br><code>%(shown)s</code></p>
+</div></body></html>"""
+
+
+def landing(kind, code):
+    clean = giris.normalize(code)
+    if kind == "davet":
+        text, label = "Tayfa'ya davet edildin. Uygulamayı açıp birkaç saniyede katılabilirsin.", "Davet kodu"
+    else:
+        text, label = "Bu bağlantı Tayfa hesabına giriş içindir. Kimseyle paylaşma.", "Giriş kodu"
+    return LANDING % {"text": text, "kind": kind, "code": clean, "label": label, "shown": giris.group(clean)}
 
 
 def require_admin(headers):
@@ -511,18 +692,28 @@ def admin_action(action, body, caller):
         status, _ = synapse("POST", "/_synapse/admin/v1/deactivate/" + quote(uid), {"erase": True})
     elif action == "remove":
         status, _ = synapse("POST", "/_synapse/admin/v1/deactivate/" + quote(uid), {"erase": True})
-    elif action == "reset-password":
-        validate_password(body.get("new_password"))
-        status, _ = synapse(
-            "POST",
-            "/_synapse/admin/v1/reset_password/" + quote(uid),
-            {"new_password": body["new_password"], "logout_devices": True},
-        )
+    elif action == "login-link":
+        if info.get("locked"):
+            raise ApiError(400, "ONAY_BEKLIYOR", "Önce üyeliği onayla.")
+        code = GIRIS.create_link(uid, giris.LINK_ADMIN_SECONDS)
+        return {"ok": True, "user_id": uid, "code": giris.group(code), "url": link_url("giris", code), "hours": 24}
     else:
         raise ApiError(404, "BULUNAMADI", "Bulunamadı.")
     if status != 200:
         raise ApiError(502, "SUNUCU_HATASI", "İşlem tamamlanamadı.")
+    if action in ("reject", "remove"):
+        GIRIS.forget_user(uid)
     return {"ok": True, "user_id": uid}
+
+
+def create_invite(body, caller):
+    try:
+        uses = int(body.get("uses", 1))
+        days = int(body.get("days", giris.INVITE_DAYS_DEFAULT))
+    except (TypeError, ValueError):
+        raise ApiError(400, "GECERSIZ_ISTEK", "Geçersiz istek.")
+    code = GIRIS.create_invite(caller, uses, days)
+    return {"code": giris.group(code), "url": link_url("davet", code), "uses": max(1, min(uses, 50)), "days": max(1, min(days, 30))}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -531,12 +722,33 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):  # şifre içeren gövdeler asla loglanmaz; erişim logu da tutulmaz
         return
 
+    def _cors(self):
+        origin = self.headers.get("Origin", "")
+        path = self.path.split("?", 1)[0].rstrip("/")
+        if WEB_ORIGIN and origin == WEB_ORIGIN and path == "/bayx/v2/web/redeem":
+            self.send_header("Access-Control-Allow-Origin", WEB_ORIGIN)
+            self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.send_header("Vary", "Origin")
+
     def _send(self, status, payload):
         raw = json.dumps(payload, ensure_ascii=False).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(raw)))
         self.send_header("Cache-Control", "no-store")
+        self._cors()
+        self.end_headers()
+        self.wfile.write(raw)
+
+    def _html(self, text):
+        raw = text.encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(raw)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("X-Frame-Options", "DENY")
         self.end_headers()
         self.wfile.write(raw)
 
@@ -560,9 +772,42 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if method == "GET" and path == "/bayx/health":
                 self._send(200, {"ok": True})
-            elif method == "POST" and path == "/bayx/register":
-                ip = self.headers.get("X-Real-IP") or self.client_address[0]
-                self._send(201, register(self._body(), ip))
+            elif method == "POST" and path == "/bayx/v2/register":
+                self._send(200, register(self._body(), self._ip()))
+            elif method == "POST" and path == "/bayx/v2/ticket":
+                self._send(200, ticket_check(self._body()))
+            elif method == "POST" and path == "/bayx/v2/recover":
+                self._send(200, recover(self._body(), self._ip()))
+            elif method == "POST" and path == "/bayx/v2/link/redeem":
+                self._send(200, redeem_link(self._body(), self._ip()))
+            elif method == "POST" and path == "/bayx/v2/link/new":
+                uid = member_from_token(self.headers)
+                code = GIRIS.create_link(uid, giris.LINK_SELF_SECONDS)
+                self._send(200, {"code": giris.group(code), "url": link_url("giris", code), "minutes": 5})
+            elif method == "POST" and path == "/bayx/v2/recovery/new":
+                uid = member_from_token(self.headers)
+                self._send(200, {"recovery_code": giris.group(GIRIS.new_recovery(uid))})
+            elif method == "POST" and path == "/bayx/v2/seal":
+                uid = member_from_token(self.headers)
+                scramble(uid)
+                self._send(200, {"ok": True})
+            elif method == "POST" and path == "/bayx/v2/web/code":
+                self._send(200, web_code(self.headers))
+            elif method == "POST" and path == "/bayx/v2/web/redeem":
+                self._send(200, web_redeem(self._body(), self._ip()))
+            elif method == "POST" and path == "/bayx/v2/local/link":
+                # Yalnızca sunucudaki tayfa-giris komutu çağırabilir (nginx üzerinden gelen istek reddedilir).
+                if self.client_address[0] != "127.0.0.1" or self.headers.get("X-Real-IP"):
+                    raise ApiError(404, "BULUNAMADI", "Bulunamadı.")
+                body = self._body()
+                uid = user_id(str(body.get("username", "")).strip().lower())
+                if active_user(uid) is None:
+                    raise ApiError(404, "KULLANICI_YOK", "Böyle onaylı bir üye yok.")
+                code = GIRIS.create_link(uid, giris.LINK_LOCAL_SECONDS)
+                self._send(200, {"code": giris.group(code), "url": link_url("giris", code), "minutes": 30})
+            elif method == "GET" and re.match(r"^/bayx/(davet|giris)/[A-Za-z0-9-]{4,24}$", path):
+                kind, code = path.split("/")[2:4]
+                self._html(landing(kind, code))
             elif method == "GET" and path == "/bayx/members":
                 caller = require_member(self.headers)
                 now = time.time()
@@ -597,7 +842,10 @@ class Handler(BaseHTTPRequestHandler):
             elif method == "GET" and path == "/bayx/admin/members":
                 require_admin(self.headers)
                 members = list_members()
-                self._send(200, {"members": members, "count": len(members), "max": MAX_MEMBERS})
+                self._send(200, {"members": members, "count": len(members), "max": MAX_MEMBERS, "invites": GIRIS.invite_count()})
+            elif method == "POST" and path == "/bayx/admin/invite":
+                caller = require_admin(self.headers)
+                self._send(200, create_invite(self._body(), caller))
             elif method == "POST" and path.startswith("/bayx/admin/"):
                 caller = require_admin(self.headers)
                 self._send(200, admin_action(path[len("/bayx/admin/"):], self._body(), caller))
@@ -608,6 +856,15 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:
             self._send(500, {"error": "SUNUCU_HATASI", "message": "Beklenmeyen bir hata oluştu."})
 
+    def _ip(self):
+        return self.headers.get("X-Real-IP") or self.client_address[0]
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self._cors()
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     def do_GET(self):
         self._handle("GET")
 
@@ -616,8 +873,9 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
-    global FCM
+    global FCM, GIRIS
     load_profiles()
+    GIRIS = giris.Store(os.path.join(STATE_DIR, "giris.json"))
     if FCM_CREDENTIALS and os.path.exists(FCM_CREDENTIALS):
         try:
             FCM = Fcm(FCM_CREDENTIALS)

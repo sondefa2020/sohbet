@@ -13,8 +13,8 @@ android {
         applicationId = "com.tayfa.chat"
         minSdk = 26
         targetSdk = 35
-        versionCode = 8
-        versionName = "0.8.0"
+        versionCode = 9
+        versionName = "0.9.0"
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }
@@ -75,4 +75,8 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
     // Sesli/görüntülü arama
     implementation("io.getstream:stream-webrtc-android:1.3.9")
+    // Uygulama kilidi (parmak izi / ekran kilidi) ve giriş QR kodu
+    implementation("androidx.biometric:biometric:1.1.0")
+    implementation("androidx.fragment:fragment-ktx:1.8.5")
+    implementation("com.google.zxing:core:3.5.3")
 }

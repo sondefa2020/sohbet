@@ -1,5 +1,15 @@
 package com.bayx.chat
 
+import androidx.compose.material.icons.outlined.PersonAdd
+import androidx.compose.material.icons.outlined.GroupAdd
+import androidx.compose.material.icons.outlined.QrCode2
+import androidx.compose.material.icons.outlined.Computer
+import androidx.compose.material.icons.outlined.Key
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Fingerprint
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.ui.graphics.Brush
+import com.bayx.chat.data.Gate
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.ui.text.font.FontStyle
@@ -262,9 +272,9 @@ private fun ChatContent(session: ChatSession, onBack: () -> Unit) {
         if (granted) startRecording() else toast("Mikrofon izni verilmedi.")
     }
 
-    Column(Modifier.fillMaxSize().background(Bg).systemBarsPadding().imePadding()) {
+    Column(Modifier.fillMaxSize().background(PageBrush).systemBarsPadding().imePadding()) {
         Row(
-            Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+            Modifier.fillMaxWidth().padding(start = 4.dp, end = 10.dp, top = 8.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Geri", tint = Ink) }
@@ -303,7 +313,7 @@ private fun ChatContent(session: ChatSession, onBack: () -> Unit) {
                     )
                 }
             }
-            IconButton(onClick = {
+            ChipIcon(Icons.Outlined.Vibration, "Titreşim gönder", size = 42.dp, tint = Color(0xFF9A6236)) {
                 val now = System.currentTimeMillis()
                 if (now - lastNudge < 5_000) {
                     toast("Biraz bekle; titreşim 5 saniyede bir gönderilebilir.")
@@ -311,15 +321,11 @@ private fun ChatContent(session: ChatSession, onBack: () -> Unit) {
                     lastNudge = now
                     scope.launch { if (!Bayx.sendNudge(session)) toast("Titreşim gönderilemedi.") }
                 }
-            }) {
-                Icon(Icons.Outlined.Vibration, "Titreşim gönder", tint = Color(0xFF8A4B00))
             }
-            IconButton(onClick = { placeCall(false) }) {
-                Icon(Icons.Outlined.Call, "Sesli ara", tint = Ink)
-            }
-            IconButton(onClick = { placeCall(true) }) {
-                Icon(Icons.Outlined.Videocam, "Görüntülü ara", tint = Ink, modifier = Modifier.size(28.dp))
-            }
+            Spacer(Modifier.width(8.dp))
+            ChipIcon(Icons.Outlined.Call, "Sesli ara", size = 42.dp) { placeCall(false) }
+            Spacer(Modifier.width(8.dp))
+            ChipIcon(Icons.Outlined.Videocam, "Görüntülü ara", size = 42.dp) { placeCall(true) }
             Box {
                 IconButton(onClick = { menuOpen = true }) { Icon(Icons.Filled.MoreVert, "Diğer", tint = Ink) }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
@@ -336,6 +342,7 @@ private fun ChatContent(session: ChatSession, onBack: () -> Unit) {
                 }
             }
         }
+        HorizontalDivider(color = Line)
         if (searchOpen) {
             val hits = if (searchQuery.isBlank()) 0 else messages.count { it.kind == MsgKind.TEXT && it.text.contains(searchQuery, true) }
             OutlinedTextField(
@@ -638,17 +645,19 @@ private fun MessageRow(
         bottomEnd = if (msg.mine) 6.dp else 22.dp,
         bottomStart = if (msg.mine) 22.dp else 6.dp,
     )
-    val fg = if (msg.mine) Color.White else Ink
-    val sub = if (msg.mine) Color.White else Muted
+    val fg = Ink
+    val sub = if (msg.mine) Color(0xFF8A7460) else Muted
     val visual = msg.kind == MsgKind.IMAGE || msg.kind == MsgKind.VIDEO
     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (msg.mine) Arrangement.End else Arrangement.Start) {
         Surface(
             shape = shape,
-            color = if (msg.mine) Blue else Color.White,
-            shadowElevation = 3.dp,
+            color = if (msg.mine) Color.Transparent else Color.White,
+            shadowElevation = if (msg.mine) 0.dp else 3.dp,
             modifier = Modifier
                 .widthIn(max = 310.dp)
+                .then(if (msg.mine) Modifier.shadow(3.dp, shape, ambientColor = SoftShadow, spotColor = SoftShadow) else Modifier)
                 .clip(shape)
+                .then(if (msg.mine) Modifier.background(PeachBrush) else Modifier)
                 .combinedClickable(onClick = {}, onLongClick = { onLongPress(msg) }),
         ) {
             Column(
@@ -692,7 +701,7 @@ private fun MessageRow(
                         Icon(
                             stateIcon.first,
                             stateIcon.second,
-                            tint = if (msg.state == MsgState.READ) Color(0xFF9EF0FF) else sub,
+                            tint = if (msg.state == MsgState.READ) Color(0xFF2D9CDB) else sub,
                             modifier = Modifier.size(if (msg.state == MsgState.READ) 17.dp else 15.dp),
                         )
                     }
@@ -733,108 +742,232 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
         }
     }
 
+    var isAdmin by remember { mutableStateOf(false) }
+    var lockOn by remember { mutableStateOf(Gate.lockEnabled && Gate.lockAvailable()) }
+    var shareDialog by remember { mutableStateOf<Triple<String, String, Api.CodeReply>?>(null) }
+    var confirmRecovery by remember { mutableStateOf(false) }
+    var working by remember { mutableStateOf(false) }
+    val username = me.userId.substringBefore(":").removePrefix("@")
+    LaunchedEffect(Unit) {
+        val token = Bayx.accessToken ?: return@LaunchedEffect
+        isAdmin = runCatching { Api.members(token).firstOrNull { it.userId == me.userId }?.admin == true }.getOrDefault(false)
+    }
+    fun withToken(block: suspend (String) -> Unit) {
+        val token = Bayx.accessToken ?: return
+        if (working) return
+        working = true
+        scope.launch {
+            try {
+                block(token)
+            } catch (e: ApiException) {
+                info = e.message
+            }
+            working = false
+        }
+    }
+
     Column(
         Modifier
             .fillMaxSize()
             .background(PageBrush)
             .systemBarsPadding()
-            .verticalScroll(rememberScrollState()),
-        horizontalAlignment = Alignment.CenterHorizontally,
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 18.dp),
     ) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 8.dp),
+            Modifier.fillMaxWidth().padding(vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Geri", tint = Ink) }
             Text(
-                "Profilim",
+                "Profil & Ayarlar",
                 modifier = Modifier.weight(1f),
                 textAlign = TextAlign.Center,
                 color = Ink,
-                fontSize = 23.sp,
-                fontWeight = FontWeight.ExtraBold,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
             )
             Spacer(Modifier.width(48.dp))
         }
-        Spacer(Modifier.height(14.dp))
-        Box(
-            Modifier.clickable(enabled = !uploading) {
-                picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-            },
-        ) {
-            Avatar(name, 148.dp, url = myAvatar, mode = myMode)
+        Spacer(Modifier.height(10.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 Modifier
-                    .align(Alignment.TopEnd)
-                    .size(40.dp)
+                    .size(124.dp)
+                    .shadow(8.dp, CircleShape, ambientColor = SoftShadow, spotColor = SoftShadow)
                     .clip(CircleShape)
-                    .background(Blue),
-                contentAlignment = Alignment.Center,
+                    .background(Brush.linearGradient(listOf(Color.White, Color(0xFFEDE3F4), Color(0xFFD9C7B4))))
+                    .padding(5.dp)
+                    .clickable(enabled = !uploading) {
+                        picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                    },
             ) {
-                if (uploading) {
-                    CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
-                } else {
-                    Icon(Icons.Outlined.PhotoCamera, "Fotoğrafı değiştir", tint = Color.White, modifier = Modifier.size(22.dp))
+                Avatar(name, 114.dp, url = myAvatar)
+                Box(
+                    Modifier
+                        .align(Alignment.BottomEnd)
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(BlueBrush),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (uploading) {
+                        CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
+                    } else {
+                        Icon(Icons.Outlined.PhotoCamera, "Fotoğrafı değiştir", tint = Color.White, modifier = Modifier.size(19.dp))
+                    }
+                }
+            }
+            Spacer(Modifier.width(16.dp))
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { editName = true }) {
+                    Text(name, color = Ink, fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                    if (isAdmin) {
+                        Spacer(Modifier.width(8.dp))
+                        Row(
+                            Modifier.clip(RoundedCornerShape(12.dp)).background(Color(0xFF1F1B18)).padding(horizontal = 8.dp, vertical = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("♛", color = Color(0xFFF2C14E), fontSize = 12.sp)
+                            Spacer(Modifier.width(3.dp))
+                            Text("Yönetici", color = Color(0xFFF2C14E), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+                Text(
+                    myStatus.ifBlank { "Durum mesajı ekle…" },
+                    color = if (myStatus.isBlank()) SoftBlue else Muted,
+                    fontSize = 16.sp,
+                    fontStyle = if (myStatus.isBlank()) FontStyle.Italic else FontStyle.Normal,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.clickable { editStatus = true }.padding(vertical = 3.dp),
+                )
+                Text("@$username", color = SoftBlue, fontSize = 15.sp)
+            }
+        }
+        Spacer(Modifier.height(20.dp))
+        SoftCard(Modifier.fillMaxWidth()) {
+            Row(
+                Modifier.fillMaxWidth().clickable { pickMode = true }.padding(horizontal = 18.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Durum", color = Ink, fontSize = 17.sp, modifier = Modifier.weight(1f))
+                Row(
+                    Modifier.clip(RoundedCornerShape(18.dp)).background(ChipBg).padding(horizontal = 14.dp, vertical = 9.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(Modifier.size(10.dp).clip(CircleShape).background(modeColor(myMode) ?: Color(0xFFB8AFA6)))
+                    Spacer(Modifier.width(8.dp))
+                    Text(modeLabel(myMode), color = Ink, fontSize = 15.sp)
+                    Spacer(Modifier.width(18.dp))
+                    Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = Ink, modifier = Modifier.size(20.dp))
                 }
             }
         }
-        Spacer(Modifier.height(12.dp))
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { editName = true }) {
-            Text(name, color = Ink, fontSize = 27.sp, fontWeight = FontWeight.ExtraBold)
-            Spacer(Modifier.width(6.dp))
-            Icon(Icons.Outlined.Edit, "Adı düzenle", tint = SoftBlue, modifier = Modifier.size(20.dp))
-        }
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.clip(RoundedCornerShape(14.dp)).clickable { pickMode = true }.padding(horizontal = 10.dp, vertical = 4.dp),
-        ) {
-            Box(Modifier.size(10.dp).clip(CircleShape).background(modeColor(myMode) ?: Muted))
-            Spacer(Modifier.width(6.dp))
-            Text(modeLabel(myMode) + " ▾", color = SoftBlue, fontSize = 17.sp)
-        }
-        Text(
-            myStatus.ifBlank { "Durum mesajı ekle…" },
-            color = if (myStatus.isBlank()) Muted else Ink,
-            fontSize = 15.sp,
-            fontStyle = if (myStatus.isBlank()) FontStyle.Italic else FontStyle.Normal,
-            textAlign = TextAlign.Center,
-            modifier = Modifier
-                .padding(horizontal = 24.dp, vertical = 4.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .clickable { editStatus = true }
-                .padding(horizontal = 10.dp, vertical = 6.dp),
-        )
-        Spacer(Modifier.height(24.dp))
-        Surface(
-            modifier = Modifier.padding(horizontal = 18.dp).fillMaxWidth(),
-            shape = RoundedCornerShape(24.dp),
-            color = Color.White,
-            shadowElevation = 5.dp,
-        ) {
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
-                SettingRow(Icons.Outlined.Person, "Hesap Bilgileri") {
-                    info = "Kullanıcı adı: " + me.userId.substringBefore(":").removePrefix("@") + "\nSunucu: " + Api.SERVER_NAME
+        Spacer(Modifier.height(14.dp))
+        SoftCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(horizontal = 18.dp, vertical = 4.dp)) {
+                SettingRow(Icons.Outlined.Person, "Hesabım") {
+                    info = "Kullanıcı adı: @$username\nSunucu: ${Api.SERVER_NAME}\n\nŞifren yok: hesabına kurtarma kodu, " +
+                        "başka cihazdan giriş kodu ya da yöneticinin giriş bağlantısıyla girersin."
                 }
                 HorizontalDivider(color = Line)
-                SettingRow(Icons.Outlined.Shield, "Gizlilik ve Güvenlik") {
-                    info = "Mesajların uçtan uca şifrelidir. Bu cihazdaki sohbet verileri şifreli saklanır ve çıkış " +
-                        "yaptığında tamamen silinir."
+                SettingRow(Icons.Outlined.Lock, "Gizlilik ve Güvenlik") {
+                    info = "Mesajların uçtan uca şifrelidir. Bu cihazdaki oturum ve sohbet verileri şifreli saklanır; gelen " +
+                        "fotoğraf, video ve sesler galeriye kaydedilmez. Çıkış yaptığında bu cihazdaki her şey silinir."
                 }
                 HorizontalDivider(color = Line)
                 SettingRow(Icons.Outlined.Notifications, "Bildirimler") { openNotificationSettings(context) }
                 HorizontalDivider(color = Line)
-                SettingRow(Icons.Outlined.Storage, "Depolama ve Medya") {
-                    info = "Gelen fotoğraf, video ve sesler galeriye kaydedilmez; yalnızca uygulamanın kendi şifreli " +
-                        "alanında tutulur ve çıkış yaptığında silinir. Bir sohbetin medyasını görmek için sohbette ⋮ > " +
-                        "Fotoğraf ve videolar'a ya da ana ekrandaki Medya sekmesine dokun."
+                SettingRow(Icons.Outlined.Fingerprint, "Uygulama kilidi", trailing = {
+                    Switch(
+                        checked = lockOn,
+                        onCheckedChange = { on ->
+                            if (on && !Gate.lockAvailable()) {
+                                info = "Uygulama kilidi için önce telefonuna ekran kilidi ya da parmak izi tanımla."
+                            } else {
+                                Gate.lockEnabled = on
+                                lockOn = on
+                            }
+                        },
+                    )
+                }) {
+                    info = "Açıksa, Tayfa'ya 30 saniyeden uzun süre sonra döndüğünde parmak izi ya da ekran kilidi istenir."
                 }
-                HorizontalDivider(color = Line)
-                SettingRow(Icons.Outlined.HowToReg, "Üyelik Onayları", onClick = onAdmin)
-                HorizontalDivider(color = Line)
-                SettingRow(Icons.AutoMirrored.Outlined.Logout, "Çıkış Yap") { confirmLogout = true }
             }
         }
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(14.dp))
+        SoftCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(horizontal = 18.dp, vertical = 4.dp)) {
+                SettingRow(Icons.Outlined.QrCode2, "Başka cihazda giriş") {
+                    withToken { token ->
+                        shareDialog = Triple(
+                            "Başka cihazda giriş",
+                            "Yeni telefonda QR kodu kamerayla okut ya da Tayfa › Hesabıma giriş yap › Giriş kodu alanına yaz. " +
+                                "5 dakika geçerli, tek kullanımlık. Kimseye gösterme.",
+                            Api.newLoginLink(token),
+                        )
+                    }
+                }
+                HorizontalDivider(color = Line)
+                SettingRow(Icons.Outlined.Computer, "Web'de aç") {
+                    withToken { token ->
+                        val reply = Api.webCode(token)
+                        shareDialog = Triple(
+                            "Tayfa Web",
+                            "Bilgisayarda ${reply.url.ifEmpty { "web adresindeki giris.html" }} adresini aç ve bu kodu yaz. " +
+                                "5 dakika geçerli, tek kullanımlık.",
+                            Api.CodeReply(reply.code, ""),
+                        )
+                    }
+                }
+                HorizontalDivider(color = Line)
+                SettingRow(Icons.Outlined.Key, "Kurtarma kodu") { confirmRecovery = true }
+                if (isAdmin) {
+                    HorizontalDivider(color = Line)
+                    SettingRow(Icons.Outlined.HowToReg, "Yönetim ve davetler", onClick = onAdmin)
+                }
+            }
+        }
+        Spacer(Modifier.height(14.dp))
+        SoftCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(horizontal = 18.dp, vertical = 4.dp)) {
+                SettingRow(Icons.Outlined.Info, "Uygulama Hakkında") {
+                    val version = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull()
+                    info = "Tayfa ${version.orEmpty()}\nÖzel, şifresiz ve uçtan uca şifreli sohbet."
+                }
+                HorizontalDivider(color = Line)
+                SettingRow(Icons.AutoMirrored.Outlined.Logout, "Çıkış Yap", tint = Color(0xFFB4232A)) { confirmLogout = true }
+            }
+        }
+        Spacer(Modifier.height(28.dp))
+    }
+
+    shareDialog?.let { (title, text, reply) ->
+        ShareCodeDialog(
+            title = title,
+            explanation = text,
+            code = reply.code,
+            url = reply.url.ifEmpty { null },
+            shareMessage = null,
+            sensitive = true,
+            onDismiss = { shareDialog = null },
+        )
+    }
+    if (confirmRecovery) {
+        AlertDialog(
+            onDismissRequest = { confirmRecovery = false },
+            title = { Text("Yeni kurtarma kodu") },
+            text = { Text("Yeni bir kurtarma kodu oluşturulacak ve eskisi geçersiz olacak. Devam edilsin mi?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmRecovery = false
+                    withToken { token -> Gate.recoveryToShow.value = Api.newRecovery(token) }
+                }) { Text("Oluştur") }
+            },
+            dismissButton = { TextButton(onClick = { confirmRecovery = false }) { Text("Vazgeç") } },
+        )
     }
 
     if (editName) {
@@ -908,15 +1041,21 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
 }
 
 @Composable
-private fun SettingRow(icon: ImageVector, label: String, onClick: () -> Unit) {
+private fun SettingRow(
+    icon: ImageVector,
+    label: String,
+    tint: Color = Ink,
+    trailing: (@Composable () -> Unit)? = null,
+    onClick: () -> Unit,
+) {
     Row(
-        Modifier.fillMaxWidth().height(58.dp).clickable(onClick = onClick),
+        Modifier.fillMaxWidth().height(60.dp).clickable(onClick = onClick),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, contentDescription = null, tint = Ink, modifier = Modifier.size(26.dp))
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(25.dp))
         Spacer(Modifier.width(18.dp))
-        Text(label, modifier = Modifier.weight(1f), color = Ink, fontSize = 16.5.sp)
-        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = Ink)
+        Text(label, modifier = Modifier.weight(1f), color = tint, fontSize = 17.sp)
+        if (trailing != null) trailing() else Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = SoftBlue)
     }
 }
 
@@ -927,7 +1066,7 @@ fun AdminScreen(me: AuthState.LoggedIn, onBack: () -> Unit) {
     var data by remember { mutableStateOf<AdminMembers?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
-    var resetFor by remember { mutableStateOf<Member?>(null) }
+    var share by remember { mutableStateOf<Triple<String, Api.CodeReply, Boolean>?>(null) }
     var removeFor by remember { mutableStateOf<Member?>(null) }
     var reload by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
@@ -943,13 +1082,42 @@ fun AdminScreen(me: AuthState.LoggedIn, onBack: () -> Unit) {
         }
     }
 
-    fun act(action: String, member: Member, newPassword: String? = null, done: String) {
+    fun invite(uses: Int) {
         if (busy) return
         val token = Bayx.accessToken ?: return
         busy = true
         scope.launch {
             try {
-                Api.adminAction(token, action, member.userId, newPassword)
+                share = Triple("Davet", Api.createInvite(token, uses, 7), false)
+            } catch (e: ApiException) {
+                toast(e.message ?: "Davet oluşturulamadı.")
+            }
+            busy = false
+            reload++
+        }
+    }
+
+    fun loginLink(member: Member) {
+        if (busy) return
+        val token = Bayx.accessToken ?: return
+        busy = true
+        scope.launch {
+            try {
+                share = Triple(member.displayName, Api.adminLoginLink(token, member.userId), true)
+            } catch (e: ApiException) {
+                toast(e.message ?: "Bağlantı oluşturulamadı.")
+            }
+            busy = false
+        }
+    }
+
+    fun act(action: String, member: Member, done: String) {
+        if (busy) return
+        val token = Bayx.accessToken ?: return
+        busy = true
+        scope.launch {
+            try {
+                Api.adminAction(token, action, member.userId)
                 toast(done)
             } catch (e: ApiException) {
                 toast(e.message ?: "İşlem tamamlanamadı.")
@@ -959,13 +1127,13 @@ fun AdminScreen(me: AuthState.LoggedIn, onBack: () -> Unit) {
         }
     }
 
-    Column(Modifier.fillMaxSize().background(Bg).systemBarsPadding()) {
+    Column(Modifier.fillMaxSize().background(PageBrush).systemBarsPadding()) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Geri", tint = Ink) }
-            Text("Üyelik Onayları", color = Ink, fontSize = 21.sp, fontWeight = FontWeight.ExtraBold)
+            Text("Yönetim ve davetler", color = Ink, fontSize = 21.sp, fontWeight = FontWeight.ExtraBold)
         }
         val current = data
         when {
@@ -1002,6 +1170,24 @@ fun AdminScreen(me: AuthState.LoggedIn, onBack: () -> Unit) {
                             }
                         }
                     }
+                    item {
+                        Surface(shape = RoundedCornerShape(20.dp), color = Color.White, shadowElevation = 3.dp) {
+                            Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                                Text("Davet et", color = Ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                                Text(
+                                    "Davet bağlantısıyla gelen kişi onay beklemeden katılır. Bağlantı 7 gün geçerlidir." +
+                                        if (current.invites > 0) " Kullanılmamış davet hakkı: ${current.invites}." else "",
+                                    color = Muted,
+                                    fontSize = 13.5.sp,
+                                )
+                                Spacer(Modifier.height(12.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    SatinTile("1 kişilik", Icons.Outlined.PersonAdd, Satin.Steel, Modifier.weight(1f)) { invite(1) }
+                                    SatinTile("5 kişilik", Icons.Outlined.GroupAdd, Satin.Lavender, Modifier.weight(1f)) { invite(5) }
+                                }
+                            }
+                        }
+                    }
                     item { SectionTitle("Onay bekleyenler (${pending.size})") }
                     if (pending.isEmpty()) {
                         item { Text("Onay bekleyen kayıt yok.", color = Muted, modifier = Modifier.padding(horizontal = 4.dp)) }
@@ -1033,7 +1219,7 @@ fun AdminScreen(me: AuthState.LoggedIn, onBack: () -> Unit) {
                                 MemberHeader(member)
                                 if (member.userId != me.userId) {
                                     Row {
-                                        TextButton(enabled = !busy, onClick = { resetFor = member }) { Text("Şifre sıfırla") }
+                                        TextButton(enabled = !busy, onClick = { loginLink(member) }) { Text("Giriş bağlantısı") }
                                         TextButton(enabled = !busy, onClick = { removeFor = member }) {
                                             Text("Üyelikten çıkar", color = Color(0xFFA32117))
                                         }
@@ -1047,30 +1233,23 @@ fun AdminScreen(me: AuthState.LoggedIn, onBack: () -> Unit) {
         }
     }
 
-    resetFor?.let { member ->
-        var newPassword by remember(member.userId) { mutableStateOf("") }
-        AlertDialog(
-            onDismissRequest = { resetFor = null },
-            title = { Text("Şifre sıfırla") },
-            text = {
-                Column {
-                    Text("${member.displayName} için yeni şifre belirle. Açık oturumları kapatılır.")
-                    Spacer(Modifier.height(12.dp))
-                    OutlinedTextField(
-                        value = newPassword,
-                        onValueChange = { newPassword = it },
-                        singleLine = true,
-                        label = { Text("Yeni şifre (en az 8 karakter)") },
-                    )
-                }
+    share?.let { (title, reply, sensitive) ->
+        ShareCodeDialog(
+            title = if (sensitive) "$title için giriş bağlantısı" else "Davet bağlantısı",
+            explanation = if (sensitive) {
+                "24 saat geçerli, tek kullanımlık. Yalnızca bu kişiye özel olarak gönder; bağlantıyı açan hesaba girer."
+            } else {
+                "Bağlantıyı gönder ya da QR kodu okut. Uygulamada Davetle katıl › Davet kodu alanına da yazılabilir."
             },
-            confirmButton = {
-                TextButton(enabled = newPassword.length >= 8, onClick = {
-                    act("reset-password", member, newPassword, done = "Şifre değiştirildi.")
-                    resetFor = null
-                }) { Text("Kaydet") }
+            code = reply.code,
+            url = reply.url,
+            shareMessage = if (sensitive) {
+                "Tayfa giriş bağlantın (24 saat, tek kullanımlık): ${reply.url}\nUygulamada giriş kodu: ${reply.code}"
+            } else {
+                "Tayfa'ya davetlisin! Uygulamayı açıp bu bağlantıya dokun: ${reply.url}\nDavet kodu: ${reply.code}"
             },
-            dismissButton = { TextButton(onClick = { resetFor = null }) { Text("Vazgeç") } },
+            sensitive = sensitive,
+            onDismiss = { share = null },
         )
     }
 

@@ -21,7 +21,7 @@ data class UserPresence(val mode: String, val status: String)
 
 data class PresenceResult(val users: Map<String, UserPresence>, val myMode: String, val myStatus: String)
 
-data class AdminMembers(val members: List<Member>, val count: Int, val max: Int)
+data class AdminMembers(val members: List<Member>, val count: Int, val max: Int, val invites: Int = 0)
 
 class ApiException(val code: String, message: String) : Exception(message)
 
@@ -76,13 +76,58 @@ object Api {
         }
     }
 
-    suspend fun register(username: String, password: String, displayName: String) = io {
-        request(
-            "POST",
-            "/bayx/register",
-            JSONObject().put("username", username).put("password", password).put("display_name", displayName),
-        )
-        Unit
+    /** Şifresiz kayıt / giriş yanıtı. status: ok, pending ya da rejected. */
+    data class AuthReply(
+        val status: String,
+        val username: String = "",
+        val otp: String = "",
+        val recoveryCode: String? = null,
+        val ticket: String? = null,
+    )
+
+    private fun authReply(json: JSONObject) = AuthReply(
+        status = json.optString("status"),
+        username = json.optString("username"),
+        otp = json.optString("otp"),
+        recoveryCode = json.optString("recovery_code").ifEmpty { null },
+        ticket = json.optString("ticket").ifEmpty { null },
+    )
+
+    suspend fun register(username: String, displayName: String, invite: String?) = io {
+        val body = JSONObject().put("username", username).put("display_name", displayName)
+        if (!invite.isNullOrBlank()) body.put("invite", invite)
+        authReply(request("POST", "/bayx/v2/register", body))
+    }
+
+    suspend fun ticket(ticket: String) = io { authReply(request("POST", "/bayx/v2/ticket", JSONObject().put("ticket", ticket))) }
+
+    suspend fun recover(username: String, code: String) = io {
+        authReply(request("POST", "/bayx/v2/recover", JSONObject().put("username", username).put("recovery_code", code)))
+    }
+
+    suspend fun redeemLink(code: String) = io { authReply(request("POST", "/bayx/v2/link/redeem", JSONObject().put("code", code))) }
+
+    /** Kod ve (varsa) bağlantı döndüren uçlar: giriş kodu, web kodu, davet. */
+    data class CodeReply(val code: String, val url: String)
+
+    private fun codeReply(json: JSONObject) = CodeReply(json.optString("code"), json.optString("url"))
+
+    suspend fun newLoginLink(token: String) = io { codeReply(request("POST", "/bayx/v2/link/new", JSONObject(), token)) }
+
+    suspend fun webCode(token: String) = io { codeReply(request("POST", "/bayx/v2/web/code", JSONObject(), token)) }
+
+    suspend fun newRecovery(token: String): String = io {
+        request("POST", "/bayx/v2/recovery/new", JSONObject(), token).optString("recovery_code")
+    }
+
+    suspend fun seal(token: String) = io { request("POST", "/bayx/v2/seal", JSONObject(), token); Unit }
+
+    suspend fun createInvite(token: String, uses: Int, days: Int) = io {
+        codeReply(request("POST", "/bayx/admin/invite", JSONObject().put("uses", uses).put("days", days), token))
+    }
+
+    suspend fun adminLoginLink(token: String, userId: String) = io {
+        codeReply(request("POST", "/bayx/admin/login-link", JSONObject().put("user_id", userId), token))
     }
 
     /** Hesap kullanılabiliyorsa null, değilse Matrix hata kodunu (ör. M_USER_LOCKED) döndürür. */
@@ -155,12 +200,11 @@ object Api {
 
     suspend fun adminMembers(token: String): AdminMembers = io {
         val json = request("GET", "/bayx/admin/members", token = token)
-        AdminMembers(parseMembers(json), json.optInt("count"), json.optInt("max", 10))
+        AdminMembers(parseMembers(json), json.optInt("count"), json.optInt("max", 10), json.optInt("invites"))
     }
 
-    suspend fun adminAction(token: String, action: String, userId: String, newPassword: String? = null) = io {
+    suspend fun adminAction(token: String, action: String, userId: String) = io {
         val body = JSONObject().put("user_id", userId)
-        if (newPassword != null) body.put("new_password", newPassword)
         request("POST", "/bayx/admin/$action", body, token)
         Unit
     }

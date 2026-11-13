@@ -15,5 +15,6 @@ class BayxApplication : Application() {
             Bayx.platformError = e.toString()
         }
         Bayx.init(this)
+        com.bayx.chat.data.Gate.init(this)
     }
 }

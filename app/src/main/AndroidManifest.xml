@@ -38,6 +38,14 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Davet ve giriş bağlantıları: tayfa://davet/KOD, tayfa://giris/KOD -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="tayfa" android:host="davet" />
+                <data android:scheme="tayfa" android:host="giris" />
+            </intent-filter>
         </activity>
         <service
             android:name=".data.PushService"

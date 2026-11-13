@@ -27,6 +27,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -181,7 +183,7 @@ internal fun MediaContent(msg: ChatMessage, tint: Color, onOpen: (ChatMessage) -
                     Modifier
                         .size(44.dp)
                         .clip(CircleShape)
-                        .background(if (msg.mine) Color.White else Blue)
+                        .background(BlueBrush)
                         .clickable(enabled = !loading) {
                             val source = media.source
                             if (playing) {
@@ -197,7 +199,7 @@ internal fun MediaContent(msg: ChatMessage, tint: Color, onOpen: (ChatMessage) -
                         },
                     contentAlignment = Alignment.Center,
                 ) {
-                    val iconTint = if (msg.mine) Blue else Color.White
+                    val iconTint = Color.White
                     if (loading) {
                         CircularProgressIndicator(color = iconTint, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
                     } else {
@@ -210,10 +212,15 @@ internal fun MediaContent(msg: ChatMessage, tint: Color, onOpen: (ChatMessage) -
                 }
                 Spacer(Modifier.width(12.dp))
                 Column {
-                    Text("Sesli mesaj", color = tint, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                    if (media.durationMs > 0) Text(formatDuration(media.durationMs), color = tint, fontSize = 13.sp)
+                    Waveform(seed = msg.key.hashCode(), playing = playing, modifier = Modifier.width(150.dp).height(30.dp))
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        if (media.durationMs > 0) formatDuration(media.durationMs) else "Sesli mesaj",
+                        color = tint.copy(alpha = 0.7f),
+                        fontSize = 12.sp,
+                    )
                 }
-                Spacer(Modifier.width(24.dp))
+                Spacer(Modifier.width(8.dp))
             }
         }
         MsgKind.LOCATION -> {
@@ -228,9 +235,9 @@ internal fun MediaContent(msg: ChatMessage, tint: Color, onOpen: (ChatMessage) -
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(
-                    Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(if (msg.mine) Color.White else Blue),
+                    Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(Brush.linearGradient(Satin.Mauve)),
                     contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Outlined.LocationOn, contentDescription = null, tint = if (msg.mine) Blue else Color.White) }
+                ) { Icon(Icons.Outlined.LocationOn, contentDescription = null, tint = Color.White) }
                 Spacer(Modifier.width(12.dp))
                 Column {
                     Text("Konum", color = tint, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
@@ -353,28 +360,55 @@ internal fun AttachSheet(
     onVideo: () -> Unit,
     onLocation: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color.White) {
-        Column(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
-            AttachRow(Icons.Outlined.Image, "Fotoğraf seç", onPhoto)
-            AttachRow(Icons.Outlined.PhotoCamera, "Kamerayla çek", onCamera)
-            AttachRow(Icons.Outlined.Videocam, "Video seç", onVideo)
-            AttachRow(Icons.Outlined.LocationOn, "Konumumu paylaş", onLocation)
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color(0xFFFBF8F4)) {
+        Column(Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, bottom = 28.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                SatinTile("Galeri", Icons.Outlined.Image, Satin.Steel, Modifier.weight(1f), onClick = onPhoto)
+                SatinTile("Kamera", Icons.Outlined.PhotoCamera, Satin.Lavender, Modifier.weight(1f), onClick = onCamera)
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                SatinTile("Video", Icons.Outlined.Videocam, Satin.Sand, Modifier.weight(1f), onClick = onVideo)
+                SatinTile("Konum", Icons.Outlined.LocationOn, Satin.Mauve, Modifier.weight(1f), onClick = onLocation)
+            }
         }
     }
 }
 
+/** Sesli mesaj dalga formu: mavi → mor → pembe → turuncu degrade çubuklar. */
 @Composable
-private fun AttachRow(icon: ImageVector, label: String, onClick: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 24.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            Modifier.size(44.dp).clip(CircleShape).background(Color(0xFFE6F0FF)),
-            contentAlignment = Alignment.Center,
-        ) { Icon(icon, contentDescription = null, tint = Blue) }
-        Spacer(Modifier.width(16.dp))
-        Text(label, color = Ink, fontSize = 16.sp)
+internal fun Waveform(seed: Int, playing: Boolean, modifier: Modifier) {
+    val bars = remember(seed) {
+        val random = java.util.Random(seed.toLong())
+        List(34) { i ->
+            val envelope = 0.35f + 0.65f * kotlin.math.sin(Math.PI * (i + 1) / 35.0).toFloat()
+            (0.18f + random.nextFloat() * 0.82f) * envelope
+        }
+    }
+    val pulse = if (playing) {
+        val transition = androidx.compose.animation.core.rememberInfiniteTransition(label = "dalga")
+        transition.animateFloat(
+            0.75f, 1f,
+            androidx.compose.animation.core.infiniteRepeatable(
+                androidx.compose.animation.core.tween(420),
+                androidx.compose.animation.core.RepeatMode.Reverse,
+            ),
+            label = "dalga",
+        ).value
+    } else 1f
+    val colors = listOf(Color(0xFF6EC6FF), Color(0xFF8B7BFF), Color(0xFFE77BC4), Color(0xFFF6A86B))
+    androidx.compose.foundation.Canvas(modifier) {
+        val step = size.width / bars.size
+        val brush = Brush.horizontalGradient(colors, startX = 0f, endX = size.width)
+        bars.forEachIndexed { i, value ->
+            val h = size.height * value * (if (i % 2 == 0) pulse else 1f)
+            drawRoundRect(
+                brush,
+                topLeft = androidx.compose.ui.geometry.Offset(i * step + step * 0.2f, (size.height - h) / 2f),
+                size = androidx.compose.ui.geometry.Size(step * 0.6f, h),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(step * 0.3f),
+            )
+        }
     }
 }
 

@@ -349,10 +349,10 @@ object Bayx {
     private class PendingApproval : Exception()
 
     private fun loginError(e: Exception): String = when {
-        e is PendingApproval -> "Hesabın henüz onaylanmadı. Yönetici onayladıktan sonra giriş yapabilirsin."
+        e is PendingApproval -> "Hesabın henüz onaylanmadı. Yönetici onaylayınca giriş yapabilirsin."
         e is ClientException.MatrixApi && e.code == "M_USER_LOCKED" ->
-            "Hesabın henüz onaylanmadı. Yönetici onayladıktan sonra giriş yapabilirsin."
-        e is ClientException.MatrixApi && e.code == "M_FORBIDDEN" -> "Kullanıcı adı veya şifre hatalı."
+            "Hesabın henüz onaylanmadı. Yönetici onaylayınca giriş yapabilirsin."
+        e is ClientException.MatrixApi && e.code == "M_FORBIDDEN" -> "Giriş süresi doldu. Lütfen tekrar dene."
         e is ClientException.MatrixApi && e.code == "M_USER_DEACTIVATED" -> "Bu hesap kapatılmış."
         e is ClientException.MatrixApi && e.code == "M_LIMIT_EXCEEDED" -> "Çok fazla deneme yapıldı. Biraz sonra tekrar dene."
         e is ApiException -> e.message ?: "Giriş yapılamadı."

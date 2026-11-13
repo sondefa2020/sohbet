@@ -70,8 +70,8 @@ import java.util.Date
 import java.util.Locale
 
 internal val BlueBrush = Brush.verticalGradient(listOf(BlueLight, BlueDark))
-internal val SoftShadow = Color(0x33153E82)
-internal val PageBrush = Brush.verticalGradient(listOf(Color.White, Color.White, Color(0xFFE6EEFB)))
+internal val SoftShadow = Color(0x26825A32)
+internal val PageBrush = Brush.verticalGradient(listOf(Color(0xFFFCFAF7), Color(0xFFF8F3ED), Color(0xFFF1E9DF)))
 
 // ---------- Ortak parçalar ----------
 
@@ -165,13 +165,13 @@ internal fun GradientButton(text: String, busy: Boolean = false, showArrow: Bool
         contentAlignment = Alignment.Center,
     ) {
         if (busy) {
-            CircularProgressIndicator(color = Color.White, strokeWidth = 3.dp, modifier = Modifier.size(28.dp))
+            CircularProgressIndicator(color = SandInk, strokeWidth = 3.dp, modifier = Modifier.size(28.dp))
         } else {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(text, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Text(text, color = SandInk, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 if (showArrow) {
                     Spacer(Modifier.width(40.dp))
-                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = Color.White)
+                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = SandInk)
                 }
             }
         }
@@ -257,9 +257,9 @@ fun SplashScreen() {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Image(painterResource(R.drawable.ic_logo), contentDescription = null, modifier = Modifier.size(96.dp))
-        Spacer(Modifier.height(8.dp))
-        Wordmark(nameSize = 36.sp, subSize = 30.sp, centered = true)
+        LogoMark(120.dp)
+        Spacer(Modifier.height(14.dp))
+        Text("Tayfa", color = Ink, fontSize = 36.sp, fontWeight = FontWeight.ExtraBold)
         Spacer(Modifier.height(28.dp))
         CircularProgressIndicator(color = Blue)
     }
@@ -290,147 +290,6 @@ fun OfflineScreen() {
             busy = true
             scope.launch { Bayx.logout() }
         }) { Text("Çıkış yap") }
-    }
-}
-
-// ---------- Giriş ve kayıt ----------
-
-@Composable
-fun AuthFlow() {
-    var registering by remember { mutableStateOf(false) }
-    if (registering) {
-        RegisterScreen(onDone = { registering = false })
-    } else {
-        LoginScreen(onRegister = { registering = true })
-    }
-}
-
-@Composable
-private fun AuthPage(content: @Composable ColumnScope.() -> Unit) {
-    Column(
-        Modifier
-            .fillMaxSize()
-            .background(PageBrush)
-            .systemBarsPadding()
-            .imePadding()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 26.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        content = content,
-    )
-}
-
-@Composable
-private fun LoginScreen(onRegister: () -> Unit) {
-    // Bilerek remember (rememberSaveable değil): giriş bilgileri hiçbir yere kaydedilmez.
-    var user by remember { mutableStateOf("") }
-    var pass by remember { mutableStateOf("") }
-    var busy by remember { mutableStateOf(false) }
-    var info by remember { mutableStateOf<String?>(null) }
-    val scope = rememberCoroutineScope()
-
-    AuthPage {
-        Spacer(Modifier.height(64.dp))
-        Image(painterResource(R.drawable.ic_logo), contentDescription = "Tayfa logosu", modifier = Modifier.size(104.dp))
-        Spacer(Modifier.height(10.dp))
-        Wordmark(nameSize = 40.sp, subSize = 34.sp, centered = true)
-        Spacer(Modifier.height(44.dp))
-        PillField(user, { user = it }, "Kullanıcı Adı", Icons.Outlined.Person)
-        Spacer(Modifier.height(16.dp))
-        PillField(pass, { pass = it }, "Şifre", Icons.Outlined.Lock, isPassword = true)
-        Spacer(Modifier.height(30.dp))
-        GradientButton("Giriş Yap", busy = busy) {
-            if (user.isBlank() || pass.isEmpty()) {
-                info = "Kullanıcı adını ve şifreni yaz."
-            } else {
-                busy = true
-                scope.launch {
-                    val error = Bayx.login(user, pass)
-                    pass = ""
-                    busy = false
-                    if (error != null) info = error
-                }
-            }
-        }
-        Spacer(Modifier.height(12.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onRegister) { Text("Hesap Oluştur", fontSize = 15.sp) }
-            Box(Modifier.width(1.dp).height(16.dp).background(SoftBlue))
-            TextButton(onClick = {
-                info = "Şifreni yalnızca yönetici sıfırlayabilir. Lütfen yöneticine başvur."
-            }) { Text("Şifremi Unuttum", fontSize = 15.sp) }
-        }
-        Spacer(Modifier.height(28.dp))
-        Text(
-            "Yeni hesaplar yönetici onayıyla açılır.\nBu cihazda kullanıcı adı ve şifre saklanmaz.",
-            color = Muted,
-            fontSize = 12.5.sp,
-            textAlign = TextAlign.Center,
-            lineHeight = 18.sp,
-        )
-        Spacer(Modifier.height(24.dp))
-    }
-
-    info?.let { message -> InfoDialog(message) { info = null } }
-}
-
-@Composable
-private fun RegisterScreen(onDone: () -> Unit) {
-    var user by remember { mutableStateOf("") }
-    var name by remember { mutableStateOf("") }
-    var pass by remember { mutableStateOf("") }
-    var pass2 by remember { mutableStateOf("") }
-    var busy by remember { mutableStateOf(false) }
-    var info by remember { mutableStateOf<String?>(null) }
-    var success by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-
-    AuthPage {
-        Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onDone) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Geri", tint = Ink) }
-        }
-        Spacer(Modifier.height(8.dp))
-        Text("Hesap Oluştur", color = Ink, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
-        Spacer(Modifier.height(6.dp))
-        Text("Kaydın yönetici onayından sonra açılır.", color = Muted, fontSize = 14.sp)
-        Spacer(Modifier.height(28.dp))
-        PillField(user, { user = it.lowercase().trim() }, "Kullanıcı adı (küçük harf, rakam)", Icons.Outlined.Person)
-        Spacer(Modifier.height(14.dp))
-        PillField(name, { name = it }, "Görünen ad", Icons.Outlined.Badge, keyboardType = KeyboardType.Text)
-        Spacer(Modifier.height(14.dp))
-        PillField(pass, { pass = it }, "Şifre (en az 8 karakter)", Icons.Outlined.Lock, isPassword = true)
-        Spacer(Modifier.height(14.dp))
-        PillField(pass2, { pass2 = it }, "Şifre (tekrar)", Icons.Outlined.Lock, isPassword = true)
-        Spacer(Modifier.height(28.dp))
-        GradientButton("Kayıt Ol", busy = busy, showArrow = false) {
-            when {
-                !Regex("^[a-z0-9][a-z0-9._-]{2,19}$").matches(user) ->
-                    info = "Kullanıcı adı 3-20 karakter olmalı; küçük harf, rakam, nokta, tire ve alt çizgi kullanılabilir."
-                name.isBlank() -> info = "Görünen adını yaz."
-                pass.length < 8 -> info = "Şifre en az 8 karakter olmalı."
-                pass != pass2 -> info = "Şifreler aynı değil."
-                else -> {
-                    busy = true
-                    scope.launch {
-                        try {
-                            Api.register(user, pass, name.trim())
-                            success = true
-                        } catch (e: ApiException) {
-                            info = e.message
-                        }
-                        pass = ""
-                        pass2 = ""
-                        busy = false
-                    }
-                }
-            }
-        }
-        Spacer(Modifier.height(24.dp))
-    }
-
-    info?.let { message -> InfoDialog(message) { info = null } }
-    if (success) {
-        InfoDialog("Kaydın alındı. Yönetici onayladıktan sonra kullanıcı adın ve şifrenle giriş yapabilirsin.") { onDone() }
     }
 }
 
@@ -499,43 +358,39 @@ fun ChatListScreen(
         }
     }
 
-    Box(Modifier.fillMaxSize().background(Bg)) {
+    Box(Modifier.fillMaxSize().background(PageBrush)) {
         Column(Modifier.fillMaxSize().systemBarsPadding()) {
             Row(
-                Modifier.fillMaxWidth().padding(start = 20.dp, end = 6.dp, top = 12.dp),
+                Modifier.fillMaxWidth().padding(start = 18.dp, end = 16.dp, top = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Image(painterResource(R.drawable.ic_logo), contentDescription = null, modifier = Modifier.size(44.dp))
+                LogoMark(48.dp)
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Tayfa", color = Ink, fontSize = 25.sp, fontWeight = FontWeight.ExtraBold)
+                    Text(me.displayName.ifEmpty { "Sohbet" }, color = Muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                ChipIcon(Icons.Outlined.Search, "Ara", size = 44.dp) { searching = !searching; if (!searching) query = "" }
                 Spacer(Modifier.width(10.dp))
-                Box(Modifier.weight(1f)) { Wordmark(nameSize = 23.sp, subSize = 18.sp, centered = false) }
-                IconButton(onClick = onSecret) {
-                    Icon(Icons.Outlined.Lock, "Gizli sohbetler", tint = Ink, modifier = Modifier.size(24.dp))
-                }
-                IconButton(onClick = { searching = !searching; if (!searching) query = "" }) {
-                    Icon(Icons.Outlined.Search, "Ara", tint = Ink, modifier = Modifier.size(26.dp))
-                }
-                IconButton(onClick = { openNotificationSettings(context) }) {
-                    Icon(Icons.Outlined.Notifications, "Bildirimler", tint = Ink, modifier = Modifier.size(26.dp))
-                }
-                IconButton(onClick = onProfile) { Icon(Icons.Filled.MoreVert, "Menü", tint = Ink) }
+                ChipIcon(Icons.Outlined.Settings, "Profil ve ayarlar", size = 44.dp, onClick = onProfile)
             }
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(18.dp))
             Surface(
-                modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth().height(54.dp),
-                shape = RoundedCornerShape(27.dp),
-                color = Color.White,
-                shadowElevation = 4.dp,
+                modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth().height(52.dp),
+                shape = RoundedCornerShape(26.dp),
+                color = ChipBg,
             ) {
-                Row {
+                Row(Modifier.padding(4.dp)) {
                     tabs.forEachIndexed { index, (label, icon) ->
                         val selected = index == tab
-                        val tint = if (selected) Color.White else Ink
+                        val tint = if (selected) Ink else Muted
                         Box(
                             Modifier
                                 .weight(1f)
                                 .fillMaxHeight()
-                                .clip(RoundedCornerShape(27.dp))
-                                .then(if (selected) Modifier.background(BlueBrush) else Modifier)
+                                .then(if (selected) Modifier.shadow(3.dp, RoundedCornerShape(22.dp)) else Modifier)
+                                .clip(RoundedCornerShape(22.dp))
+                                .then(if (selected) Modifier.background(Color.White) else Modifier)
                                 .clickable { tab = index },
                             contentAlignment = Alignment.Center,
                         ) {
@@ -568,10 +423,30 @@ fun ChatListScreen(
             Spacer(Modifier.height(12.dp))
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when (tab) {
-                    0 -> if (rooms.isEmpty()) {
-                        EmptyHint(if (query.isNotBlank()) "Aramaya uyan sohbet yok." else "Henüz sohbet yok.\nKişiler sekmesinden birini seçerek başla.")
-                    } else {
-                        LazyColumn {
+                    0 -> LazyColumn {
+                        if (query.isBlank()) {
+                            item {
+                                Row(
+                                    Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 10.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                ) {
+                                    SatinTile("Gruplar", Icons.Outlined.Groups, Satin.Steel, Modifier.weight(1f)) { tab = 2 }
+                                    SatinTile("Gizli Oda", Icons.Outlined.Lock, Satin.Lavender, Modifier.weight(1f), onClick = onSecret)
+                                    SatinTile("Medya", Icons.Outlined.PermMedia, Satin.Sand, Modifier.weight(1f), onClick = onMedia)
+                                }
+                            }
+                        }
+                        if (rooms.isEmpty()) {
+                            item {
+                                Text(
+                                    if (query.isNotBlank()) "Aramaya uyan sohbet yok." else "Henüz sohbet yok.\nKişiler sekmesinden birini seçerek başla.",
+                                    color = Muted,
+                                    textAlign = TextAlign.Center,
+                                    lineHeight = 22.sp,
+                                    modifier = Modifier.fillMaxWidth().padding(32.dp),
+                                )
+                            }
+                        } else {
                             items(rooms, key = { it.id }) { chat ->
                                 ChatRow(chat, mode = chat.dmUserId?.let { presences[it]?.mode }) { onOpenChat(chat.id) }
                             }
@@ -617,8 +492,8 @@ fun ChatListScreen(
                 }
             }
             Surface(
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp).fillMaxWidth().height(76.dp),
-                shape = RoundedCornerShape(24.dp),
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp).fillMaxWidth().height(74.dp),
+                shape = RoundedCornerShape(28.dp),
                 color = Color.White,
                 shadowElevation = 6.dp,
             ) {
@@ -724,13 +599,13 @@ private fun EmptyHint(text: String) {
 
 @Composable
 private fun RowScope.NavItem(label: String, icon: ImageVector, selected: Boolean, onClick: () -> Unit) {
-    val tint = if (selected) Blue else Ink
+    val tint = if (selected) Blue else Muted
     Column(
         Modifier
             .weight(1f)
             .fillMaxHeight()
             .clip(RoundedCornerShape(22.dp))
-            .then(if (selected) Modifier.background(Color(0xFFE6F0FF)) else Modifier)
+            .then(if (selected) Modifier.background(Color(0xFFF5EADD)) else Modifier)
             .clickable(onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
@@ -776,7 +651,7 @@ private fun ChatRow(chat: ChatSummary, mode: String? = null, onClick: () -> Unit
                     overflow = TextOverflow.Ellipsis,
                 )
                 Spacer(Modifier.width(8.dp))
-                Text(formatTime(chat.time), color = Ink, fontSize = 14.sp)
+                Text(formatTime(chat.time), color = if (chat.unread > 0) Blue else SoftBlue, fontSize = 13.sp)
             }
             Spacer(Modifier.height(4.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {

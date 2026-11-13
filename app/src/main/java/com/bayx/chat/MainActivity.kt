@@ -43,20 +43,24 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.navigation.compose.NavHost
 import com.bayx.chat.data.AuthState
 import com.bayx.chat.data.Bayx
+import com.bayx.chat.data.Gate
+import androidx.fragment.app.FragmentActivity
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 
-val Blue = Color(0xFF1565E0)
-val BlueLight = Color(0xFF2F7FF2)
-val BlueDark = Color(0xFF0F5BD8)
-val Ink = Color(0xFF0F1B2D)
-val Muted = Color(0xFF3C4C63)
-val SoftBlue = Color(0xFF5E7494)
-val Bg = Color(0xFFFAFCFF)
-val Line = Color(0xFFE1E8F2)
-val Online = Color(0xFF22C55E)
+// Tayfa tasarım dili: sıcak krem zemin, kum/karamel vurgu, koyu mürekkep yazı.
+// (Adlar eski sürümden kalma; "Blue" artık karamel vurgu rengidir.)
+val Blue = Color(0xFFB07A4E)
+val BlueLight = Color(0xFFE6C9A6)
+val BlueDark = Color(0xFFC79A6E)
+val Ink = Color(0xFF1F1B18)
+val Muted = Color(0xFF6E655C)
+val SoftBlue = Color(0xFF8C7F72)
+val Bg = Color(0xFFF8F4EF)
+val Line = Color(0xFFECE4DA)
+val Online = Color(0xFF34C759)
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(
@@ -75,6 +79,20 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
+        // Davet / giriş bağlantısı: tayfa://davet/KOD ya da tayfa://giris/KOD
+        val data = intent?.data
+        if (data != null && data.scheme == "tayfa") {
+            val code = data.pathSegments.firstOrNull().orEmpty().take(24)
+            if (code.isNotEmpty()) {
+                Gate.link.value = when (data.host) {
+                    "davet" -> Gate.Link.Invite(code)
+                    "giris" -> Gate.Link.Login(code)
+                    else -> null
+                }
+            }
+            intent.data = null
+            return
+        }
         val roomId = intent?.getStringExtra(Notifier.EXTRA_ROOM_ID) ?: return
         intent.removeExtra(Notifier.EXTRA_ROOM_ID)
         Bayx.pendingRoom.value = roomId
@@ -82,10 +100,12 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        Gate.onForeground()
         Bayx.setForeground(true)
     }
 
     override fun onStop() {
+        Gate.onBackground()
         Bayx.setForeground(false)
         super.onStop()
     }
@@ -137,9 +157,13 @@ fun BayxApp() {
             is AuthState.LoggedIn -> MainNav(state)
         }
     }
+    val locked by Gate.locked.collectAsState()
+    val recovery by Gate.recoveryToShow.collectAsState()
     if (auth is AuthState.LoggedIn) {
         EffectOverlay()
         CallOverlay()
+        if (locked) LockScreen()
+        recovery?.let { code -> if (!locked) RecoveryCodeDialog(code) { Gate.recoveryToShow.value = null } }
     }
 }
 
