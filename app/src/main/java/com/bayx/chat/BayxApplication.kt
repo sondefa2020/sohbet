@@ -17,5 +17,6 @@ class BayxApplication : Application() {
         Bayx.init(this)
         com.bayx.chat.data.Gate.init(this)
         Wallpaper.init(this)
+        com.bayx.chat.data.CallLog.init(this)
     }
 }

@@ -239,6 +239,7 @@ private fun MainNav(me: AuthState.LoggedIn) {
                 onSecret = { nav.navigate("secret") },
                 onMedia = { nav.navigate("media") },
                 onRequests = { nav.navigate("requests") },
+                onCalls = { nav.navigate("calls") },
             )
         }
         composable("requests") {
@@ -256,6 +257,12 @@ private fun MainNav(me: AuthState.LoggedIn) {
         }
         composable("media") {
             MediaHubScreen(onBack = { nav.popBackStack() })
+        }
+        composable("calls") {
+            CallsScreen(
+                onBack = { nav.popBackStack() },
+                onOpenChat = { roomId -> nav.navigate("chat/" + Uri.encode(roomId)) },
+            )
         }
         composable("chat/{id}") { entry ->
             ChatScreen(

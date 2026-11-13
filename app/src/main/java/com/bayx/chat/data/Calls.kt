@@ -64,6 +64,7 @@ data class CallState(
     val peerOnline: Boolean = true,
     val held: Boolean = false,
     val screenSharing: Boolean = false,
+    val fromMe: Boolean = false,
 )
 
 /**
@@ -107,6 +108,7 @@ object Calls {
 
     fun init(context: Context) {
         app = context.applicationContext
+        CallLog.init(app)
     }
 
     fun eglContext(): EglBase.Context {
@@ -176,7 +178,7 @@ object Calls {
             remoteDescriptionSet = false
             val name = data.optString("name").ifBlank { from.substringBefore(":").removePrefix("@") }
             val video = data.optBoolean("video")
-            state.value = CallState(callId, from, name, video, CallPhase.INCOMING, speaker = video, cameraOn = video)
+            state.value = CallState(callId, from, name, video, CallPhase.INCOMING, speaker = video, cameraOn = video, fromMe = false)
             startRinging()
             Notifier.cancelCall(app)
             if (!foreground) Notifier.showIncomingCall(app, name, video)
@@ -223,7 +225,7 @@ object Calls {
         if (state.value?.let { it.phase != CallPhase.ENDED } == true) return
         val callId = newCallId()
         val online = Bayx.online.value.contains(peerId)
-        state.value = CallState(callId, peerId, peerName, video, CallPhase.OUTGOING, speaker = video, cameraOn = video, peerOnline = online)
+        state.value = CallState(callId, peerId, peerName, video, CallPhase.OUTGOING, speaker = video, cameraOn = video, peerOnline = online, fromMe = true)
         ensurePolling()
         scope.launch {
             withContext(rtc) {
@@ -536,6 +538,15 @@ object Calls {
         val current = state.value ?: return
         if (current.phase == CallPhase.ENDED) return
         if (notify) send("hangup", current.peerId, current.callId)
+        runCatching {
+            CallLog.record(
+                peerId = current.peerId,
+                peerName = current.peerName,
+                outgoing = current.fromMe,
+                answered = current.phase == CallPhase.ACTIVE,
+                video = current.video,
+            )
+        }
         ringJob?.cancel()
         disconnectJob?.cancel()
         stopRinging()

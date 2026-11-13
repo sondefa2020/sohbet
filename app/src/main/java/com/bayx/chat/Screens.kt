@@ -315,6 +315,7 @@ fun ChatListScreen(
     onSecret: () -> Unit = {},
     onMedia: () -> Unit = {},
     onRequests: () -> Unit = {},
+    onCalls: () -> Unit = {},
 ) {
     var tab by remember { mutableIntStateOf(0) }
     val allRooms by Bayx.rooms.collectAsState()
@@ -576,9 +577,7 @@ fun ChatListScreen(
             ) {
                 Row {
                     NavItem("Sohbetler", Icons.Filled.Sms, selected = true) { tab = 0 }
-                    NavItem("Aramalar", Icons.Outlined.Call, selected = false) {
-                        toast("Aramak için bir sohbet aç ve üstteki telefon ya da kamera simgesine dokun.")
-                    }
+                    NavItem("Aramalar", Icons.Outlined.Call, selected = false, onClick = onCalls)
                     NavItem("Medya", Icons.Outlined.PermMedia, selected = false, onClick = onMedia)
                     NavItem("Ayarlar", Icons.Outlined.Settings, selected = false, onClick = onProfile)
                 }
