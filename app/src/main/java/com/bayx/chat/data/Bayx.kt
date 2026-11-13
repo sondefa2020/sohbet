@@ -402,6 +402,7 @@ object Bayx {
         roomsPrimed = false
         online.value = emptySet()
         presences.value = emptyMap()
+        contacts.value = Api.Contacts(emptyList(), emptyList(), emptyList())
         myMode.value = "online"
         myStatus.value = ""
         myAvatarUrl.value = null
@@ -982,6 +983,49 @@ object Bayx {
 
     fun rememberMembers(members: List<Member>) {
         members.forEach { memberNames[it.userId] = it.displayName }
+    }
+
+    // ------------------------------------------------------------- kişiler
+
+    val contacts = MutableStateFlow(Api.Contacts(emptyList(), emptyList(), emptyList()))
+
+    suspend fun refreshContacts() {
+        val token = accessToken ?: return
+        runCatching { Api.contacts(token) }.onSuccess {
+            contacts.value = it
+            rememberMembers(it.friends + it.incoming + it.outgoing)
+        }
+    }
+
+    suspend fun findUser(username: String): Api.ContactFind? {
+        val token = accessToken ?: return null
+        return runCatching { Api.contactFind(token, username) }.getOrNull()
+    }
+
+    /** Kişi isteği gönderir; hata varsa mesajı döndürür. */
+    suspend fun sendContactRequest(username: String): String? {
+        val token = accessToken ?: return "Oturum yok."
+        return try {
+            Api.contactRequest(token, username)
+            refreshContacts()
+            null
+        } catch (e: ApiException) {
+            e.message
+        }
+    }
+
+    suspend fun acceptContact(username: String): Boolean {
+        val token = accessToken ?: return false
+        val ok = runCatching { Api.contactAccept(token, username) }.isSuccess
+        if (ok) refreshContacts()
+        return ok
+    }
+
+    suspend fun rejectContact(username: String): Boolean {
+        val token = accessToken ?: return false
+        val ok = runCatching { Api.contactReject(token, username) }.isSuccess
+        if (ok) refreshContacts()
+        return ok
     }
 
     // ------------------------------------------------------------- silme

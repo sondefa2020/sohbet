@@ -1,5 +1,6 @@
 package com.bayx.chat
 
+import androidx.compose.material.icons.outlined.PersonSearch
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -321,10 +322,14 @@ fun ChatListScreen(
     val rooms = allRooms.filter { !it.secret }.filter {
         query.isBlank() || it.name.contains(query, ignoreCase = true) || it.lastMessage.contains(query, ignoreCase = true)
     }
-    var members by remember { mutableStateOf<List<Member>?>(null) }
-    var membersError by remember { mutableStateOf<String?>(null) }
+    val contacts by Bayx.contacts.collectAsState()
+    val members = contacts.friends.filter { it.userId != me.userId }
+    var loadedContacts by remember { mutableStateOf(false) }
     var showNewGroup by remember { mutableStateOf(false) }
     var opening by remember { mutableStateOf(false) }
+    var findText by remember { mutableStateOf("") }
+    var findResult by remember { mutableStateOf<Api.ContactFind?>(null) }
+    var finding by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val toast = rememberToast()
     val context = LocalContext.current
@@ -334,29 +339,46 @@ fun ChatListScreen(
         "Gruplar" to Icons.Outlined.Groups,
     )
 
-    LaunchedEffect(tab, showNewGroup) {
-        if ((tab == 1 || showNewGroup) && members == null) {
-            val token = Bayx.accessToken
-            try {
-                val all = if (token == null) emptyList() else Api.members(token)
-                Bayx.rememberMembers(all)
-                members = all.filter { it.userId != me.userId }
-                membersError = null
-            } catch (e: ApiException) {
-                membersError = e.message
+    LaunchedEffect(Unit) {
+        Bayx.refreshContacts()
+        loadedContacts = true
+    }
+
+    fun doFind() {
+        val name = findText.trim().lowercase()
+        if (name.isBlank() || finding) return
+        finding = true
+        scope.launch {
+            findResult = Bayx.findUser(name)
+            finding = false
+            if (findResult?.found != true) toast("@$name adında bir kullanıcı bulunamadı.")
+        }
+    }
+
+    fun sendRequest(username: String) {
+        scope.launch {
+            val error = Bayx.sendContactRequest(username)
+            if (error == null) {
+                toast("İstek gönderildi.")
+                findResult = null
+                findText = ""
+            } else {
+                toast(error)
             }
         }
     }
 
-    fun openDirect(member: Member) {
+    fun openDirectId(userId: String) {
         if (opening) return
         opening = true
         scope.launch {
-            val roomId = Bayx.startDirectChat(member.userId)
+            val roomId = Bayx.startDirectChat(userId)
             opening = false
             if (roomId != null) onOpenChat(roomId) else toast("Sohbet açılamadı. Tekrar dene.")
         }
     }
+
+    fun openDirect(member: Member) = openDirectId(member.userId)
 
     Box(Modifier.fillMaxSize().background(PageBrush)) {
         Column(Modifier.fillMaxSize().systemBarsPadding()) {
@@ -453,23 +475,64 @@ fun ChatListScreen(
                         }
                     }
                     1 -> {
-                        val list = members?.filter { query.isBlank() || it.displayName.contains(query, ignoreCase = true) }
-                        when {
-                            membersError != null -> EmptyHint(membersError ?: "")
-                            list == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                CircularProgressIndicator(color = Blue)
-                            }
-                            list.isEmpty() -> EmptyHint("Henüz başka üye yok.\nArkadaşların kayıt olduğunda burada görünür.")
-                            else -> LazyColumn {
-                                items(list, key = { it.userId }) { member ->
-                                    val p = presences[member.userId]
-                                    PersonRow(
-                                        member.displayName,
-                                        (p?.status ?: member.status).ifBlank { modeLabel(p?.mode ?: member.mode) },
-                                        mode = p?.mode ?: member.mode,
-                                        url = member.avatarUrl,
-                                    ) { openDirect(member) }
+                        val friends = members.filter { query.isBlank() || it.displayName.contains(query, true) || it.userId.contains(query, true) }
+                        LazyColumn {
+                            item {
+                                Column(Modifier.padding(horizontal = 16.dp)) {
+                                    OutlinedTextField(
+                                        value = findText,
+                                        onValueChange = { findText = it.lowercase().trim(); findResult = null },
+                                        singleLine = true,
+                                        placeholder = { Text("Kullanıcı adıyla kişi bul", color = Muted) },
+                                        leadingIcon = { Icon(Icons.Outlined.PersonSearch, contentDescription = null, tint = Muted) },
+                                        trailingIcon = {
+                                            TextButton(onClick = { doFind() }, enabled = findText.isNotBlank() && !finding) { Text("Bul") }
+                                        },
+                                        shape = RoundedCornerShape(22.dp),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedContainerColor = Color.White,
+                                            unfocusedContainerColor = Color.White,
+                                            unfocusedBorderColor = Line,
+                                            focusedBorderColor = Blue,
+                                        ),
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
+                                    findResult?.takeIf { it.found }?.let { r -> FindResultCard(r, onRequest = { sendRequest(r.username) }, onOpen = { openDirectId(it) }) }
                                 }
+                            }
+                            if (contacts.incoming.isNotEmpty()) {
+                                item { SectionLabel("Gelen istekler (${contacts.incoming.size})") }
+                                items(contacts.incoming, key = { "in-" + it.userId }) { m ->
+                                    RequestRow(m, incoming = true,
+                                        onAccept = { scope.launch { if (Bayx.acceptContact(m.userId.substringBefore(":").removePrefix("@"))) toast("${m.displayName} artık kişilerinde.") } },
+                                        onReject = { scope.launch { Bayx.rejectContact(m.userId.substringBefore(":").removePrefix("@")) } })
+                                }
+                            }
+                            if (contacts.outgoing.isNotEmpty()) {
+                                item { SectionLabel("Gönderilen istekler (${contacts.outgoing.size})") }
+                                items(contacts.outgoing, key = { "out-" + it.userId }) { m ->
+                                    RequestRow(m, incoming = false, onAccept = {},
+                                        onReject = { scope.launch { Bayx.rejectContact(m.userId.substringBefore(":").removePrefix("@")) } })
+                                }
+                            }
+                            item { SectionLabel("Kişilerim (${friends.size})") }
+                            if (friends.isEmpty()) {
+                                item {
+                                    Text(
+                                        "Henüz kişin yok. Yukarıdan kullanıcı adıyla birini bul ve istek gönder.",
+                                        color = Muted, textAlign = TextAlign.Center, lineHeight = 22.sp,
+                                        modifier = Modifier.fillMaxWidth().padding(28.dp),
+                                    )
+                                }
+                            }
+                            items(friends, key = { it.userId }) { member ->
+                                val p = presences[member.userId]
+                                PersonRow(
+                                    member.displayName,
+                                    (p?.status ?: member.status).ifBlank { modeLabel(p?.mode ?: member.mode) },
+                                    mode = p?.mode ?: member.mode,
+                                    url = member.avatarUrl,
+                                ) { openDirect(member) }
                             }
                         }
                     }
@@ -539,7 +602,7 @@ fun ChatListScreen(
 }
 
 @Composable
-private fun NewGroupDialog(members: List<Member>?, onDismiss: () -> Unit, onCreate: (String, List<String>) -> Unit) {
+private fun NewGroupDialog(members: List<Member>, onDismiss: () -> Unit, onCreate: (String, List<String>) -> Unit) {
     var name by remember { mutableStateOf("") }
     val selected = remember { mutableStateListOf<String>() }
     AlertDialog(
@@ -555,10 +618,8 @@ private fun NewGroupDialog(members: List<Member>?, onDismiss: () -> Unit, onCrea
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(12.dp))
-                if (members == null) {
-                    CircularProgressIndicator(color = Blue)
-                } else if (members.isEmpty()) {
-                    Text("Eklenecek başka üye yok.", color = Muted)
+                if (members.isEmpty()) {
+                    Text("Önce kişi ekle; gruba yalnızca kişilerini davet edebilirsin.", color = Muted)
                 } else {
                     Column(Modifier.heightIn(max = 280.dp).verticalScroll(rememberScrollState())) {
                         members.forEach { member ->
@@ -613,6 +674,59 @@ private fun RowScope.NavItem(label: String, icon: ImageVector, selected: Boolean
         Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(26.dp))
         Spacer(Modifier.height(4.dp))
         Text(label, color = tint, fontSize = 13.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium)
+    }
+}
+
+@Composable
+private fun SectionLabel(text: String) {
+    Text(text, color = SoftBlue, fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 22.dp, top = 16.dp, bottom = 4.dp))
+}
+
+/** Kullanıcı adıyla bulunan kişi: ilişkiye göre istek gönder / sohbet aç / bekliyor. */
+@Composable
+private fun FindResultCard(r: Api.ContactFind, onRequest: () -> Unit, onOpen: (String) -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = Color.White,
+        shadowElevation = 3.dp,
+        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+    ) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Avatar(r.displayName, 48.dp)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(r.displayName, color = Ink, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("@${r.username}", color = Muted, fontSize = 13.sp)
+            }
+            when (r.relation) {
+                "friend" -> Button(onClick = { onOpen(r.userId) }, modifier = Modifier.height(40.dp)) { Text("Sohbet") }
+                "outgoing" -> Text("İstek gönderildi", color = Muted, fontSize = 13.sp)
+                "incoming" -> Button(onClick = onRequest, modifier = Modifier.height(40.dp)) { Text("Kabul et") }
+                "self" -> Text("Bu sensin", color = Muted, fontSize = 13.sp)
+                else -> Button(onClick = onRequest, modifier = Modifier.height(40.dp)) { Text("İstek gönder") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RequestRow(member: Member, incoming: Boolean, onAccept: () -> Unit, onReject: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Avatar(member.displayName, 48.dp)
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(member.displayName, color = Ink, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(if (incoming) "seni kişi olarak eklemek istiyor" else "istek bekliyor", color = Muted, fontSize = 13.sp)
+        }
+        if (incoming) {
+            TextButton(onClick = onReject) { Text("Yok", color = Muted) }
+            Button(onClick = onAccept, modifier = Modifier.height(40.dp)) { Text("Ekle") }
+        } else {
+            TextButton(onClick = onReject) { Text("Geri çek", color = Muted) }
+        }
     }
 }
 

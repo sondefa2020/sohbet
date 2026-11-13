@@ -1,5 +1,6 @@
 package com.bayx.chat
 
+import androidx.compose.material.icons.outlined.AlternateEmail
 import androidx.compose.material.icons.outlined.PersonAdd
 import androidx.compose.material.icons.outlined.GroupAdd
 import androidx.compose.material.icons.outlined.QrCode2
@@ -746,12 +747,14 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
     var isAdmin by remember { mutableStateOf(false) }
     var lockOn by remember { mutableStateOf(Gate.lockEnabled && Gate.lockAvailable()) }
     var shareDialog by remember { mutableStateOf<Triple<String, String, Api.CodeReply>?>(null) }
-    var confirmRecovery by remember { mutableStateOf(false) }
     var working by remember { mutableStateOf(false) }
+    var emailState by remember { mutableStateOf<Api.EmailStatus?>(null) }
+    var showEmail by remember { mutableStateOf(false) }
     val username = me.userId.substringBefore(":").removePrefix("@")
     LaunchedEffect(Unit) {
         val token = Bayx.accessToken ?: return@LaunchedEffect
-        isAdmin = runCatching { Api.members(token).firstOrNull { it.userId == me.userId }?.admin == true }.getOrDefault(false)
+        isAdmin = runCatching { Api.adminMembers(token); true }.getOrDefault(false)
+        emailState = runCatching { Api.emailStatus(token) }.getOrNull()
     }
     fun withToken(block: suspend (String) -> Unit) {
         val token = Bayx.accessToken ?: return
@@ -901,16 +904,19 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
         Spacer(Modifier.height(14.dp))
         SoftCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(horizontal = 18.dp, vertical = 4.dp)) {
-                SettingRow(Icons.Outlined.QrCode2, "Başka cihazda giriş") {
-                    withToken { token ->
-                        shareDialog = Triple(
-                            "Başka cihazda giriş",
-                            "Yeni telefonda QR kodu kamerayla okut ya da Tayfa › Hesabıma giriş yap › Giriş kodu alanına yaz. " +
-                                "5 dakika geçerli, tek kullanımlık. Kimseye gösterme.",
-                            Api.newLoginLink(token),
-                        )
-                    }
-                }
+                SettingRow(
+                    Icons.Outlined.AlternateEmail,
+                    "E-posta",
+                    trailing = {
+                        val st = emailState
+                        when {
+                            st == null -> Unit
+                            st.email.isBlank() -> Text("Ekle", color = SoftBlue, fontSize = 14.sp)
+                            st.verified -> Text("Doğrulandı ✓", color = Color(0xFF2E9E5B), fontSize = 13.sp)
+                            else -> Text("Doğrula", color = Color(0xFFE5872A), fontSize = 13.sp)
+                        }
+                    },
+                ) { showEmail = true }
                 HorizontalDivider(color = Line)
                 SettingRow(Icons.Outlined.Computer, "Web'de aç") {
                     withToken { token ->
@@ -933,8 +939,6 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
                         )
                     }
                 }
-                HorizontalDivider(color = Line)
-                SettingRow(Icons.Outlined.Key, "Kurtarma kodu") { confirmRecovery = true }
                 if (isAdmin) {
                     HorizontalDivider(color = Line)
                     SettingRow(Icons.Outlined.HowToReg, "Yönetim ve davetler", onClick = onAdmin)
@@ -955,6 +959,17 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
         Spacer(Modifier.height(28.dp))
     }
 
+    if (showEmail) {
+        EmailDialog(
+            status = emailState,
+            onDismiss = { showEmail = false },
+            onSave = { address ->
+                withToken { token -> emailState = Api.emailSet(token, address) }
+            },
+            onResend = { withToken { token -> emailState = Api.emailResend(token); toast("Doğrulama e-postası yeniden gönderildi.") } },
+            onRemove = { withToken { token -> emailState = Api.emailSet(token, "") } },
+        )
+    }
     shareDialog?.let { (title, text, reply) ->
         ShareCodeDialog(
             title = title,
@@ -966,21 +981,6 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
             onDismiss = { shareDialog = null },
         )
     }
-    if (confirmRecovery) {
-        AlertDialog(
-            onDismissRequest = { confirmRecovery = false },
-            title = { Text("Yeni kurtarma kodu") },
-            text = { Text("Yeni bir kurtarma kodu oluşturulacak ve eskisi geçersiz olacak. Devam edilsin mi?") },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmRecovery = false
-                    withToken { token -> Gate.recoveryToShow.value = Api.newRecovery(token) }
-                }) { Text("Oluştur") }
-            },
-            dismissButton = { TextButton(onClick = { confirmRecovery = false }) { Text("Vazgeç") } },
-        )
-    }
-
     if (editName) {
         TextInputDialog(
             title = "Görünen ad",
@@ -1077,7 +1077,8 @@ fun AdminScreen(me: AuthState.LoggedIn, onBack: () -> Unit) {
     var data by remember { mutableStateOf<AdminMembers?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
-    var share by remember { mutableStateOf<Triple<String, Api.CodeReply, Boolean>?>(null) }
+    var query by remember { mutableStateOf("") }
+    var resetFor by remember { mutableStateOf<Member?>(null) }
     var removeFor by remember { mutableStateOf<Member?>(null) }
     var reload by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
@@ -1093,42 +1094,13 @@ fun AdminScreen(me: AuthState.LoggedIn, onBack: () -> Unit) {
         }
     }
 
-    fun invite(uses: Int) {
+    fun act(action: String, member: Member, newPassword: String? = null, done: String) {
         if (busy) return
         val token = Bayx.accessToken ?: return
         busy = true
         scope.launch {
             try {
-                share = Triple("Davet", Api.createInvite(token, uses, 7), false)
-            } catch (e: ApiException) {
-                toast(e.message ?: "Davet oluşturulamadı.")
-            }
-            busy = false
-            reload++
-        }
-    }
-
-    fun loginLink(member: Member) {
-        if (busy) return
-        val token = Bayx.accessToken ?: return
-        busy = true
-        scope.launch {
-            try {
-                share = Triple(member.displayName, Api.adminLoginLink(token, member.userId), true)
-            } catch (e: ApiException) {
-                toast(e.message ?: "Bağlantı oluşturulamadı.")
-            }
-            busy = false
-        }
-    }
-
-    fun act(action: String, member: Member, done: String) {
-        if (busy) return
-        val token = Bayx.accessToken ?: return
-        busy = true
-        scope.launch {
-            try {
-                Api.adminAction(token, action, member.userId)
+                Api.adminAction(token, action, member.userId, newPassword)
                 toast(done)
             } catch (e: ApiException) {
                 toast(e.message ?: "İşlem tamamlanamadı.")
@@ -1144,7 +1116,7 @@ fun AdminScreen(me: AuthState.LoggedIn, onBack: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Geri", tint = Ink) }
-            Text("Yönetim ve davetler", color = Ink, fontSize = 21.sp, fontWeight = FontWeight.ExtraBold)
+            Text("Yönetim", color = Ink, fontSize = 21.sp, fontWeight = FontWeight.ExtraBold)
         }
         val current = data
         when {
@@ -1155,8 +1127,9 @@ fun AdminScreen(me: AuthState.LoggedIn, onBack: () -> Unit) {
                 CircularProgressIndicator(color = Blue)
             }
             else -> {
-                val pending = current.members.filter { it.pending }
-                val active = current.members.filter { !it.pending }
+                val shown = current.members.filter {
+                    query.isBlank() || it.displayName.contains(query, true) || it.userId.contains(query, true)
+                }
                 LazyColumn(
                     contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -1164,13 +1137,8 @@ fun AdminScreen(me: AuthState.LoggedIn, onBack: () -> Unit) {
                     item {
                         Surface(shape = RoundedCornerShape(20.dp), color = Color.White, shadowElevation = 3.dp) {
                             Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                                Text("Üye kapasitesi", color = Muted, fontSize = 13.sp)
-                                Text(
-                                    "${current.count} / ${current.max} kişi",
-                                    color = Ink,
-                                    fontSize = 24.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                )
+                                Text("Üye sayısı", color = Muted, fontSize = 13.sp)
+                                Text("${current.count} / ${current.max} kişi", color = Ink, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
                                 Spacer(Modifier.height(8.dp))
                                 LinearProgressIndicator(
                                     progress = { (current.count.toFloat() / current.max.coerceAtLeast(1)).coerceIn(0f, 1f) },
@@ -1178,61 +1146,36 @@ fun AdminScreen(me: AuthState.LoggedIn, onBack: () -> Unit) {
                                     color = Blue,
                                     trackColor = Line,
                                 )
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    "Yönetici olarak her üyenin şifresini sıfırlayabilir ya da hesabını kapatabilirsin.",
+                                    color = Muted,
+                                    fontSize = 12.5.sp,
+                                )
                             }
                         }
                     }
                     item {
-                        Surface(shape = RoundedCornerShape(20.dp), color = Color.White, shadowElevation = 3.dp) {
-                            Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                                Text("Davet et", color = Ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                                Text(
-                                    "Davet bağlantısıyla gelen kişi onay beklemeden katılır. Bağlantı 7 gün geçerlidir." +
-                                        if (current.invites > 0) " Kullanılmamış davet hakkı: ${current.invites}." else "",
-                                    color = Muted,
-                                    fontSize = 13.5.sp,
-                                )
-                                Spacer(Modifier.height(12.dp))
-                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    SatinTile("1 kişilik", Icons.Outlined.PersonAdd, Satin.Steel, Modifier.weight(1f)) { invite(1) }
-                                    SatinTile("5 kişilik", Icons.Outlined.GroupAdd, Satin.Lavender, Modifier.weight(1f)) { invite(5) }
-                                }
-                            }
-                        }
+                        OutlinedTextField(
+                            value = query,
+                            onValueChange = { query = it },
+                            singleLine = true,
+                            placeholder = { Text("Üye ara", color = Muted) },
+                            leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null, tint = Muted) },
+                            shape = RoundedCornerShape(20.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
                     }
-                    item { SectionTitle("Onay bekleyenler (${pending.size})") }
-                    if (pending.isEmpty()) {
-                        item { Text("Onay bekleyen kayıt yok.", color = Muted, modifier = Modifier.padding(horizontal = 4.dp)) }
-                    }
-                    items(pending, key = { it.userId }) { member ->
-                        Surface(shape = RoundedCornerShape(20.dp), color = Color.White, shadowElevation = 3.dp) {
-                            Column(Modifier.fillMaxWidth().padding(14.dp)) {
-                                MemberHeader(member)
-                                Spacer(Modifier.height(12.dp))
-                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    OutlinedButton(
-                                        enabled = !busy,
-                                        onClick = { act("reject", member, done = "Kayıt reddedildi.") },
-                                        modifier = Modifier.weight(1f).height(46.dp),
-                                    ) { Text("Reddet", color = Color(0xFFA32117)) }
-                                    Button(
-                                        enabled = !busy,
-                                        onClick = { act("approve", member, done = "${member.displayName} onaylandı.") },
-                                        modifier = Modifier.weight(1f).height(46.dp),
-                                    ) { Text("Onayla") }
-                                }
-                            }
-                        }
-                    }
-                    item { SectionTitle("Üyeler (${active.size})") }
-                    items(active, key = { it.userId }) { member ->
+                    item { SectionTitle("Üyeler (${shown.size})") }
+                    items(shown, key = { it.userId }) { member ->
                         Surface(shape = RoundedCornerShape(20.dp), color = Color.White, shadowElevation = 3.dp) {
                             Column(Modifier.fillMaxWidth().padding(14.dp)) {
                                 MemberHeader(member)
                                 if (member.userId != me.userId) {
                                     Row {
-                                        TextButton(enabled = !busy, onClick = { loginLink(member) }) { Text("Giriş bağlantısı") }
+                                        TextButton(enabled = !busy, onClick = { resetFor = member }) { Text("Şifre sıfırla") }
                                         TextButton(enabled = !busy, onClick = { removeFor = member }) {
-                                            Text("Üyelikten çıkar", color = Color(0xFFA32117))
+                                            Text("Hesabı kapat", color = Color(0xFFA32117))
                                         }
                                     }
                                 }
@@ -1244,36 +1187,44 @@ fun AdminScreen(me: AuthState.LoggedIn, onBack: () -> Unit) {
         }
     }
 
-    share?.let { (title, reply, sensitive) ->
-        ShareCodeDialog(
-            title = if (sensitive) "$title için giriş bağlantısı" else "Davet bağlantısı",
-            explanation = if (sensitive) {
-                "24 saat geçerli, tek kullanımlık. Yalnızca bu kişiye özel olarak gönder; bağlantıyı açan hesaba girer."
-            } else {
-                "Bağlantıyı gönder ya da QR kodu okut. Uygulamada Davetle katıl › Davet kodu alanına da yazılabilir."
+    resetFor?.let { member ->
+        var newPassword by remember(member.userId) { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { resetFor = null },
+            title = { Text("Şifre sıfırla") },
+            text = {
+                Column {
+                    Text("${member.displayName} için yeni bir şifre belirle. Açık oturumları kapatılır; bu şifreyi kendisine ilet.")
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = newPassword,
+                        onValueChange = { newPassword = it },
+                        singleLine = true,
+                        label = { Text("Yeni şifre (en az 8 karakter)") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             },
-            code = reply.code,
-            url = reply.url,
-            shareMessage = if (sensitive) {
-                "Tayfa giriş bağlantın (24 saat, tek kullanımlık): ${reply.url}\nUygulamada giriş kodu: ${reply.code}"
-            } else {
-                "Tayfa'ya davetlisin! Uygulamayı açıp bu bağlantıya dokun: ${reply.url}\nDavet kodu: ${reply.code}"
+            confirmButton = {
+                TextButton(enabled = newPassword.length >= 8, onClick = {
+                    act("reset-password", member, newPassword, done = "Şifre değiştirildi.")
+                    resetFor = null
+                }) { Text("Kaydet") }
             },
-            sensitive = sensitive,
-            onDismiss = { share = null },
+            dismissButton = { TextButton(onClick = { resetFor = null }) { Text("Vazgeç") } },
         )
     }
 
     removeFor?.let { member ->
         AlertDialog(
             onDismissRequest = { removeFor = null },
-            title = { Text("Üyelikten çıkar") },
+            title = { Text("Hesabı kapat") },
             text = { Text("${member.displayName} üyelikten çıkarılacak ve hesabı kapatılacak. Bu işlem geri alınamaz.") },
             confirmButton = {
                 TextButton(onClick = {
-                    act("remove", member, done = "Üye çıkarıldı.")
+                    act("remove", member, done = "Hesap kapatıldı.")
                     removeFor = null
-                }) { Text("Çıkar", color = Color(0xFFA32117)) }
+                }) { Text("Kapat", color = Color(0xFFA32117)) }
             },
             dismissButton = { TextButton(onClick = { removeFor = null }) { Text("Vazgeç") } },
         )
@@ -1345,3 +1296,54 @@ private fun avatarJpeg(context: android.content.Context, uri: android.net.Uri): 
         out.toByteArray()
     }
 }.getOrNull()
+
+@Composable
+private fun EmailDialog(
+    status: Api.EmailStatus?,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+    onResend: () -> Unit,
+    onRemove: () -> Unit,
+) {
+    var value by remember { mutableStateOf(status?.email ?: "") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("E-posta") },
+        text = {
+            Column {
+                when {
+                    status == null -> Text("E-posta durumu yükleniyor…", color = Muted)
+                    !status.mailReady -> Text("Sunucuda e-posta gönderimi henüz ayarlı değil. Yönetici ayarladığında kullanabilirsin.", color = Muted, fontSize = 13.5.sp)
+                    status.email.isNotBlank() && status.verified -> Text("E-postan doğrulandı. Şifreni unutursan bu adrese sıfırlama kodu gönderilir.", color = Muted, fontSize = 13.5.sp)
+                    status.email.isNotBlank() -> Text("Doğrulama bağlantısı ${status.email} adresine gönderildi. Gelen kutunu ve istenmeyen klasörünü kontrol et. Kalan süre: ${status.daysLeft} gün.", color = Color(0xFFB07A2E), fontSize = 13.5.sp)
+                    else -> Text("Şifreni unutursan e-postayla sıfırlayabilmen için bir adres ekle. İsteğe bağlıdır.", color = Muted, fontSize = 13.5.sp)
+                }
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = value,
+                    onValueChange = { value = it.trim() },
+                    singleLine = true,
+                    label = { Text("E-posta adresi") },
+                    enabled = status?.mailReady != false,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (status != null && status.email.isNotBlank() && !status.verified) {
+                    TextButton(onClick = onResend) { Text("Doğrulama e-postasını yeniden gönder") }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = value.contains("@") && value != status?.email,
+                onClick = { onSave(value); onDismiss() },
+            ) { Text("Kaydet") }
+        },
+        dismissButton = {
+            if (status != null && status.email.isNotBlank()) {
+                TextButton(onClick = { onRemove(); onDismiss() }) { Text("Kaldır", color = Muted) }
+            } else {
+                TextButton(onClick = onDismiss) { Text("Kapat") }
+            }
+        },
+    )
+}

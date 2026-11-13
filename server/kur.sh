@@ -121,6 +121,9 @@ retention:
       interval: 15m
     - shortest_max_lifetime: 2d
       interval: 6h
+# Herkese açık oda dizini yok: her şey kişi onayına dayalı, odalar listede görünmez.
+room_list_publication_rules:
+  - action: deny
 # Telefondan Tayfa Web'e giriş: oturum açık telefon 5 dakikalık tek seferlik giriş jetonu alabilir.
 login_via_existing_session:
   enabled: true
@@ -146,11 +149,11 @@ say "Kayıt ve yönetim servisi kuruluyor"
 id bayx >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin bayx
 install -d -m 755 /opt/bayx
 install -d -m 750 -o root -g bayx /etc/bayx
-for f in kayit.py giris.py; do
+for f in kayit.py giris.py eposta.py; do
     curl -fsSL -o "/opt/bayx/$f.yeni" "$RAW_BASE/$f" || fail "$f indirilemedi."
     python3 -m py_compile "/opt/bayx/$f.yeni" || fail "$f bozuk indi."
 done
-for f in kayit.py giris.py; do
+for f in kayit.py giris.py eposta.py; do
     mv "/opt/bayx/$f.yeni" "/opt/bayx/$f"
     chmod 644 "/opt/bayx/$f"
 done
@@ -228,6 +231,63 @@ print("Tayfa Web şifre sorduğunda bunu yaz (tireler dahil). 5 dakika sonra ken
 SIFRECMD
 chmod 755 /usr/local/bin/tayfa-sifre
 
+# Sunucuda bir üyenin şifresini belirle: sudo tayfa-sifre-belirle [kullanıcı_adı]
+cat > /usr/local/bin/tayfa-sifre-belirle <<'BELIRLECMD'
+#!/bin/bash
+set -euo pipefail
+U="${1:-}"
+if [ -z "$U" ] && [ -f /etc/bayx/yonetici-olusturuldu ]; then U="$(cat /etc/bayx/yonetici-olusturuldu)"; fi
+[ -n "$U" ] || { echo "Kullanım: sudo tayfa-sifre-belirle <kullanıcı_adı>"; exit 1; }
+read -r -s -p "$U için yeni şifre (en az 8 karakter): " P1; echo
+read -r -s -p "Yeni şifre (tekrar): " P2; echo
+[ "$P1" = "$P2" ] || { echo "Şifreler aynı değil."; exit 1; }
+BODY="$(U="$U" P="$P1" python3 -c 'import json,os; print(json.dumps({"username": os.environ["U"], "password": os.environ["P"]}))')"
+if curl -fsS -o /dev/null -X POST http://127.0.0.1:8010/bayx/v3/local/password -H 'Content-Type: application/json' -d "$BODY"; then
+    echo "Şifre belirlendi. Uygulamada kullanıcı adı: $U"
+else
+    echo "Şifre belirlenemedi (en az 8 karakter olmalı; kullanıcı adı doğru mu?)."
+fi
+BELIRLECMD
+chmod 755 /usr/local/bin/tayfa-sifre-belirle
+
+# E-posta ayarını dene: sudo tayfa-eposta-test adres@ornek.com
+cat > /usr/local/bin/tayfa-eposta-test <<'MAILTEST'
+#!/bin/bash
+set -euo pipefail
+TO="${1:-}"
+[ -n "$TO" ] || { echo "Kullanım: sudo tayfa-eposta-test adres@ornek.com"; exit 1; }
+systemctl restart bayx-kayit; sleep 2
+BODY="$(TO="$TO" python3 -c 'import json,os; print(json.dumps({"to": os.environ["TO"]}))')"
+curl -fsS -X POST http://127.0.0.1:8010/bayx/local/mailtest -H 'Content-Type: application/json' -d "$BODY" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+print("Deneme e-postası gönderildi; gelen kutunu kontrol et." if d["ok"] else "Gönderilemedi: " + d["detail"])'
+MAILTEST
+chmod 755 /usr/local/bin/tayfa-eposta-test
+
+# E-posta (doğrulama ve şifre sıfırlama): SMTP bilgileri sunucuda elle girilir (gizli şifre içerir).
+if [ ! -f /etc/bayx/smtp.env ]; then
+    umask 077
+    cat > /etc/bayx/smtp.env <<'SMTPENV'
+# Tayfa e-posta ayarları. Doldurduktan sonra: sudo systemctl restart bayx-kayit
+# Gmail için: 2 adımlı doğrulama açık olmalı; https://myaccount.google.com/apppasswords
+# adresinden "Tayfa" adıyla 16 haneli uygulama şifresi oluştur ve BAYX_SMTP_PASS'a yaz.
+BAYX_SMTP_HOST=smtp.gmail.com
+BAYX_SMTP_PORT=587
+BAYX_SMTP_USER=acioglu30@gmail.com
+BAYX_SMTP_PASS=
+BAYX_SMTP_FROM=Tayfa <acioglu30@gmail.com>
+SMTPENV
+    umask 022
+fi
+chown root:bayx /etc/bayx/smtp.env
+chmod 640 /etc/bayx/smtp.env
+if grep -E "^BAYX_SMTP_PASS=.+" /etc/bayx/smtp.env >/dev/null; then
+    MAIL_OK="ayarlı (denemek için: sudo tayfa-eposta-test adres@ornek.com)"
+else
+    MAIL_OK="hayır (/etc/bayx/smtp.env içine SMTP şifresi yazılmalı)"
+fi
+
 # Bildirimler: Firebase servis hesabı dosyası sunucuya elle konur (gizli anahtar içerir).
 PUSH_OK="hayır (/etc/bayx/firebase.json yok)"
 if [ -s /etc/bayx/firebase.json ]; then
@@ -250,6 +310,7 @@ After=network.target matrix-synapse.service
 User=bayx
 Group=bayx
 EnvironmentFile=$ENV_FILE
+EnvironmentFile=-/etc/bayx/smtp.env
 ExecStart=/usr/bin/python3 /opt/bayx/kayit.py
 Restart=on-failure
 RestartSec=3
@@ -424,9 +485,12 @@ if [ ! -f /etc/bayx/yonetici-olusturuldu ]; then
     echo "$ADMIN_USER" > /etc/bayx/yonetici-olusturuldu
 fi
 if [ -f /etc/bayx/yonetici-olusturuldu ]; then
-    ADMIN_NOTE="Yönetici ($(cat /etc/bayx/yonetici-olusturuldu)) için giriş — telefonda bağlantıyı aç ya da kodu yaz:
-$(/usr/local/bin/tayfa-giris 2>&1 || true)
-Yeni bağlantı gerekirse: sudo tayfa-giris  (başka üye için: sudo tayfa-giris kullanici_adi)"
+    ADMIN_U="$(cat /etc/bayx/yonetici-olusturuldu)"
+    ADMIN_EMAIL="${BAYX_ADMIN_EMAIL:-acioglu30@gmail.com}"
+    BODY="$(U="$ADMIN_U" E="$ADMIN_EMAIL" python3 -c 'import json,os; print(json.dumps({"username": os.environ["U"], "email": os.environ["E"]}))')"
+    curl -fsS -o /dev/null -X POST http://127.0.0.1:8010/bayx/v3/local/email -H 'Content-Type: application/json' -d "$BODY" || true
+    ADMIN_NOTE="Yönetici: $ADMIN_U  (e-posta: $ADMIN_EMAIL)
+Yönetici şifresini belirlemek ya da değiştirmek için: sudo tayfa-sifre-belirle"
 fi
 
 # ------------------------------------------------- 4. nginx yönlendirmesi
@@ -486,6 +550,7 @@ Kayıt servisi (https üzerinden)        : $KAYIT_OK
 Arama aktarma sunucusu (coturn)        : $TURN_OK
 Bildirim servisi (Firebase)            : $PUSH_OK
 Tayfa Web                              : $WEB_OK
+E-posta (doğrulama, şifre sıfırlama)   : $MAIL_OK
 $FIREWALL_NOTE
 $ADMIN_NOTE
 =====================================================

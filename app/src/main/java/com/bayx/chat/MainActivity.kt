@@ -79,20 +79,6 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
-        // Davet / giriş bağlantısı: tayfa://davet/KOD ya da tayfa://giris/KOD
-        val data = intent?.data
-        if (data != null && data.scheme == "tayfa") {
-            val code = data.pathSegments.firstOrNull().orEmpty().take(24)
-            if (code.isNotEmpty()) {
-                Gate.link.value = when (data.host) {
-                    "davet" -> Gate.Link.Invite(code)
-                    "giris" -> Gate.Link.Login(code)
-                    else -> null
-                }
-            }
-            intent.data = null
-            return
-        }
         val roomId = intent?.getStringExtra(Notifier.EXTRA_ROOM_ID) ?: return
         intent.removeExtra(Notifier.EXTRA_ROOM_ID)
         Bayx.pendingRoom.value = roomId
@@ -158,12 +144,10 @@ fun BayxApp() {
         }
     }
     val locked by Gate.locked.collectAsState()
-    val recovery by Gate.recoveryToShow.collectAsState()
     if (auth is AuthState.LoggedIn) {
         EffectOverlay()
         CallOverlay()
         if (locked) LockScreen()
-        recovery?.let { code -> if (!locked) RecoveryCodeDialog(code) { Gate.recoveryToShow.value = null } }
     }
 }
 

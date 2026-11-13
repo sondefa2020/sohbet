@@ -25,6 +25,7 @@ import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import eposta
 import giris
 
 SYNAPSE = os.environ.get("BAYX_SYNAPSE_URL", "http://127.0.0.1:8008").rstrip("/")
@@ -136,6 +137,102 @@ def check_rate(ip):
         _rate[ip] = recent
 
 
+def validate_password(password):
+    if not isinstance(password, str) or not (8 <= len(password) <= 128):
+        raise ApiError(400, "GECERSIZ_SIFRE", "Şifre en az 8 karakter olmalı.")
+
+
+EMAILS = None
+
+
+def register_simple(body, ip):
+    """Kolay kayıt: kullanıcı adı + şifre (+ isteğe bağlı e-posta). Onay beklemeden hesap açılır."""
+    username = body.get("username")
+    if isinstance(username, str):
+        username = username.strip().lower()
+    if not isinstance(username, str) or not USERNAME_RE.match(username) or username == BOT_USER:
+        raise ApiError(
+            400,
+            "GECERSIZ_KULLANICI_ADI",
+            "Kullanıcı adı 3-20 karakter olmalı; küçük harf, rakam, nokta, tire ve alt çizgi kullanılabilir.",
+        )
+    password = body.get("password")
+    validate_password(password)
+    email = eposta.clean_email(body.get("email") or "")
+    if email is None:
+        raise ApiError(400, "GECERSIZ_EPOSTA", "E-posta adresi geçersiz görünüyor.")
+    if email and EMAILS.owner_of(email, verified_only=True):
+        raise ApiError(409, "EPOSTA_KULLANIMDA", "Bu e-posta başka bir hesapta kullanılıyor.")
+    check_rate(ip)
+    uid = user_id(username)
+    with _register_lock:
+        status, _ = synapse("GET", "/_synapse/admin/v2/users/" + quote(uid))
+        if status == 200:
+            raise ApiError(409, "KULLANICI_ADI_ALINMIS", "Bu kullanıcı adı alınmış, başka bir tane dene.")
+        if status != 404:
+            raise ApiError(502, "SUNUCU_HATASI", "Kullanıcı adı kontrol edilemedi.")
+        if len(list_members()) >= MAX_MEMBERS:
+            raise ApiError(403, "KAPASITE_DOLU", "Üye sınırına ulaşıldı. Yeni kayıt alınamıyor.")
+        status, _ = synapse(
+            "PUT",
+            "/_synapse/admin/v2/users/" + quote(uid),
+            {"password": password, "displayname": username, "admin": False, "locked": False},
+        )
+        if status not in (200, 201):
+            raise ApiError(502, "SUNUCU_HATASI", "Hesap oluşturulamadı.")
+    if email:
+        threading.Thread(target=EMAILS.set_email, args=(uid, email), daemon=True).start()
+    return {"status": "ok", "username": username, "email_pending": bool(email)}
+
+
+def reset_request(body, ip):
+    """Şifre sıfırlama kodu ister. Hesap var mı yok mu belli etmemek için her zaman aynı yanıt."""
+    login = str(body.get("login", "")).strip().lower()
+    if _recover_attempts.blocked("reset:" + ip):
+        raise ApiError(429, "COK_FAZLA_DENEME", "Çok fazla deneme. Bir saat sonra tekrar dene.")
+    _recover_attempts.fail("reset:" + ip)  # istek sayısını da sınırla
+    uid = None
+    if "@" in login and not login.startswith("@"):
+        uid = EMAILS.owner_of(login, verified_only=True)
+    elif USERNAME_RE.match(login.lstrip("@").split(":")[0]):
+        uid = user_id(login.lstrip("@").split(":")[0])
+    if uid and active_user(uid):
+        threading.Thread(target=EMAILS.start_reset, args=(uid,), daemon=True).start()
+    return {
+        "ok": True,
+        "message": "Bu hesaba doğrulanmış bir e-posta bağlıysa 6 haneli kod gönderildi. Gelen kutunu ve istenmeyen klasörünü kontrol et.",
+    }
+
+
+def reset_confirm(body, ip):
+    login = str(body.get("login", "")).strip().lower()
+    uid = None
+    if "@" in login and not login.startswith("@"):
+        uid = EMAILS.owner_of(login, verified_only=True)
+    elif USERNAME_RE.match(login.lstrip("@").split(":")[0]):
+        uid = user_id(login.lstrip("@").split(":")[0])
+    password = body.get("password")
+    validate_password(password)
+    if _recover_attempts.blocked("rc:" + ip) or not uid or not EMAILS.check_reset(uid, body.get("code")):
+        _recover_attempts.fail("rc:" + ip)
+        raise ApiError(403, "KOD_HATALI", "Kod hatalı ya da süresi dolmuş.")
+    status, _ = synapse(
+        "POST",
+        "/_synapse/admin/v1/reset_password/" + quote(uid),
+        {"new_password": password, "logout_devices": True},
+    )
+    if status != 200:
+        raise ApiError(502, "SUNUCU_HATASI", "Şifre değiştirilemedi.")
+    return {"ok": True, "username": username_of(uid)}
+
+
+VERIFIED_PAGE = """<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tayfa</title></head><body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+font-family:system-ui,Segoe UI,Roboto,sans-serif;background:linear-gradient(#fbf8f4,#f2ebe2);color:#1f1b18">
+<div style="background:#fff;border-radius:28px;box-shadow:0 18px 50px rgba(90,60,30,.12);padding:34px 28px;max-width:360px;width:86%%;text-align:center">
+<div style="font-size:54px">%s</div><h1 style="margin:8px 0;font-size:24px">%s</h1><p style="color:#6e655c">%s</p></div></body></html>"""
+
+
 def validate_profile(body):
     username = body.get("username")
     display_name = body.get("display_name") or username
@@ -151,6 +248,169 @@ def validate_profile(body):
 
 
 GIRIS = None
+
+
+def _contacts():
+    return GIRIS.data.setdefault("contacts", {})
+
+
+def _crec(uid):
+    rec = _contacts().setdefault(uid, {})
+    for k in ("friends", "incoming", "outgoing"):
+        rec.setdefault(k, [])
+    return rec
+
+
+def are_friends(a, b):
+    return b in _crec(a)["friends"]
+
+
+def friends_of(uid):
+    return list(_crec(uid)["friends"])
+
+
+def contact_relation(me, other):
+    rec = _crec(me)
+    if other == me:
+        return "self"
+    if other in rec["friends"]:
+        return "friend"
+    if other in rec["incoming"]:
+        return "incoming"
+    if other in rec["outgoing"]:
+        return "outgoing"
+    return "none"
+
+
+def profile_brief(uid):
+    """Herkese görünen asgari bilgi: kullanıcı adı ve görünen ad. Durum/foto arkadaşlara özel."""
+    info = active_user(uid)
+    if info is None:
+        return None
+    return {"user_id": uid, "username": username_of(uid), "display_name": info.get("displayname") or username_of(uid)}
+
+
+def contact_find(headers, body):
+    me = member_from_token(headers)
+    raw = str(body.get("username", "")).strip().lower().lstrip("@").split(":")[0]
+    if not USERNAME_RE.match(raw):
+        raise ApiError(400, "GECERSIZ_KULLANICI_ADI", "Kullanıcı adını kontrol et.")
+    uid = user_id(raw)
+    brief = profile_brief(uid)
+    if brief is None or uid == user_id(BOT_USER):
+        return {"found": False}
+    brief["relation"] = contact_relation(me, uid)
+    brief["found"] = True
+    return brief
+
+
+def contact_overview(headers, now):
+    me = member_from_token(headers)
+    rec = _crec(me)
+    friends = []
+    for uid in rec["friends"]:
+        info = active_user(uid)
+        if info is None:
+            continue
+        pub = public_profile(uid, now)
+        friends.append({
+            "user_id": uid,
+            "username": username_of(uid),
+            "display_name": info.get("displayname") or username_of(uid),
+            "avatar_url": info.get("avatar_url") or "",
+            "mode": pub["mode"],
+            "status": pub["status"],
+        })
+    incoming = [b for b in (profile_brief(u) for u in rec["incoming"]) if b]
+    outgoing = [b for b in (profile_brief(u) for u in rec["outgoing"]) if b]
+    return {"friends": friends, "incoming": incoming, "outgoing": outgoing}
+
+
+def contact_target(me, body):
+    raw = body.get("user_id") or body.get("username") or ""
+    raw = str(raw).strip().lower().lstrip("@").split(":")[0]
+    if not USERNAME_RE.match(raw):
+        raise ApiError(400, "GECERSIZ_KULLANICI", "Geçersiz kullanıcı.")
+    other = user_id(raw)
+    if other == me:
+        raise ApiError(400, "GECERSIZ_KULLANICI", "Kendine istek gönderemezsin.")
+    if active_user(other) is None or other == user_id(BOT_USER):
+        raise ApiError(404, "KULLANICI_YOK", "Böyle bir kullanıcı yok.")
+    return other
+
+
+def contact_request(headers, body):
+    me = member_from_token(headers)
+    other = contact_target(me, body)
+    with GIRIS.lock:
+        mine, theirs = _crec(me), _crec(other)
+        if other in mine["friends"]:
+            return {"ok": True, "relation": "friend"}
+        if other in mine["incoming"]:
+            # Karşılıklı istek: hemen arkadaş yap.
+            _accept(me, other)
+            return {"ok": True, "relation": "friend"}
+        if other not in mine["outgoing"]:
+            mine["outgoing"].append(other)
+        if me not in theirs["incoming"]:
+            theirs["incoming"].append(me)
+        GIRIS.save()
+    return {"ok": True, "relation": "outgoing"}
+
+
+def _accept(me, other):
+    """me, other'dan gelen isteği kabul eder (kilit çağıran tarafından tutulur)."""
+    mine, theirs = _crec(me), _crec(other)
+    for lst in (mine["incoming"], mine["outgoing"]):
+        if other in lst:
+            lst.remove(other)
+    for lst in (theirs["incoming"], theirs["outgoing"]):
+        if me in lst:
+            lst.remove(me)
+    if other not in mine["friends"]:
+        mine["friends"].append(other)
+    if me not in theirs["friends"]:
+        theirs["friends"].append(me)
+    GIRIS.save()
+
+
+def contact_accept(headers, body):
+    me = member_from_token(headers)
+    other = contact_target(me, body)
+    with GIRIS.lock:
+        if other not in _crec(me)["incoming"] and other not in _crec(me)["friends"]:
+            raise ApiError(404, "ISTEK_YOK", "Bu kullanıcıdan bekleyen bir istek yok.")
+        _accept(me, other)
+    return {"ok": True, "relation": "friend"}
+
+
+def contact_reject(headers, body):
+    """Geleni reddet, gönderileni geri çek ya da arkadaşlıktan çıkar — hepsi için aynı uç."""
+    me = member_from_token(headers)
+    other = contact_target(me, body)
+    with GIRIS.lock:
+        mine, theirs = _crec(me), _crec(other)
+        for lst in (mine["friends"], mine["incoming"], mine["outgoing"]):
+            if other in lst:
+                lst.remove(other)
+        for lst in (theirs["friends"], theirs["incoming"], theirs["outgoing"]):
+            if me in lst:
+                lst.remove(me)
+        GIRIS.save()
+    return {"ok": True, "relation": "none"}
+
+
+def contact_forget(uid):
+    """Üye silinince kişisini herkesten temizle."""
+    with GIRIS.lock:
+        _contacts().pop(uid, None)
+        for rec in _contacts().values():
+            for lst in ("friends", "incoming", "outgoing"):
+                if uid in rec[lst]:
+                    rec[lst].remove(uid)
+        GIRIS.save()
+
+
 _otp_lock = threading.Lock()
 _otp_gen = {}
 
@@ -461,7 +721,8 @@ def presence(headers, body):
             _last_seen[uid] = now
         else:
             _last_seen.pop(uid, None)
-        users = {u: public_profile(u, now) for u in set(_last_seen) | set(_profiles)}
+        visible = set(friends_of(uid))
+        users = {u: public_profile(u, now) for u in visible}
         online = [u for u, p in users.items() if p["mode"] != "offline"]
         mine = {"mode": _profiles.get(uid, {}).get("mode", "online"), "status": _profiles.get(uid, {}).get("status", "")}
     return {"online": online, "users": users, "me": mine}
@@ -692,6 +953,13 @@ def admin_action(action, body, caller):
         status, _ = synapse("POST", "/_synapse/admin/v1/deactivate/" + quote(uid), {"erase": True})
     elif action == "remove":
         status, _ = synapse("POST", "/_synapse/admin/v1/deactivate/" + quote(uid), {"erase": True})
+    elif action == "reset-password":
+        validate_password(body.get("new_password"))
+        status, _ = synapse(
+            "POST",
+            "/_synapse/admin/v1/reset_password/" + quote(uid),
+            {"new_password": body["new_password"], "logout_devices": True},
+        )
     elif action == "login-link":
         if info.get("locked"):
             raise ApiError(400, "ONAY_BEKLIYOR", "Önce üyeliği onayla.")
@@ -703,6 +971,8 @@ def admin_action(action, body, caller):
         raise ApiError(502, "SUNUCU_HATASI", "İşlem tamamlanamadı.")
     if action in ("reject", "remove"):
         GIRIS.forget_user(uid)
+        EMAILS.remove(uid)
+        contact_forget(uid)
     return {"ok": True, "user_id": uid}
 
 
@@ -772,6 +1042,80 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if method == "GET" and path == "/bayx/health":
                 self._send(200, {"ok": True})
+            elif method == "POST" and path == "/bayx/v3/contacts":
+                self._send(200, contact_overview(self.headers, time.time()))
+            elif method == "POST" and path == "/bayx/v3/contacts/find":
+                self._send(200, contact_find(self.headers, self._body()))
+            elif method == "POST" and path == "/bayx/v3/contacts/request":
+                self._send(200, contact_request(self.headers, self._body()))
+            elif method == "POST" and path == "/bayx/v3/contacts/accept":
+                self._send(200, contact_accept(self.headers, self._body()))
+            elif method == "POST" and path == "/bayx/v3/contacts/reject":
+                self._send(200, contact_reject(self.headers, self._body()))
+            elif method == "POST" and path == "/bayx/v3/register":
+                self._send(200, register_simple(self._body(), self._ip()))
+            elif method == "POST" and path == "/bayx/v3/reset/request":
+                self._send(200, reset_request(self._body(), self._ip()))
+            elif method == "POST" and path == "/bayx/v3/reset/confirm":
+                self._send(200, reset_confirm(self._body(), self._ip()))
+            elif method == "POST" and path == "/bayx/v3/email/status":
+                self._send(200, EMAILS.status(member_from_token(self.headers)))
+            elif method == "POST" and path == "/bayx/v3/email/set":
+                uid = member_from_token(self.headers)
+                email = eposta.clean_email(self._body().get("email") or "")
+                if email is None:
+                    raise ApiError(400, "GECERSIZ_EPOSTA", "E-posta adresi geçersiz görünüyor.")
+                if not email:
+                    EMAILS.remove(uid)
+                else:
+                    error = EMAILS.set_email(uid, email)
+                    if error:
+                        raise ApiError(409, "EPOSTA_KULLANIMDA", error)
+                self._send(200, EMAILS.status(uid))
+            elif method == "POST" and path == "/bayx/v3/email/resend":
+                uid = member_from_token(self.headers)
+                error = EMAILS.resend(uid)
+                if error:
+                    raise ApiError(400, "GONDERILEMEDI", error)
+                self._send(200, EMAILS.status(uid))
+            elif method == "GET" and re.match(r"^/bayx/eposta/[A-Za-z0-9_-]{10,80}$", path):
+                uid = EMAILS.verify_token(path.rsplit("/", 1)[1])
+                if uid:
+                    self._html(VERIFIED_PAGE % ("✅", "E-posta doğrulandı", "Teşekkürler! Artık şifreni unutursan e-postayla sıfırlayabilirsin."))
+                else:
+                    self._html(VERIFIED_PAGE % ("⌛", "Bağlantı geçersiz", "Bağlantının süresi dolmuş ya da zaten kullanılmış. Uygulamada Profil › E-posta bölümünden yenisini iste."))
+            elif method == "POST" and path == "/bayx/v3/local/email":
+                if self.client_address[0] != "127.0.0.1" or self.headers.get("X-Real-IP"):
+                    raise ApiError(404, "BULUNAMADI", "Bulunamadı.")
+                body = self._body()
+                uid = user_id(str(body.get("username", "")).strip().lower())
+                email = eposta.clean_email(body.get("email") or "")
+                if not email or active_user(uid) is None:
+                    raise ApiError(400, "GECERSIZ_ISTEK", "Kullanıcı ya da e-posta geçersiz.")
+                error = EMAILS.set_email(uid, email, verified=True, send=False)
+                if error:
+                    raise ApiError(409, "EPOSTA_KULLANIMDA", error)
+                self._send(200, EMAILS.status(uid))
+            elif method == "POST" and path == "/bayx/v3/local/password":
+                # Sunucudaki tayfa-sifre-belirle komutu: yöneticinin şifresini sunucuda belirler.
+                if self.client_address[0] != "127.0.0.1" or self.headers.get("X-Real-IP"):
+                    raise ApiError(404, "BULUNAMADI", "Bulunamadı.")
+                body = self._body()
+                uid = user_id(str(body.get("username", "")).strip().lower())
+                validate_password(body.get("password"))
+                if active_user(uid, allow_locked=True) is None:
+                    raise ApiError(404, "KULLANICI_YOK", "Böyle bir üye yok.")
+                if not set_password(uid, body["password"]):
+                    raise ApiError(502, "SUNUCU_HATASI", "Şifre değiştirilemedi.")
+                self._send(200, {"ok": True})
+            elif method == "POST" and path == "/bayx/local/mailtest":
+                if self.client_address[0] != "127.0.0.1" or self.headers.get("X-Real-IP"):
+                    raise ApiError(404, "BULUNAMADI", "Bulunamadı.")
+                to = eposta.clean_email(self._body().get("to") or "")
+                if not to:
+                    raise ApiError(400, "GECERSIZ_EPOSTA", "Adres geçersiz.")
+                ok, detail = EMAILS.mailer.send(to, "Tayfa e-posta denemesi", "Tayfa sunucusundan deneme e-postası. Ayarlar doğru!")
+                self._send(200, {"ok": ok, "detail": detail})
             elif method == "POST" and path == "/bayx/v2/register":
                 self._send(200, register(self._body(), self._ip()))
             elif method == "POST" and path == "/bayx/v2/ticket":
@@ -822,6 +1166,7 @@ class Handler(BaseHTTPRequestHandler):
             elif method == "GET" and path == "/bayx/members":
                 caller = require_member(self.headers)
                 now = time.time()
+                fset = set(friends_of(caller))
                 with _presence_lock:
                     members = [
                         {
@@ -833,7 +1178,7 @@ class Handler(BaseHTTPRequestHandler):
                             "mode": public_profile(m["user_id"], now)["mode"],
                         }
                         for m in list_members()
-                        if not m["pending"]
+                        if not m["pending"] and m["user_id"] in fset
                     ]
                 self._send(200, {"members": members, "me": caller})
             elif method == "POST" and path == "/bayx/presence":
@@ -884,9 +1229,10 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
-    global FCM, GIRIS
+    global FCM, GIRIS, EMAILS
     load_profiles()
     GIRIS = giris.Store(os.path.join(STATE_DIR, "giris.json"))
+    EMAILS = eposta.Emails(GIRIS, PUBLIC_BASE, eposta.Mailer())
     if FCM_CREDENTIALS and os.path.exists(FCM_CREDENTIALS):
         try:
             FCM = Fcm(FCM_CREDENTIALS)

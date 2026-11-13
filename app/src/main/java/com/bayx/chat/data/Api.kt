@@ -76,62 +76,87 @@ object Api {
         }
     }
 
-    /** Şifresiz kayıt / giriş yanıtı. status: ok, pending ya da rejected. */
-    data class AuthReply(
-        val status: String,
-        val username: String = "",
-        val otp: String = "",
-        val recoveryCode: String? = null,
-        val ticket: String? = null,
-    )
-
-    private fun authReply(json: JSONObject) = AuthReply(
-        status = json.optString("status"),
-        username = json.optString("username"),
-        otp = json.optString("otp"),
-        recoveryCode = json.optString("recovery_code").ifEmpty { null },
-        ticket = json.optString("ticket").ifEmpty { null },
-    )
-
-    suspend fun register(username: String, displayName: String, invite: String?) = io {
-        val body = JSONObject().put("username", username).put("display_name", displayName)
-        if (!invite.isNullOrBlank()) body.put("invite", invite)
-        authReply(request("POST", "/bayx/v2/register", body))
+    /** Kolay kayıt: kullanıcı adı + şifre (+ isteğe bağlı e-posta). */
+    suspend fun registerSimple(username: String, password: String, email: String?): Boolean = io {
+        val body = JSONObject().put("username", username).put("password", password)
+        if (!email.isNullOrBlank()) body.put("email", email)
+        request("POST", "/bayx/v3/register", body).optBoolean("email_pending")
     }
 
-    suspend fun ticket(ticket: String) = io { authReply(request("POST", "/bayx/v2/ticket", JSONObject().put("ticket", ticket))) }
-
-    suspend fun recover(username: String, code: String) = io {
-        authReply(request("POST", "/bayx/v2/recover", JSONObject().put("username", username).put("recovery_code", code)))
+    suspend fun resetRequest(login: String): String = io {
+        request("POST", "/bayx/v3/reset/request", JSONObject().put("login", login)).optString("message")
     }
 
-    suspend fun redeemLink(code: String) = io { authReply(request("POST", "/bayx/v2/link/redeem", JSONObject().put("code", code))) }
+    suspend fun resetConfirm(login: String, code: String, password: String) = io {
+        request("POST", "/bayx/v3/reset/confirm", JSONObject().put("login", login).put("code", code).put("password", password))
+        Unit
+    }
 
-    /** Kod ve (varsa) bağlantı döndüren uçlar: giriş kodu, web kodu, davet. */
+    data class EmailStatus(val email: String, val verified: Boolean, val daysLeft: Int, val mailReady: Boolean)
+
+    private fun emailStatus(json: JSONObject) =
+        EmailStatus(json.optString("email"), json.optBoolean("verified"), json.optInt("days_left"), json.optBoolean("mail_ready"))
+
+    suspend fun emailStatus(token: String) = io { emailStatus(request("POST", "/bayx/v3/email/status", JSONObject(), token)) }
+    suspend fun emailSet(token: String, email: String) = io { emailStatus(request("POST", "/bayx/v3/email/set", JSONObject().put("email", email), token)) }
+    suspend fun emailResend(token: String) = io { emailStatus(request("POST", "/bayx/v3/email/resend", JSONObject(), token)) }
+
+    // ---------------------------------------------------------------- kişiler
+
+    data class Contacts(val friends: List<Member>, val incoming: List<Member>, val outgoing: List<Member>)
+    data class ContactFind(val found: Boolean, val userId: String, val username: String, val displayName: String, val relation: String)
+
+    private fun briefList(json: JSONObject, key: String): List<Member> {
+        val array = json.optJSONArray(key) ?: return emptyList()
+        return (0 until array.length()).map { i ->
+            val m = array.getJSONObject(i)
+            Member(
+                userId = m.optString("user_id"),
+                displayName = m.optString("display_name").ifEmpty { m.optString("username") },
+                admin = false,
+                pending = false,
+                avatarUrl = m.optString("avatar_url").ifEmpty { null },
+                status = m.optString("status"),
+                mode = m.optString("mode").ifEmpty { "offline" },
+            )
+        }
+    }
+
+    suspend fun contacts(token: String): Contacts = io {
+        val json = request("POST", "/bayx/v3/contacts", JSONObject(), token)
+        Contacts(briefList(json, "friends"), briefList(json, "incoming"), briefList(json, "outgoing"))
+    }
+
+    suspend fun contactFind(token: String, username: String): ContactFind = io {
+        val json = request("POST", "/bayx/v3/contacts/find", JSONObject().put("username", username), token)
+        ContactFind(
+            found = json.optBoolean("found"),
+            userId = json.optString("user_id"),
+            username = json.optString("username"),
+            displayName = json.optString("display_name").ifEmpty { json.optString("username") },
+            relation = json.optString("relation", "none"),
+        )
+    }
+
+    suspend fun contactRequest(token: String, username: String): String = io {
+        request("POST", "/bayx/v3/contacts/request", JSONObject().put("username", username), token).optString("relation")
+    }
+    suspend fun contactAccept(token: String, username: String) = io { request("POST", "/bayx/v3/contacts/accept", JSONObject().put("username", username), token); Unit }
+    suspend fun contactReject(token: String, username: String) = io { request("POST", "/bayx/v3/contacts/reject", JSONObject().put("username", username), token); Unit }
+
+    /** Kod ve (varsa) bağlantı döndüren uçlar: web kodu, davet. */
     data class CodeReply(val code: String, val url: String)
 
     private fun codeReply(json: JSONObject) = CodeReply(json.optString("code"), json.optString("url"))
 
-    suspend fun newLoginLink(token: String) = io { codeReply(request("POST", "/bayx/v2/link/new", JSONObject(), token)) }
-
     suspend fun webCode(token: String) = io { codeReply(request("POST", "/bayx/v2/web/code", JSONObject(), token)) }
-
-    suspend fun newRecovery(token: String): String = io {
-        request("POST", "/bayx/v2/recovery/new", JSONObject(), token).optString("recovery_code")
-    }
 
     suspend fun webPassword(token: String): String = io {
         request("POST", "/bayx/v2/web/password", JSONObject(), token).optString("password")
     }
 
-    suspend fun seal(token: String) = io { request("POST", "/bayx/v2/seal", JSONObject(), token); Unit }
-
     suspend fun createInvite(token: String, uses: Int, days: Int) = io {
         codeReply(request("POST", "/bayx/admin/invite", JSONObject().put("uses", uses).put("days", days), token))
-    }
-
-    suspend fun adminLoginLink(token: String, userId: String) = io {
-        codeReply(request("POST", "/bayx/admin/login-link", JSONObject().put("user_id", userId), token))
     }
 
     /** Hesap kullanılabiliyorsa null, değilse Matrix hata kodunu (ör. M_USER_LOCKED) döndürür. */
@@ -207,8 +232,9 @@ object Api {
         AdminMembers(parseMembers(json), json.optInt("count"), json.optInt("max", 10), json.optInt("invites"))
     }
 
-    suspend fun adminAction(token: String, action: String, userId: String) = io {
+    suspend fun adminAction(token: String, action: String, userId: String, newPassword: String? = null) = io {
         val body = JSONObject().put("user_id", userId)
+        if (newPassword != null) body.put("new_password", newPassword)
         request("POST", "/bayx/admin/$action", body, token)
         Unit
     }
