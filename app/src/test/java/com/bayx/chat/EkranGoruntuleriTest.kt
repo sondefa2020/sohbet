@@ -40,6 +40,12 @@ class EkranGoruntuleriTest {
     }
 
     @Test
+    fun onboarding() {
+        compose.setContent { BayxTheme { OnboardingScreen() } }
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/0-onboarding.png")
+    }
+
+    @Test
     fun hosgeldin() {
         compose.setContent { BayxTheme { AuthFlow() } }
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/1-hosgeldin.png")

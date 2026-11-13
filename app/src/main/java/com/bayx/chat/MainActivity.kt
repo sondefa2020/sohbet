@@ -151,12 +151,16 @@ fun BayxApp() {
         }
     }
 
+    val accepted by Gate.onboardingAccepted.collectAsState()
     Box(Modifier.fillMaxSize().offset { IntOffset(shake.value.dp.roundToPx(), 0) }) {
-        when (val state = auth) {
-            AuthState.Loading -> SplashScreen()
-            AuthState.LoggedOut -> AuthFlow()
-            AuthState.Offline -> OfflineScreen()
-            is AuthState.LoggedIn -> MainNav(state)
+        when {
+            !accepted && auth !is AuthState.LoggedIn -> OnboardingScreen()
+            else -> when (val state = auth) {
+                AuthState.Loading -> SplashScreen()
+                AuthState.LoggedOut -> AuthFlow()
+                AuthState.Offline -> OfflineScreen()
+                is AuthState.LoggedIn -> MainNav(state)
+            }
         }
     }
     val locked by Gate.locked.collectAsState()

@@ -10,6 +10,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 object Gate {
     val locked = MutableStateFlow(false)
 
+    /** İlk kurulumda kullanıcı sözleşmesi onaylandı mı. */
+    val onboardingAccepted = MutableStateFlow(true)
+
     private const val LOCK_AFTER_MS = 30_000L
     private lateinit var prefs: SharedPreferences
     private lateinit var appContext: Context
@@ -19,6 +22,12 @@ object Gate {
         appContext = context.applicationContext
         prefs = appContext.getSharedPreferences("tayfa_giris", Context.MODE_PRIVATE)
         locked.value = lockEnabled && lockAvailable()
+        onboardingAccepted.value = prefs.getBoolean("onay", false)
+    }
+
+    fun acceptOnboarding() {
+        prefs.edit().putBoolean("onay", true).apply()
+        onboardingAccepted.value = true
     }
 
     var lockEnabled: Boolean
