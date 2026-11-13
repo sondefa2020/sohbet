@@ -281,7 +281,7 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit) {
       ChatBackground(wallpaper)
       Column(Modifier.fillMaxSize().systemBarsPadding().imePadding()) {
         Row(
-            Modifier.fillMaxWidth().padding(start = 4.dp, end = 10.dp, top = 8.dp, bottom = 10.dp),
+            Modifier.fillMaxWidth().background(GlassBar).padding(start = 4.dp, end = 10.dp, top = 8.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Geri", tint = Ink) }
@@ -443,17 +443,17 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit) {
             )
         } else {
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                Modifier.fillMaxWidth().background(GlassBar).padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Surface(shape = CircleShape, color = Color.White, shadowElevation = 4.dp, modifier = Modifier.size(48.dp)) {
+                Surface(shape = CircleShape, color = GlassPill, shadowElevation = 2.dp, modifier = Modifier.size(48.dp)) {
                     IconButton(onClick = { showAttach = true }) { Icon(Icons.Filled.Add, "Ekle", tint = Ink) }
                 }
                 Spacer(Modifier.width(10.dp))
                 Surface(
                     shape = RoundedCornerShape(28.dp),
-                    color = Color.White,
-                    shadowElevation = 4.dp,
+                    color = GlassPill,
+                    shadowElevation = 2.dp,
                     modifier = Modifier.weight(1f),
                 ) {
                     TextField(

@@ -78,6 +78,10 @@ import com.google.zxing.qrcode.QRCodeWriter
 internal val SandBrush = Brush.verticalGradient(listOf(Color(0xFFE6C9A6), Color(0xFFC79A6E)))
 internal val SandInk = Color(0xFF2A1C10)
 
+/** Buzlu cam yüzeyler: arka planın hafifçe geçtiği yarı saydam beyaz (modern görünüm). */
+internal val GlassBar = Color.White.copy(alpha = 0.66f)
+internal val GlassPill = Color.White.copy(alpha = 0.86f)
+
 /** Kendi mesaj balonum: açık şeftali. */
 internal val PeachBrush = Brush.linearGradient(listOf(Color(0xFFFBEEDF), Color(0xFFF3DDC6)))
 internal val ChipBg = Color(0xFFF1ECE6)

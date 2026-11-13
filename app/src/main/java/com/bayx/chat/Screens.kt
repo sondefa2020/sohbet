@@ -570,7 +570,7 @@ fun ChatListScreen(
             Surface(
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp).fillMaxWidth().height(74.dp),
                 shape = RoundedCornerShape(28.dp),
-                color = Color.White,
+                color = GlassPill,
                 shadowElevation = 6.dp,
             ) {
                 Row {
