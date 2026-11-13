@@ -137,7 +137,10 @@ fun BayxApp() {
             is AuthState.LoggedIn -> MainNav(state)
         }
     }
-    if (auth is AuthState.LoggedIn) CallOverlay()
+    if (auth is AuthState.LoggedIn) {
+        EffectOverlay()
+        CallOverlay()
+    }
 }
 
 @Composable
@@ -169,7 +172,19 @@ private fun MainNav(me: AuthState.LoggedIn) {
                 me = me,
                 onOpenChat = { roomId -> nav.navigate("chat/" + Uri.encode(roomId)) },
                 onProfile = { nav.navigate("profile") },
+                onSecret = { nav.navigate("secret") },
+                onMedia = { nav.navigate("media") },
             )
+        }
+        composable("secret") {
+            SecretAreaScreen(
+                me = me,
+                onBack = { nav.popBackStack() },
+                onOpenChat = { roomId -> nav.navigate("chat/" + Uri.encode(roomId)) },
+            )
+        }
+        composable("media") {
+            MediaHubScreen(onBack = { nav.popBackStack() })
         }
         composable("chat/{id}") { entry ->
             ChatScreen(

@@ -100,6 +100,23 @@ private fun rememberMediaBitmap(source: MediaSource?, maxSide: Int): State<Bitma
         }
     }
 
+/** Galeri için kare küçük resim. */
+@Composable
+internal fun MediaThumb(msg: ChatMessage, modifier: Modifier) {
+    val media = msg.media
+    val preview = if (msg.kind == MsgKind.IMAGE) media?.thumbnail ?: media?.source else media?.thumbnail
+    val bitmap by rememberMediaBitmap(preview, 360)
+    Box(modifier.background(Color(0xFFDCE8F2)), contentAlignment = Alignment.Center) {
+        val current = bitmap
+        if (current != null) {
+            Image(current.asImageBitmap(), contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        }
+        if (msg.kind == MsgKind.VIDEO) {
+            Icon(Icons.Filled.PlayArrow, "Video", tint = Color.White, modifier = Modifier.size(30.dp))
+        }
+    }
+}
+
 private fun aspectOf(media: MediaRef): Float =
     if (media.width > 0 && media.height > 0) (media.width.toFloat() / media.height).coerceIn(0.6f, 1.8f) else 1.33f
 

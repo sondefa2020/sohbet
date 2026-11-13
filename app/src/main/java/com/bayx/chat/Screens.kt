@@ -1,5 +1,8 @@
 package com.bayx.chat
 
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -81,21 +84,35 @@ private val avatarTints = listOf(
 )
 
 @Composable
-internal fun Avatar(name: String, size: Dp, online: Boolean = false) {
+internal fun Avatar(name: String, size: Dp, online: Boolean = false, url: String? = null, mode: String? = null) {
     val (bg, fg) = avatarTints[(name.firstOrNull()?.code ?: 0) % avatarTints.size]
+    val bitmap by produceState<android.graphics.Bitmap?>(initialValue = null, url) {
+        value = url?.let { Bayx.loadAvatar(it) }
+    }
     Box(Modifier.size(size)) {
         Box(
             Modifier.fillMaxSize().clip(CircleShape).background(bg),
             contentAlignment = Alignment.Center,
         ) {
-            Text(
-                text = name.trim().take(1).uppercase().ifEmpty { "?" },
-                color = fg,
-                fontSize = (size.value * 0.36f).sp,
-                fontWeight = FontWeight.Bold,
-            )
+            val current = bitmap
+            if (current != null) {
+                Image(
+                    current.asImageBitmap(),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                )
+            } else {
+                Text(
+                    text = name.trim().take(1).uppercase().ifEmpty { "?" },
+                    color = fg,
+                    fontSize = (size.value * 0.36f).sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
         }
-        if (online) {
+        val dot = modeColor(mode ?: if (online) "online" else null)
+        if (dot != null) {
             Box(
                 Modifier
                     .align(Alignment.BottomEnd)
@@ -104,10 +121,26 @@ internal fun Avatar(name: String, size: Dp, online: Boolean = false) {
                     .background(Color.White)
                     .padding(2.dp)
                     .clip(CircleShape)
-                    .background(Online),
+                    .background(dot),
             )
         }
     }
+}
+
+/** MSN tarzı durum rengi: yeşil çevrimiçi, kırmızı meşgul, turuncu dışarıda. */
+internal fun modeColor(mode: String?): Color? = when (mode) {
+    "online" -> Online
+    "busy" -> Color(0xFFE5484D)
+    "away" -> Color(0xFFF59E0B)
+    else -> null
+}
+
+internal fun modeLabel(mode: String?): String = when (mode) {
+    "online" -> "Çevrimiçi"
+    "busy" -> "Meşgul"
+    "away" -> "Dışarıda"
+    "invisible" -> "Çevrimdışı görün"
+    else -> "Çevrimdışı"
 }
 
 @Composable
@@ -413,10 +446,22 @@ internal fun InfoDialog(message: String, onDismiss: () -> Unit) {
 // ---------- Sohbet listesi ----------
 
 @Composable
-fun ChatListScreen(me: AuthState.LoggedIn, onOpenChat: (String) -> Unit, onProfile: () -> Unit) {
+fun ChatListScreen(
+    me: AuthState.LoggedIn,
+    onOpenChat: (String) -> Unit,
+    onProfile: () -> Unit,
+    onSecret: () -> Unit = {},
+    onMedia: () -> Unit = {},
+) {
     var tab by remember { mutableIntStateOf(0) }
-    val rooms by Bayx.rooms.collectAsState()
+    val allRooms by Bayx.rooms.collectAsState()
     val onlineUsers by Bayx.online.collectAsState()
+    val presences by Bayx.presences.collectAsState()
+    var query by remember { mutableStateOf("") }
+    var searching by remember { mutableStateOf(false) }
+    val rooms = allRooms.filter { !it.secret }.filter {
+        query.isBlank() || it.name.contains(query, ignoreCase = true) || it.lastMessage.contains(query, ignoreCase = true)
+    }
     var members by remember { mutableStateOf<List<Member>?>(null) }
     var membersError by remember { mutableStateOf<String?>(null) }
     var showNewGroup by remember { mutableStateOf(false) }
@@ -434,7 +479,9 @@ fun ChatListScreen(me: AuthState.LoggedIn, onOpenChat: (String) -> Unit, onProfi
         if ((tab == 1 || showNewGroup) && members == null) {
             val token = Bayx.accessToken
             try {
-                members = if (token == null) emptyList() else Api.members(token).filter { it.userId != me.userId }
+                val all = if (token == null) emptyList() else Api.members(token)
+                Bayx.rememberMembers(all)
+                members = all.filter { it.userId != me.userId }
                 membersError = null
             } catch (e: ApiException) {
                 membersError = e.message
@@ -461,7 +508,10 @@ fun ChatListScreen(me: AuthState.LoggedIn, onOpenChat: (String) -> Unit, onProfi
                 Image(painterResource(R.drawable.ic_logo), contentDescription = null, modifier = Modifier.size(44.dp))
                 Spacer(Modifier.width(10.dp))
                 Box(Modifier.weight(1f)) { Wordmark(nameSize = 23.sp, subSize = 18.sp, centered = false) }
-                IconButton(onClick = { toast("Sohbetlerde arama özelliği sonraki sürümde eklenecek.") }) {
+                IconButton(onClick = onSecret) {
+                    Icon(Icons.Outlined.Lock, "Gizli sohbetler", tint = Ink, modifier = Modifier.size(24.dp))
+                }
+                IconButton(onClick = { searching = !searching; if (!searching) query = "" }) {
                     Icon(Icons.Outlined.Search, "Ara", tint = Ink, modifier = Modifier.size(26.dp))
                 }
                 IconButton(onClick = { openNotificationSettings(context) }) {
@@ -498,18 +548,37 @@ fun ChatListScreen(me: AuthState.LoggedIn, onOpenChat: (String) -> Unit, onProfi
                     }
                 }
             }
+            if (searching) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    singleLine = true,
+                    placeholder = { Text("Sohbet, mesaj ya da kişi ara", color = Muted) },
+                    leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null, tint = Muted) },
+                    shape = RoundedCornerShape(24.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = Color.White,
+                        unfocusedContainerColor = Color.White,
+                        unfocusedBorderColor = Line,
+                        focusedBorderColor = Blue,
+                    ),
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp).fillMaxWidth(),
+                )
+            }
             Spacer(Modifier.height(12.dp))
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when (tab) {
                     0 -> if (rooms.isEmpty()) {
-                        EmptyHint("Henüz sohbet yok.\nKişiler sekmesinden birini seçerek başla.")
+                        EmptyHint(if (query.isNotBlank()) "Aramaya uyan sohbet yok." else "Henüz sohbet yok.\nKişiler sekmesinden birini seçerek başla.")
                     } else {
                         LazyColumn {
-                            items(rooms, key = { it.id }) { chat -> ChatRow(chat, online = chat.dmUserId != null && chat.dmUserId in onlineUsers) { onOpenChat(chat.id) } }
+                            items(rooms, key = { it.id }) { chat ->
+                                ChatRow(chat, mode = chat.dmUserId?.let { presences[it]?.mode }) { onOpenChat(chat.id) }
+                            }
                         }
                     }
                     1 -> {
-                        val list = members
+                        val list = members?.filter { query.isBlank() || it.displayName.contains(query, ignoreCase = true) }
                         when {
                             membersError != null -> EmptyHint(membersError ?: "")
                             list == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -518,13 +587,19 @@ fun ChatListScreen(me: AuthState.LoggedIn, onOpenChat: (String) -> Unit, onProfi
                             list.isEmpty() -> EmptyHint("Henüz başka üye yok.\nArkadaşların kayıt olduğunda burada görünür.")
                             else -> LazyColumn {
                                 items(list, key = { it.userId }) { member ->
-                                    PersonRow(member.displayName, member.userId.substringBefore(":"), online = member.userId in onlineUsers) { openDirect(member) }
+                                    val p = presences[member.userId]
+                                    PersonRow(
+                                        member.displayName,
+                                        (p?.status ?: member.status).ifBlank { modeLabel(p?.mode ?: member.mode) },
+                                        mode = p?.mode ?: member.mode,
+                                        url = member.avatarUrl,
+                                    ) { openDirect(member) }
                                 }
                             }
                         }
                     }
                     else -> {
-                        val groups = rooms.filter { !it.isDirect }
+                        val groups = rooms.filter { !it.isDirect && !it.secret }
                         Column(Modifier.fillMaxSize()) {
                             TextButton(
                                 onClick = { showNewGroup = true },
@@ -534,7 +609,7 @@ fun ChatListScreen(me: AuthState.LoggedIn, onOpenChat: (String) -> Unit, onProfi
                                 EmptyHint("Henüz grup yok.")
                             } else {
                                 LazyColumn {
-                                    items(groups, key = { it.id }) { chat -> ChatRow(chat, online = chat.dmUserId != null && chat.dmUserId in onlineUsers) { onOpenChat(chat.id) } }
+                                    items(groups, key = { it.id }) { chat -> ChatRow(chat) { onOpenChat(chat.id) } }
                                 }
                             }
                         }
@@ -552,7 +627,7 @@ fun ChatListScreen(me: AuthState.LoggedIn, onOpenChat: (String) -> Unit, onProfi
                     NavItem("Aramalar", Icons.Outlined.Call, selected = false) {
                         toast("Aramak için bir sohbet aç ve üstteki telefon ya da kamera simgesine dokun.")
                     }
-                    NavItem("Medya", Icons.Outlined.PermMedia, selected = false) { toast("Medya sonraki sürümde eklenecek.") }
+                    NavItem("Medya", Icons.Outlined.PermMedia, selected = false, onClick = onMedia)
                     NavItem("Ayarlar", Icons.Outlined.Settings, selected = false, onClick = onProfile)
                 }
             }
@@ -667,12 +742,12 @@ private fun RowScope.NavItem(label: String, icon: ImageVector, selected: Boolean
 }
 
 @Composable
-private fun PersonRow(name: String, handle: String, online: Boolean = false, onClick: () -> Unit) {
+private fun PersonRow(name: String, handle: String, mode: String? = null, url: String? = null, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Avatar(name, 56.dp, online = online)
+        Avatar(name, 56.dp, url = url, mode = mode)
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
             Text(name, color = Ink, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -682,12 +757,12 @@ private fun PersonRow(name: String, handle: String, online: Boolean = false, onC
 }
 
 @Composable
-private fun ChatRow(chat: ChatSummary, online: Boolean = false, onClick: () -> Unit) {
+private fun ChatRow(chat: ChatSummary, mode: String? = null, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Avatar(chat.name, 60.dp, online = online)
+        Avatar(chat.name, 60.dp, url = chat.avatarUrl, mode = mode)
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
