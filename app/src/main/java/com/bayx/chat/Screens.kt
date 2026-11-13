@@ -413,7 +413,8 @@ fun ChatListScreen(
             Surface(
                 modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth().height(52.dp),
                 shape = RoundedCornerShape(26.dp),
-                color = ChipBg,
+                color = GlassPill,
+                shadowElevation = 2.dp,
             ) {
                 Row(Modifier.padding(4.dp)) {
                     tabs.forEachIndexed { index, (label, icon) ->
