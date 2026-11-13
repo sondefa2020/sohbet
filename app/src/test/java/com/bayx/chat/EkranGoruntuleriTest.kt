@@ -87,7 +87,7 @@ class EkranGoruntuleriTest {
     @Test
     fun profil() {
         Bayx.myStatus.value = "Kodlamaya devam 🎧"
-        compose.setContent { BayxTheme { ProfileScreen(me, onBack = {}, onAdmin = {}) } }
+        compose.setContent { BayxTheme { ProfileScreen(me, onBack = {}, onAdmin = {}, onWebLink = {}) } }
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/4-profil.png")
     }
 }
