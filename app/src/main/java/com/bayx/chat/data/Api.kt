@@ -6,7 +6,20 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 
-data class Member(val userId: String, val displayName: String, val admin: Boolean, val pending: Boolean)
+data class Member(
+    val userId: String,
+    val displayName: String,
+    val admin: Boolean,
+    val pending: Boolean,
+    val avatarUrl: String? = null,
+    val status: String = "",
+    val mode: String = "offline",
+)
+
+/** Başkalarının gördüğü durum: online, busy, away ya da offline. */
+data class UserPresence(val mode: String, val status: String)
+
+data class PresenceResult(val users: Map<String, UserPresence>, val myMode: String, val myStatus: String)
 
 data class AdminMembers(val members: List<Member>, val count: Int, val max: Int)
 
@@ -91,6 +104,9 @@ object Api {
                 displayName = m.optString("display_name").ifEmpty { m.optString("user_id") },
                 admin = m.optBoolean("admin"),
                 pending = m.optBoolean("pending"),
+                avatarUrl = m.optString("avatar_url").ifEmpty { null },
+                status = m.optString("status"),
+                mode = m.optString("mode").ifEmpty { "offline" },
             )
         }
     }
@@ -100,10 +116,20 @@ object Api {
     }
 
     /** Yoklama gönderir ve şu an çevrimiçi olan üyelerin kimliklerini döndürür. */
-    suspend fun presence(token: String, active: Boolean): Set<String> = io {
-        val json = request("POST", "/bayx/presence", JSONObject().put("active", active), token)
-        val array = json.optJSONArray("online")
-        if (array == null) emptySet() else (0 until array.length()).map { array.getString(it) }.toSet()
+    suspend fun presence(token: String, active: Boolean, mode: String? = null, status: String? = null): PresenceResult = io {
+        val body = JSONObject().put("active", active)
+        if (mode != null) body.put("mode", mode)
+        if (status != null) body.put("status", status)
+        val json = request("POST", "/bayx/presence", body, token)
+        val users = HashMap<String, UserPresence>()
+        json.optJSONObject("users")?.let { obj ->
+            obj.keys().forEach { uid ->
+                val p = obj.optJSONObject(uid) ?: return@forEach
+                users[uid] = UserPresence(p.optString("mode", "offline"), p.optString("status"))
+            }
+        }
+        val me = json.optJSONObject("me")
+        PresenceResult(users, me?.optString("mode", "online") ?: "online", me?.optString("status").orEmpty())
     }
 
     // ------------------------------------------------------------ arama

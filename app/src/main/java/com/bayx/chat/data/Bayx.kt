@@ -25,7 +25,17 @@ import org.matrix.rustcomponents.sdk.ClientBuilder
 import org.matrix.rustcomponents.sdk.ClientDelegate
 import org.matrix.rustcomponents.sdk.ClientException
 import org.matrix.rustcomponents.sdk.CreateRoomParameters
+import org.matrix.rustcomponents.sdk.EventOrTransactionId
 import org.matrix.rustcomponents.sdk.EventSendState
+import org.matrix.rustcomponents.sdk.TimelineConfiguration
+import org.matrix.rustcomponents.sdk.TimelineFilter
+import org.matrix.rustcomponents.sdk.TimelineFocus
+import org.matrix.rustcomponents.sdk.DateDividerMode
+import org.matrix.rustcomponents.sdk.TypingNotificationsListener
+import uniffi.matrix_sdk_ui.TimelineReadReceiptTracking
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.util.LruCache
 import org.matrix.rustcomponents.sdk.ImageInfo
 import org.matrix.rustcomponents.sdk.LatestEventValue
 import org.matrix.rustcomponents.sdk.MediaSource
@@ -83,10 +93,12 @@ data class ChatSummary(
     val isDirect: Boolean,
     val dmUserId: String? = null,
     val lastFromMe: Boolean = false,
+    val secret: Boolean = false,
+    val avatarUrl: String? = null,
 )
 
-enum class MsgKind { TEXT, DATE, IMAGE, VIDEO, VOICE, LOCATION, NUDGE }
-enum class MsgState { NONE, SENDING, SENT, FAILED }
+enum class MsgKind { TEXT, DATE, IMAGE, VIDEO, VOICE, LOCATION, NUDGE, EFFECT }
+enum class MsgState { NONE, SENDING, SENT, READ, FAILED }
 
 /** Bir mesaja bağlı medya: şifreli kaynak adresi ve gösterim için gereken bilgiler. */
 class MediaRef(
@@ -108,6 +120,7 @@ data class ChatMessage(
     val time: Long,
     val state: MsgState,
     val media: MediaRef? = null,
+    val eventId: EventOrTransactionId? = null,
 )
 
 /** Açık bir sohbetin canlı durumu. */
@@ -116,6 +129,14 @@ class ChatSession internal constructor(val roomId: String) {
     val title = MutableStateFlow("")
     @Volatile var isDirect: Boolean = true
     val dmUserId = MutableStateFlow<String?>(null)
+    /** Şu an yazmakta olan diğer üyelerin adları. */
+    val typing = MutableStateFlow<List<String>>(emptyList())
+    /** Gizli sohbet mi; öyleyse mesajların kaybolma süresi (ms). */
+    @Volatile var secret: Boolean = false
+    @Volatile var lifetimeMs: Long = 0L
+    internal var room: Room? = null
+    internal var typingHandle: TaskHandle? = null
+    internal var expiryJob: Job? = null
     internal var timeline: Timeline? = null
     internal var handle: TaskHandle? = null
     internal val items = ArrayList<TimelineItem>()
@@ -141,6 +162,18 @@ object Bayx {
     /** Şu an çevrimiçi olan üyelerin kullanıcı kimlikleri. */
     val online = MutableStateFlow<Set<String>>(emptySet())
 
+    /** Üyelerin MSN tarzı durumları ve durum mesajları. */
+    val presences = MutableStateFlow<Map<String, UserPresence>>(emptyMap())
+
+    /** Kendi durumum (online, busy, away, invisible) ve durum mesajım. */
+    val myMode = MutableStateFlow("online")
+    val myStatus = MutableStateFlow("")
+    val myAvatarUrl = MutableStateFlow<String?>(null)
+
+    /** Gelen ya da gönderilen sohbet efekti (kalp, konfeti, kar). */
+    val effects = MutableSharedFlow<String>(extraBufferCapacity = 4)
+    private val effectSeen = HashSet<String>()
+
     /** Gelen titreşimler: gönderenin görünen adı. */
     val nudges = MutableSharedFlow<NudgeEvent>(extraBufferCapacity = 4)
 
@@ -162,6 +195,7 @@ object Bayx {
         store = SecureStore(appContext)
         Calls.init(appContext)
         Sounds.init(appContext)
+        SecretLock.init(appContext)
         Notifier.createChannels(appContext)
         scope.launch { restore() }
     }
@@ -173,7 +207,8 @@ object Bayx {
     /** Bildirime dokunularak açılması istenen sohbet. */
     val pendingRoom = MutableStateFlow<String?>(null)
 
-    fun roomName(roomId: String): String? = rooms.value.firstOrNull { it.id == roomId }?.name
+    fun roomName(roomId: String): String? =
+        rooms.value.firstOrNull { it.id == roomId }?.takeIf { !it.secret }?.name
 
     // -------------------------------------------------------------- bildirim
 
@@ -367,6 +402,12 @@ object Bayx {
         presenceJob = null
         roomsPrimed = false
         online.value = emptySet()
+        presences.value = emptyMap()
+        myMode.value = "online"
+        myStatus.value = ""
+        myAvatarUrl.value = null
+        avatarCache.evictAll()
+        synchronized(effectSeen) { effectSeen.clear() }
         synchronized(nudgeSeen) { nudgeSeen.clear() }
         runCatching { roomListResult?.entriesStream()?.cancel() }
         runCatching { delegateHandle?.cancel() }
@@ -384,6 +425,7 @@ object Bayx {
     /** Bu cihazda oturuma ait her şeyi siler: şifreli oturum kaydı, yerel veritabanı, medya ve önbellek. */
     private fun wipeLocal() {
         store.clear()
+        SecretLock.clear()
         runCatching { dataDir().deleteRecursively() }
         runCatching { appContext.cacheDir.listFiles()?.forEach { it.deleteRecursively() } }
         runCatching { File(appContext.filesDir, "media").deleteRecursively() }
@@ -415,6 +457,7 @@ object Bayx {
         sync.start()
         startPresence()
         scope.launch { registerPush() }
+        scope.launch { refreshMyAvatar() }
     }
 
     // ------------------------------------------------------ çevrimiçi durumu
@@ -425,7 +468,7 @@ object Bayx {
             while (isActive) {
                 val token = accessToken
                 if (foreground && token != null) {
-                    runCatching { Api.presence(token, active = true) }.onSuccess { online.value = it }
+                    runCatching { Api.presence(token, active = true) }.onSuccess { applyPresence(it) }
                 }
                 delay(30_000)
             }
@@ -435,10 +478,11 @@ object Bayx {
     /** Uygulama öne geldiğinde ya da arka plana geçtiğinde çağrılır. */
     fun setForeground(active: Boolean) {
         foreground = active
+        if (!active) SecretLock.lock()
         Calls.onForeground(active)
         val token = accessToken ?: return
         scope.launch {
-            runCatching { Api.presence(token, active) }.onSuccess { if (active) online.value = it }
+            runCatching { Api.presence(token, active) }.onSuccess { if (active) applyPresence(it) }
         }
     }
 
@@ -546,6 +590,8 @@ object Bayx {
             unread = info.numUnreadMessages.toInt(),
             isDirect = info.isDirect,
             lastFromMe = fromMe,
+            secret = secretLifetime(info.topic) != null,
+            avatarUrl = info.avatarUrl ?: if (info.isDirect || secretLifetime(info.topic) != null) heroAvatar(room) else null,
             dmUserId = if (info.isDirect) dmPartner(room) else null,
         )
     }
@@ -563,7 +609,11 @@ object Bayx {
         if (content !is TimelineItemContent.MsgLike) return null
         return when (val kind = content.content.kind) {
             is MsgLikeKind.Message -> when (val type = kind.content.msgType) {
-                is MessageType.Text -> if (isNudge(type.content.body)) NUDGE_LABEL else type.content.body
+                is MessageType.Text -> when {
+                    isNudge(type.content.body) -> NUDGE_LABEL
+                    type.content.body.startsWith(EFFECT_MARK) -> effectLabel(type.content.body.removePrefix(EFFECT_MARK))
+                    else -> type.content.body
+                }
                 is MessageType.Notice -> type.content.body
                 is MessageType.Emote -> type.content.body
                 is MessageType.Image -> "Fotoğraf"
@@ -586,15 +636,53 @@ object Bayx {
         val room = c.getRoom(roomId) ?: runCatching { syncService?.roomListService()?.room(roomId) }.getOrNull()
             ?: return@withContext null
         val session = ChatSession(roomId)
+        session.room = room
         Notifier.cancelRoom(appContext, roomId)
         runCatching {
             val info = room.roomInfo()
             session.title.value = info.displayName.orEmpty()
             session.isDirect = info.isDirect
-            if (info.isDirect) session.dmUserId.value = dmPartner(room)
+            val lifetime = secretLifetime(info.topic)
+            if (lifetime != null) {
+                session.secret = true
+                session.lifetimeMs = lifetime
+                session.dmUserId.value = dmPartner(room)
+            } else if (info.isDirect) {
+                session.dmUserId.value = dmPartner(room)
+            }
         }
         runCatching { syncService?.roomListService()?.setRoomSubscriptions(listOf(roomId)) }
-        val timeline = room.timeline()
+        val timeline = runCatching {
+            room.timelineWithConfiguration(
+                TimelineConfiguration(
+                    focus = TimelineFocus.Live(hideThreadedEvents = false),
+                    filter = TimelineFilter.All,
+                    internalIdPrefix = null,
+                    dateDividerMode = DateDividerMode.DAILY,
+                    trackReadReceipts = TimelineReadReceiptTracking.MESSAGE_LIKE_EVENTS,
+                    reportUtds = false,
+                ),
+            )
+        }.getOrElse { room.timeline() }
+        session.typingHandle = runCatching {
+            room.subscribeToTypingNotifications(object : TypingNotificationsListener {
+                override fun call(typingUserIds: List<String>) {
+                    val me = (auth.value as? AuthState.LoggedIn)?.userId
+                    session.typing.value = typingUserIds.filter { it != me }.map { uid ->
+                        presenceName(uid)
+                    }
+                }
+            })
+        }.getOrNull()
+        if (session.lifetimeMs > 0) {
+            // Süresi dolan mesajlar ekrandan da kalksın.
+            session.expiryJob = scope.launch {
+                while (isActive) {
+                    delay(30_000)
+                    applyTimelineDiffs(session, emptyList())
+                }
+            }
+        }
         session.timeline = timeline
         session.handle = timeline.addListener(object : TimelineListener {
             override fun onUpdate(diff: List<TimelineDiff>) {
@@ -607,6 +695,9 @@ object Bayx {
     }
 
     fun closeChat(session: ChatSession) {
+        session.expiryJob?.cancel()
+        runCatching { session.typingHandle?.cancel() }
+        runCatching { session.room?.let { r -> scope.launch { runCatching { r.typingNotice(false) } } } }
         runCatching { session.handle?.cancel() }
         runCatching { session.timeline?.close() }
         session.handle = null
@@ -634,7 +725,7 @@ object Bayx {
                     }
                 }
             }
-            items.mapNotNull { runCatching { toMessage(it) }.getOrNull() }
+            mapWithReceipts(session, items)
         }
         session.messages.value = mapped
         val timeline = session.timeline
@@ -662,10 +753,21 @@ object Bayx {
         }
         val profile = event.senderProfile
         val sender = if (profile is ProfileDetails.Ready) profile.displayName ?: event.sender else event.sender
+        val effect = effectName(event.content)
+        if (effect != null) {
+            if (!event.isOwn) noticeEffect(event.sender, effect, event.timestamp.toLong())
+            return ChatMessage(
+                key, MsgKind.EFFECT, effect, event.isOwn, sender, event.timestamp.toLong(), state,
+                eventId = event.eventOrTransactionId,
+            )
+        }
         val nudge = media == null && text == NUDGE_LABEL
         if (nudge && !event.isOwn) noticeNudge(event.sender, sender, event.timestamp.toLong())
         val kind = if (nudge) MsgKind.NUDGE else media?.first ?: MsgKind.TEXT
-        return ChatMessage(key, kind, text, event.isOwn, sender, event.timestamp.toLong(), state, media?.second)
+        return ChatMessage(
+            key, kind, text, event.isOwn, sender, event.timestamp.toLong(), state, media?.second,
+            eventId = event.eventOrTransactionId,
+        )
     }
 
     private fun mediaOf(content: TimelineItemContent): Pair<MsgKind, MediaRef>? {
@@ -805,7 +907,7 @@ object Bayx {
     suspend fun sendText(session: ChatSession, text: String): Boolean = withContext(Dispatchers.IO) {
         val timeline = session.timeline ?: return@withContext false
         val ok = runCatching { timeline.send(messageEventContentFromMarkdown(text)) }.isSuccess
-        if (ok && text != NUDGE_BODY) Sounds.play(Sounds.Kind.OUTGOING)
+        if (ok && text != NUDGE_BODY && !text.startsWith(EFFECT_MARK)) Sounds.play(Sounds.Kind.OUTGOING)
         ok
     }
 
@@ -840,5 +942,194 @@ object Bayx {
                 ),
             )
         }.getOrNull()
+    }
+
+    // ------------------------------------------------------------- okundu
+
+    /** Mesajları eşler; karşı tarafın okundu bilgisi geçtiği yerden önceki kendi mesajlarımı "okundu" yapar. */
+    private fun mapWithReceipts(session: ChatSession, items: List<TimelineItem>): List<ChatMessage> {
+        val me = (auth.value as? AuthState.LoggedIn)?.userId
+        val now = System.currentTimeMillis()
+        var readSeen = false
+        val out = ArrayList<ChatMessage>(items.size)
+        for (index in items.indices.reversed()) {
+            val item = items[index]
+            val event = runCatching { item.asEvent() }.getOrNull()
+            if (event != null && event.readReceipts.keys.any { it != me }) readSeen = true
+            var msg = runCatching { toMessage(item) }.getOrNull() ?: continue
+            if (session.lifetimeMs > 0 && msg.kind != MsgKind.DATE && now - msg.time > session.lifetimeMs) continue
+            if (msg.mine && readSeen && msg.state == MsgState.SENT) msg = msg.copy(state = MsgState.READ)
+            out.add(msg)
+        }
+        out.reverse()
+        // Süresi dolan mesajlar yüzünden boş kalan tarih ayraçlarını at.
+        return out.filterIndexed { i, m -> m.kind != MsgKind.DATE || (i + 1 < out.size && out[i + 1].kind != MsgKind.DATE) }
+    }
+
+    // ------------------------------------------------------------- yazıyor
+
+    fun setTyping(session: ChatSession, typing: Boolean) {
+        val room = session.room ?: return
+        scope.launch { runCatching { room.typingNotice(typing) } }
+    }
+
+    private fun presenceName(userId: String): String {
+        val local = userId.substringBefore(":").removePrefix("@")
+        return memberNames[userId] ?: local
+    }
+
+    /** Üye listesinden öğrenilen görünen adlar (yazıyor göstergesi için). */
+    private val memberNames = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    fun rememberMembers(members: List<Member>) {
+        members.forEach { memberNames[it.userId] = it.displayName }
+    }
+
+    // ------------------------------------------------------------- silme
+
+    /** Kendi mesajını herkesten siler. */
+    suspend fun deleteMessage(session: ChatSession, msg: ChatMessage): Boolean = withContext(Dispatchers.IO) {
+        val timeline = session.timeline ?: return@withContext false
+        val id = msg.eventId ?: return@withContext false
+        runCatching { timeline.redactEvent(id, null) }.isSuccess
+    }
+
+    // ------------------------------------------------------------- durum
+
+    private fun applyPresence(result: PresenceResult) {
+        presences.value = result.users
+        online.value = result.users.filterValues { it.mode != "offline" }.keys
+        myMode.value = result.myMode
+        myStatus.value = result.myStatus
+    }
+
+    /** MSN tarzı durum: online, busy, away ya da invisible (çevrimdışı görün). */
+    fun setMode(mode: String) {
+        myMode.value = mode
+        val token = accessToken ?: return
+        scope.launch { runCatching { Api.presence(token, foreground, mode = mode) }.onSuccess { applyPresence(it) } }
+    }
+
+    fun setStatusMessage(text: String) {
+        myStatus.value = text
+        val token = accessToken ?: return
+        scope.launch { runCatching { Api.presence(token, foreground, status = text) }.onSuccess { applyPresence(it) } }
+    }
+
+    // ------------------------------------------------------------- profil
+
+    suspend fun setDisplayName(name: String): Boolean = withContext(Dispatchers.IO) {
+        val c = client ?: return@withContext false
+        val ok = runCatching { c.setDisplayName(name) }.isSuccess
+        if (ok) {
+            val current = auth.value as? AuthState.LoggedIn
+            if (current != null) auth.value = current.copy(displayName = name)
+            store.load()?.let { saved -> runCatching { store.save(JSONObject(saved).put("displayName", name).toString()) } }
+        }
+        ok
+    }
+
+    suspend fun setAvatar(jpeg: ByteArray): Boolean = withContext(Dispatchers.IO) {
+        val c = client ?: return@withContext false
+        val ok = runCatching { c.uploadAvatar("image/jpeg", jpeg) }.isSuccess
+        if (ok) myAvatarUrl.value = runCatching { c.avatarUrl() }.getOrNull()
+        ok
+    }
+
+    suspend fun refreshMyAvatar() {
+        val c = client ?: return
+        myAvatarUrl.value = runCatching { c.avatarUrl() }.getOrNull()
+    }
+
+    private val avatarCache = LruCache<String, Bitmap>(60)
+
+    /** Profil fotoğrafını (mxc adresi) indirir; yalnızca bellekte önbelleğe alır. */
+    suspend fun loadAvatar(mxc: String): Bitmap? = withContext(Dispatchers.IO) {
+        avatarCache.get(mxc)?.let { return@withContext it }
+        val c = client ?: return@withContext null
+        val bytes = runCatching {
+            MediaSource.fromUrl(mxc).use { source -> c.getMediaThumbnail(source, 256uL, 256uL) }
+        }.getOrNull() ?: return@withContext null
+        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return@withContext null
+        avatarCache.put(mxc, bitmap)
+        bitmap
+    }
+
+    private suspend fun heroAvatar(room: Room): String? {
+        val me = (auth.value as? AuthState.LoggedIn)?.userId
+        return runCatching { room.heroes().firstOrNull { it.userId != me }?.avatarUrl }.getOrNull()
+    }
+
+    // ------------------------------------------------------------- efektler
+
+    private const val EFFECT_MARK = "\u2060\u2061"
+    val EFFECTS = listOf("kalp", "konfeti", "kar", "havaifisek")
+
+    fun effectLabel(name: String): String = when (name) {
+        "kalp" -> "Kalp yağmuru gönderdi"
+        "konfeti" -> "Konfeti patlattı"
+        "kar" -> "Kar yağdırdı"
+        "havaifisek" -> "Havai fişek attı"
+        else -> "Efekt gönderdi"
+    }
+
+    private fun effectName(content: TimelineItemContent): String? {
+        val kind = (content as? TimelineItemContent.MsgLike)?.content?.kind as? MsgLikeKind.Message ?: return null
+        val type = kind.content.msgType as? MessageType.Text ?: return null
+        val body = type.content.body
+        return if (body.startsWith(EFFECT_MARK)) body.removePrefix(EFFECT_MARK).takeIf { it in EFFECTS } else null
+    }
+
+    private fun noticeEffect(senderId: String, name: String, time: Long) {
+        if (System.currentTimeMillis() - time > 20_000) return
+        val fresh = synchronized(effectSeen) { effectSeen.add("$senderId:$time") }
+        if (fresh) effects.tryEmit(name)
+    }
+
+    suspend fun sendEffect(session: ChatSession, name: String): Boolean {
+        val ok = sendText(session, EFFECT_MARK + name)
+        if (ok) effects.tryEmit(name)
+        return ok
+    }
+
+    // ---------------------------------------------------------- gizli sohbet
+
+    /** Gizli sohbetler oda konusunda bu işaretle tanınır: "<işaret>:<ms>". */
+    private const val SECRET_MARK = "\u2060tayfa-gizli"
+
+    private fun secretLifetime(topic: String?): Long? {
+        if (topic == null || !topic.startsWith(SECRET_MARK)) return null
+        return topic.substringAfter(":", "").toLongOrNull() ?: 0L
+    }
+
+    /**
+     * Kişiyle yeni bir gizli sohbet açar. Mesajlar [lifetimeMs] sonra sunucudan silinir
+     * (Synapse saklama politikası) ve uygulamada gösterilmez.
+     */
+    suspend fun createSecretChat(userId: String, lifetimeMs: Long): String? = withContext(Dispatchers.IO) {
+        val c = client ?: return@withContext null
+        val roomId = runCatching {
+            c.createRoom(
+                CreateRoomParameters(
+                    name = null,
+                    topic = "$SECRET_MARK:$lifetimeMs",
+                    isEncrypted = true,
+                    isDirect = false,
+                    visibility = RoomVisibility.Private,
+                    preset = RoomPreset.TRUSTED_PRIVATE_CHAT,
+                    invite = listOf(userId),
+                ),
+            )
+        }.getOrNull() ?: return@withContext null
+        var room: Room? = null
+        for (attempt in 0 until 20) {
+            room = c.getRoom(roomId)
+            if (room != null) break
+            delay(300)
+        }
+        runCatching {
+            room?.sendStateEventRaw("m.room.retention", "", JSONObject().put("max_lifetime", lifetimeMs).toString())
+        }
+        roomId
     }
 }

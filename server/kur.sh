@@ -111,6 +111,16 @@ turn_allow_guests: false
 # Bildirimler aynı makinedeki Bayx servisine (127.0.0.1:8010) iletilir.
 ip_range_whitelist:
   - "127.0.0.1"
+# Kaybolan mesajlar: sohbet için süre belirlenmişse süresi dolan mesajlar sunucudan silinir.
+retention:
+  enabled: true
+  allowed_lifetime_min: 1m
+  allowed_lifetime_max: 365d
+  purge_jobs:
+    - longest_max_lifetime: 2d
+      interval: 15m
+    - shortest_max_lifetime: 2d
+      interval: 6h
 EOF
 chown matrix-synapse:matrix-synapse "$SYNAPSE_CONF"
 chmod 600 "$SYNAPSE_CONF"
@@ -199,6 +209,8 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
+StateDirectory=bayx
+Environment=BAYX_STATE_DIR=/var/lib/bayx
 
 [Install]
 WantedBy=multi-user.target
@@ -266,6 +278,66 @@ if command -v ufw >/dev/null && ufw status 2>/dev/null | grep -E "^Status: activ
     FIREWALL_NOTE="ufw: 3478 TCP/UDP ve 49160-49200 UDP portları açıldı."
 else
     FIREWALL_NOTE="Panelde ya da sağlayıcıda güvenlik duvarı varsa şu portları aç: 3478 TCP ve UDP, 49160-49200 UDP."
+fi
+
+# ------------------------------------------------- 2c. Tayfa Web (tarayıcı)
+# Element Web, Tayfa adıyla ayrı bir alt alan adında yayınlanır (güvenlik için sohbet
+# sunucusundan ayrı bir adreste olmalı). Alt alan adı panelde oluşturulmamışsa atlanır.
+WEB_DOMAIN="${BAYX_WEB_DOMAIN:-web.acioglu.tr}"
+WEB_DIR="${BAYX_WEB_DIR:-/home/acioglu/acioglu.tr/subdomains/${WEB_DOMAIN%%.*}/public_html}"
+WEB_OK="hayır (panelde $WEB_DOMAIN alt alan adı yok)"
+if [ -d "$WEB_DIR" ]; then
+    say "Tayfa Web kuruluyor ($WEB_DOMAIN)"
+    WEB_TAG="$(curl -fsSL https://api.github.com/repos/element-hq/element-web/releases/latest | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"])')" \
+        || fail "Element Web sürümü öğrenilemedi."
+    WEB_TMP="$(mktemp -d)"
+    curl -fsSL -o "$WEB_TMP/element.tar.gz" \
+        "https://github.com/element-hq/element-web/releases/download/$WEB_TAG/element-$WEB_TAG.tar.gz" \
+        || fail "Element Web indirilemedi."
+    tar -xzf "$WEB_TMP/element.tar.gz" -C "$WEB_TMP"
+    WEB_SRC="$(find "$WEB_TMP" -maxdepth 1 -type d -name 'element-*' | head -1)"
+    [ -f "$WEB_SRC/index.html" ] || fail "Element Web paketi beklenen yapıda değil."
+    if [ -n "$(ls -A "$WEB_DIR" 2>/dev/null)" ] && [ ! -f "$WEB_DIR/.tayfa-web" ]; then
+        mkdir -p "$WEB_DIR/../public_html.yedek"
+        cp -a "$WEB_DIR/." "$WEB_DIR/../public_html.yedek/"
+    fi
+    find "$WEB_DIR" -mindepth 1 -delete
+    cp -a "$WEB_SRC/." "$WEB_DIR/"
+    cat > "$WEB_DIR/config.json" <<WEBCONF
+{
+  "default_server_config": {
+    "m.homeserver": { "base_url": "https://$DOMAIN", "server_name": "$DOMAIN" }
+  },
+  "brand": "Tayfa",
+  "default_theme": "light",
+  "default_country_code": "TR",
+  "disable_custom_urls": true,
+  "disable_guests": true,
+  "disable_3pid_login": true,
+  "show_labs_settings": false,
+  "mobile_guide_toast": false,
+  "room_directory": { "servers": [] },
+  "embedded_pages": { "login_for_welcome": true },
+  "setting_defaults": {
+    "UIFeature.registration": false,
+    "UIFeature.passwordReset": false,
+    "UIFeature.voip": false,
+    "UIFeature.widgets": false,
+    "UIFeature.feedback": false,
+    "UIFeature.thirdPartyId": false,
+    "UIFeature.identityServer": false,
+    "UIFeature.shareSocialMedia": false,
+    "UIFeature.urlPreviews": false,
+    "UIFeature.locationSharing": false
+  }
+}
+WEBCONF
+    echo "$WEB_TAG" > "$WEB_DIR/.tayfa-web"
+    chown -R --reference="$(dirname "$WEB_DIR")" "$WEB_DIR"
+    find "$WEB_DIR" -type d -exec chmod 755 {} +
+    find "$WEB_DIR" -type f -exec chmod 644 {} +
+    rm -rf "$WEB_TMP"
+    WEB_OK="evet (https://$WEB_DOMAIN, $WEB_TAG)"
 fi
 
 # ------------------------------------------------------ 3. Yönetici hesabı
@@ -341,6 +413,7 @@ https://$DOMAIN üzerinden erişim : $PUBLIC_OK
 Kayıt servisi (https üzerinden)        : $KAYIT_OK
 Arama aktarma sunucusu (coturn)        : $TURN_OK
 Bildirim servisi (Firebase)            : $PUSH_OK
+Tayfa Web                              : $WEB_OK
 $FIREWALL_NOTE
 $ADMIN_NOTE
 =====================================================

@@ -107,6 +107,7 @@ def list_members():
                 {
                     "user_id": user.get("name"),
                     "display_name": user.get("displayname") or "",
+                    "avatar_url": user.get("avatar_url") or "",
                     "admin": bool(user.get("admin")),
                     "pending": bool(user.get("locked")),
                 }
@@ -217,17 +218,72 @@ def member_from_token(headers):
     return uid
 
 
+# MSN tarzı durumlar ve durum mesajı. Kalıcı olarak saklanır (sunucu yeniden başlasa da kalır).
+STATE_DIR = os.environ.get("BAYX_STATE_DIR", "/var/lib/bayx")
+PROFILE_FILE = os.path.join(STATE_DIR, "profil.json")
+MODES = {"online", "busy", "away", "invisible"}
+_profiles = {}
+
+
+def load_profiles():
+    global _profiles
+    try:
+        with open(PROFILE_FILE) as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            _profiles = data
+    except (OSError, ValueError):
+        _profiles = {}
+
+
+def save_profiles():
+    try:
+        os.makedirs(STATE_DIR, exist_ok=True)
+        tmp = PROFILE_FILE + ".yeni"
+        with open(tmp, "w") as f:
+            json.dump(_profiles, f, ensure_ascii=False)
+        os.replace(tmp, PROFILE_FILE)
+    except OSError:
+        pass
+
+
+def public_profile(uid, now):
+    """Başkalarının gördüğü durum: görünmez kullanıcı çevrimdışı görünür."""
+    prof = _profiles.get(uid, {})
+    mode = prof.get("mode", "online")
+    seen = _last_seen.get(uid)
+    online = seen is not None and now - seen < PRESENCE_WINDOW and mode != "invisible"
+    return {"mode": mode if online else "offline", "status": prof.get("status", "")}
+
+
 def presence(headers, body):
-    """Çağıranın yoklamasını kaydeder ve şu an çevrimiçi olan üyeleri döndürür."""
+    """Çağıranın yoklamasını, durumunu ve durum mesajını kaydeder; üyelerin durumlarını döndürür."""
     uid = member_from_token(headers)
     now = time.time()
     with _presence_lock:
+        prof = dict(_profiles.get(uid, {}))
+        changed = False
+        mode = body.get("mode")
+        if mode in MODES and prof.get("mode") != mode:
+            prof["mode"] = mode
+            changed = True
+        status = body.get("status")
+        if isinstance(status, str):
+            status = status.strip()[:80]
+            if prof.get("status", "") != status:
+                prof["status"] = status
+                changed = True
+        if changed:
+            _profiles[uid] = prof
+            save_profiles()
         if body.get("active", True):
             _last_seen[uid] = now
         else:
             _last_seen.pop(uid, None)
-        online = [u for u, seen in _last_seen.items() if now - seen < PRESENCE_WINDOW]
-    return {"online": online}
+        users = {u: public_profile(u, now) for u in set(_last_seen) | set(_profiles)}
+        online = [u for u, p in users.items() if p["mode"] != "offline"]
+        mine = {"mode": _profiles.get(uid, {}).get("mode", "online"), "status": _profiles.get(uid, {}).get("status", "")}
+    return {"online": online, "users": users, "me": mine}
 
 
 # ------------------------------------------------------------------ bildirim (FCM)
@@ -509,11 +565,20 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(201, register(self._body(), ip))
             elif method == "GET" and path == "/bayx/members":
                 caller = require_member(self.headers)
-                members = [
-                    {"user_id": m["user_id"], "display_name": m["display_name"], "admin": m["admin"]}
-                    for m in list_members()
-                    if not m["pending"]
-                ]
+                now = time.time()
+                with _presence_lock:
+                    members = [
+                        {
+                            "user_id": m["user_id"],
+                            "display_name": m["display_name"],
+                            "avatar_url": m["avatar_url"],
+                            "admin": m["admin"],
+                            "status": _profiles.get(m["user_id"], {}).get("status", ""),
+                            "mode": public_profile(m["user_id"], now)["mode"],
+                        }
+                        for m in list_members()
+                        if not m["pending"]
+                    ]
                 self._send(200, {"members": members, "me": caller})
             elif method == "POST" and path == "/bayx/presence":
                 length = self.headers.get("Content-Length", "0")
@@ -552,6 +617,7 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     global FCM
+    load_profiles()
     if FCM_CREDENTIALS and os.path.exists(FCM_CREDENTIALS):
         try:
             FCM = Fcm(FCM_CREDENTIALS)
