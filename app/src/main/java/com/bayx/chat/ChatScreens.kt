@@ -1,5 +1,10 @@
 package com.bayx.chat
 
+import androidx.compose.material.icons.outlined.Block
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.automirrored.outlined.Send
+import androidx.compose.material.icons.automirrored.outlined.Reply
 import androidx.compose.material.icons.outlined.Wallpaper
 import androidx.compose.material.icons.outlined.AlternateEmail
 import androidx.compose.material.icons.outlined.PersonAdd
@@ -152,6 +157,11 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit) {
     var menuOpen by remember { mutableStateOf(false) }
     var showGallery by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<ChatMessage?>(null) }
+    var actionMsg by remember { mutableStateOf<ChatMessage?>(null) }
+    var replyTarget by remember { mutableStateOf<ChatMessage?>(null) }
+    var editTarget by remember { mutableStateOf<ChatMessage?>(null) }
+    var forwardMsg by remember { mutableStateOf<ChatMessage?>(null) }
+    var blockPeer by remember { mutableStateOf<String?>(null) }
     if (session.secret) SecureWindow()
     var lastNudge by remember { mutableLongStateOf(0L) }
     var draft by remember { mutableStateOf("") }
@@ -351,6 +361,13 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit) {
                         leadingIcon = { Icon(Icons.Outlined.Wallpaper, contentDescription = null) },
                         onClick = { menuOpen = false; showWallpaper = true },
                     )
+                    partner?.let { peer ->
+                        DropdownMenuItem(
+                            text = { Text("Engelle", color = Color(0xFFB4232A)) },
+                            leadingIcon = { Icon(Icons.Outlined.Block, contentDescription = null, tint = Color(0xFFB4232A)) },
+                            onClick = { menuOpen = false; blockPeer = peer },
+                        )
+                    }
                 }
             }
         }
@@ -406,7 +423,7 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit) {
                     msg,
                     showSender = !session.isDirect && !session.secret,
                     onOpen = { viewer = it },
-                    onLongPress = { if (it.mine && it.eventId != null) deleteTarget = it },
+                    onLongPress = { actionMsg = it },
                 )
             }
         }
@@ -442,6 +459,26 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit) {
                 },
             )
         } else {
+            val banner = editTarget?.let { "Düzenleniyor" to it } ?: replyTarget?.let { (if (it.mine) "Sen" else it.sender) to it }
+            banner?.let { (who, msg) ->
+                Row(
+                    Modifier.fillMaxWidth().background(GlassBar).padding(start = 16.dp, end = 8.dp, top = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(Modifier.width(3.dp).height(36.dp).clip(RoundedCornerShape(2.dp)).background(Blue))
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(if (editTarget != null) "Mesajı düzenle" else "$who yanıtlanıyor", color = Blue, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            msg.text.ifBlank { "Medya" },
+                            color = Muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    IconButton(onClick = { replyTarget = null; editTarget = null; draft = "" }) {
+                        Icon(Icons.Filled.Close, "Kapat", tint = Muted)
+                    }
+                }
+            }
             Row(
                 Modifier.fillMaxWidth().background(GlassBar).padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -485,9 +522,18 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit) {
                         .clickable {
                             val text = draft.trim()
                             if (text.isNotEmpty()) {
+                                val edit = editTarget
+                                val reply = replyTarget
                                 draft = ""
+                                editTarget = null
+                                replyTarget = null
                                 scope.launch {
-                                    if (!Bayx.sendText(session, text)) toast("Mesaj gönderilemedi.")
+                                    val ok = when {
+                                        edit != null -> Bayx.editMessage(session, edit, text)
+                                        reply != null && reply.eventId != null -> Bayx.sendReply(session, text, reply.eventId)
+                                        else -> Bayx.sendText(session, text)
+                                    }
+                                    if (!ok) toast("Mesaj gönderilemedi.")
                                 }
                             } else if (
                                 ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
@@ -543,6 +589,38 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit) {
     viewer?.let { msg -> MediaViewerDialog(msg) { viewer = null } }
     if (showGallery) MediaGalleryDialog(session) { showGallery = false }
     if (showWallpaper) WallpaperPicker(context, wallpaper) { showWallpaper = false }
+    actionMsg?.let { msg ->
+        MessageActionSheet(
+            msg = msg,
+            canEdit = msg.mine && msg.kind == MsgKind.TEXT && msg.eventId != null,
+            canDelete = msg.mine && msg.eventId != null,
+            onReply = { replyTarget = msg; editTarget = null; actionMsg = null },
+            onForward = { forwardMsg = msg; actionMsg = null },
+            onEdit = { editTarget = msg; replyTarget = null; draft = msg.text; actionMsg = null },
+            onDelete = { deleteTarget = msg; actionMsg = null },
+            onDismiss = { actionMsg = null },
+        )
+    }
+    forwardMsg?.let { msg ->
+        ForwardDialog(msg) { forwardMsg = null }
+    }
+    blockPeer?.let { peer ->
+        val uname = peer.substringBefore(":").removePrefix("@")
+        AlertDialog(
+            onDismissRequest = { blockPeer = null },
+            title = { Text("Engelle") },
+            text = { Text("@$uname engellensin mi? Artık sana istek gönderemez ve kişilerinden çıkar.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    blockPeer = null
+                    scope.launch {
+                        if (Bayx.blockContact(uname)) { toast("@$uname engellendi."); onBack() } else toast("Engellenemedi.")
+                    }
+                }) { Text("Engelle", color = Color(0xFFB4232A)) }
+            },
+            dismissButton = { TextButton(onClick = { blockPeer = null }) { Text("Vazgeç") } },
+        )
+    }
     deleteTarget?.let { target ->
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
@@ -1428,4 +1506,81 @@ private fun AppConfigCard() {
             }
         }
     }
+}
+
+/** Mesaja uzun basınca açılan eylem menüsü: yanıtla, ilet, düzenle, sil. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun MessageActionSheet(
+    msg: ChatMessage,
+    canEdit: Boolean,
+    canDelete: Boolean,
+    onReply: () -> Unit,
+    onForward: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color.White) {
+        Column(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
+            ActionRow(Icons.AutoMirrored.Outlined.Reply, "Yanıtla", onReply)
+            if (msg.kind == MsgKind.TEXT) ActionRow(Icons.AutoMirrored.Outlined.Send, "İlet", onForward)
+            if (canEdit) ActionRow(Icons.Outlined.Edit, "Düzenle", onEdit)
+            if (canDelete) ActionRow(Icons.Outlined.Delete, "Sil", onDelete, tint = Color(0xFFB4232A))
+        }
+    }
+}
+
+@Composable
+private fun ActionRow(icon: ImageVector, label: String, onClick: () -> Unit, tint: Color = Ink) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 24.dp, vertical = 15.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(24.dp))
+        Spacer(Modifier.width(20.dp))
+        Text(label, color = tint, fontSize = 17.sp)
+    }
+}
+
+/** İletme: kişilerden birini seç, metni ona ilet. */
+@Composable
+private fun ForwardDialog(msg: ChatMessage, onDismiss: () -> Unit) {
+    val contacts by Bayx.contacts.collectAsState()
+    val scope = rememberCoroutineScope()
+    val toast = rememberToast()
+    var busy by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("İlet") },
+        text = {
+            if (contacts.friends.isEmpty()) {
+                Text("İletebileceğin bir kişi yok.", color = Muted)
+            } else {
+                androidx.compose.foundation.lazy.LazyColumn(Modifier.heightIn(max = 380.dp)) {
+                    items(contacts.friends, key = { it.userId }) { friend ->
+                        Row(
+                            Modifier.fillMaxWidth().clickable(enabled = !busy) {
+                                busy = true
+                                scope.launch {
+                                    val roomId = Bayx.startDirectChat(friend.userId)
+                                    val ok = roomId != null && Bayx.forwardText(roomId, msg.text)
+                                    busy = false
+                                    toast(if (ok) "${friend.displayName} kişisine iletildi." else "İletilemedi.")
+                                    onDismiss()
+                                }
+                            }.padding(vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Avatar(friend.displayName, 42.dp, url = friend.avatarUrl)
+                            Spacer(Modifier.width(12.dp))
+                            Text(friend.displayName, fontSize = 16.sp, color = Ink)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Kapat") } },
+    )
 }

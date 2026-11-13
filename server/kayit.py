@@ -283,7 +283,7 @@ def _contacts():
 
 def _crec(uid):
     rec = _contacts().setdefault(uid, {})
-    for k in ("friends", "incoming", "outgoing"):
+    for k in ("friends", "incoming", "outgoing", "blocked"):
         rec.setdefault(k, [])
     return rec
 
@@ -306,6 +306,8 @@ def contact_relation(me, other):
         return "incoming"
     if other in rec["outgoing"]:
         return "outgoing"
+    if other in rec["blocked"]:
+        return "blocked"
     return "none"
 
 
@@ -350,7 +352,8 @@ def contact_overview(headers, now):
         })
     incoming = [b for b in (profile_brief(u) for u in rec["incoming"]) if b]
     outgoing = [b for b in (profile_brief(u) for u in rec["outgoing"]) if b]
-    return {"friends": friends, "incoming": incoming, "outgoing": outgoing}
+    blocked = [b for b in (profile_brief(u) for u in rec["blocked"]) if b]
+    return {"friends": friends, "incoming": incoming, "outgoing": outgoing, "blocked": blocked}
 
 
 def contact_target(me, body):
@@ -371,6 +374,11 @@ def contact_request(headers, body):
     other = contact_target(me, body)
     with GIRIS.lock:
         mine, theirs = _crec(me), _crec(other)
+        if me in theirs["blocked"]:
+            # Karşı taraf beni engellemiş: isteği sessizce yut (belli etme).
+            return {"ok": True, "relation": "outgoing"}
+        if other in mine["blocked"]:
+            raise ApiError(400, "ENGELLI", "Bu kullanıcıyı engelledin. Önce engeli kaldır.")
         if other in mine["friends"]:
             return {"ok": True, "relation": "friend"}
         if other in mine["incoming"]:
@@ -414,6 +422,32 @@ def contact_accept(headers, body):
     return {"ok": True, "relation": "friend"}
 
 
+def contact_block(headers, body):
+    me = member_from_token(headers)
+    other = contact_target(me, body)
+    with GIRIS.lock:
+        mine, theirs = _crec(me), _crec(other)
+        for lst in ("friends", "incoming", "outgoing"):
+            if other in mine[lst]:
+                mine[lst].remove(other)
+            if me in theirs[lst]:
+                theirs[lst].remove(me)
+        if other not in mine["blocked"]:
+            mine["blocked"].append(other)
+        GIRIS.save()
+    return {"ok": True, "relation": "blocked"}
+
+
+def contact_unblock(headers, body):
+    me = member_from_token(headers)
+    other = contact_target(me, body)
+    with GIRIS.lock:
+        if other in _crec(me)["blocked"]:
+            _crec(me)["blocked"].remove(other)
+            GIRIS.save()
+    return {"ok": True, "relation": "none"}
+
+
 def contact_reject(headers, body):
     """Geleni reddet, gönderileni geri çek ya da arkadaşlıktan çıkar — hepsi için aynı uç."""
     me = member_from_token(headers)
@@ -435,8 +469,8 @@ def contact_forget(uid):
     with GIRIS.lock:
         _contacts().pop(uid, None)
         for rec in _contacts().values():
-            for lst in ("friends", "incoming", "outgoing"):
-                if uid in rec[lst]:
+            for lst in ("friends", "incoming", "outgoing", "blocked"):
+                if uid in rec.get(lst, []):
                     rec[lst].remove(uid)
         GIRIS.save()
 
@@ -1101,6 +1135,10 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, contact_accept(self.headers, self._body()))
             elif method == "POST" and path == "/bayx/v3/contacts/reject":
                 self._send(200, contact_reject(self.headers, self._body()))
+            elif method == "POST" and path == "/bayx/v3/contacts/block":
+                self._send(200, contact_block(self.headers, self._body()))
+            elif method == "POST" and path == "/bayx/v3/contacts/unblock":
+                self._send(200, contact_unblock(self.headers, self._body()))
             elif method == "POST" and path == "/bayx/v3/register":
                 self._send(200, register_simple(self._body(), self._ip()))
             elif method == "POST" and path == "/bayx/v3/reset/request":

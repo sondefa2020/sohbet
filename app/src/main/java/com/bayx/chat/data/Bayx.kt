@@ -24,6 +24,7 @@ import org.matrix.rustcomponents.sdk.ClientBuilder
 import org.matrix.rustcomponents.sdk.ClientDelegate
 import org.matrix.rustcomponents.sdk.ClientException
 import org.matrix.rustcomponents.sdk.CreateRoomParameters
+import org.matrix.rustcomponents.sdk.EditedContent
 import org.matrix.rustcomponents.sdk.EventOrTransactionId
 import org.matrix.rustcomponents.sdk.EventSendState
 import org.matrix.rustcomponents.sdk.TimelineConfiguration
@@ -1029,6 +1030,20 @@ object Bayx {
         return ok
     }
 
+    suspend fun blockContact(username: String): Boolean {
+        val token = accessToken ?: return false
+        val ok = runCatching { Api.contactBlock(token, username) }.isSuccess
+        if (ok) refreshContacts()
+        return ok
+    }
+
+    suspend fun unblockContact(username: String): Boolean {
+        val token = accessToken ?: return false
+        val ok = runCatching { Api.contactUnblock(token, username) }.isSuccess
+        if (ok) refreshContacts()
+        return ok
+    }
+
     // ------------------------------------------------------------- silme
 
     /** Kendi mesajını herkesten siler. */
@@ -1036,6 +1051,31 @@ object Bayx {
         val timeline = session.timeline ?: return@withContext false
         val id = msg.eventId ?: return@withContext false
         runCatching { timeline.redactEvent(id, null) }.isSuccess
+    }
+
+    /** Bir mesaja alıntılı yanıt gönderir. */
+    suspend fun sendReply(session: ChatSession, text: String, replyTo: EventOrTransactionId): Boolean = withContext(Dispatchers.IO) {
+        val timeline = session.timeline ?: return@withContext false
+        val ok = runCatching { timeline.sendReply(messageEventContentFromMarkdown(text), replyTo) }.isSuccess
+        if (ok) Sounds.play(Sounds.Kind.OUTGOING)
+        ok
+    }
+
+    /** Gönderilmiş kendi mesajını düzenler. */
+    suspend fun editMessage(session: ChatSession, msg: ChatMessage, newText: String): Boolean = withContext(Dispatchers.IO) {
+        val timeline = session.timeline ?: return@withContext false
+        val id = msg.eventId ?: return@withContext false
+        runCatching {
+            timeline.edit(id, EditedContent.RoomMessage(messageEventContentFromMarkdown(newText)))
+        }.isSuccess
+    }
+
+    /** Bir metin mesajını başka bir sohbete iletir. */
+    suspend fun forwardText(targetRoomId: String, text: String): Boolean = withContext(Dispatchers.IO) {
+        val session = openChat(targetRoomId) ?: return@withContext false
+        val ok = runCatching { session.timeline?.send(messageEventContentFromMarkdown("↪ " + text)); true }.getOrDefault(false)
+        closeChat(session)
+        ok
     }
 
     // ------------------------------------------------------------- durum

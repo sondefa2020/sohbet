@@ -769,6 +769,22 @@ fun RequestsScreen(onBack: () -> Unit, onOpenChat: (String) -> Unit) {
                         RequestRow(m, incoming = false, onAccept = {}, onReject = { handle(u, false, m.displayName) })
                     }
                 }
+                if (contacts.blocked.isNotEmpty()) {
+                    item { SectionLabel("Engellenenler (${contacts.blocked.size})") }
+                    items(contacts.blocked, key = { "blk-" + it.userId }) { m ->
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Avatar(m.displayName, 48.dp)
+                            Spacer(Modifier.width(14.dp))
+                            Text(m.displayName, color = Ink, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                            TextButton(onClick = {
+                                scope.launch { if (Bayx.unblockContact(m.userId.substringBefore(":").removePrefix("@"))) toast("Engel kaldırıldı.") }
+                            }) { Text("Engeli kaldır") }
+                        }
+                    }
+                }
             }
         }
     }

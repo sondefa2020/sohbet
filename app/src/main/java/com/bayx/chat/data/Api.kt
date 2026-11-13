@@ -103,7 +103,7 @@ object Api {
 
     // ---------------------------------------------------------------- kişiler
 
-    data class Contacts(val friends: List<Member>, val incoming: List<Member>, val outgoing: List<Member>)
+    data class Contacts(val friends: List<Member>, val incoming: List<Member>, val outgoing: List<Member>, val blocked: List<Member> = emptyList())
     data class ContactFind(val found: Boolean, val userId: String, val username: String, val displayName: String, val relation: String)
 
     private fun briefList(json: JSONObject, key: String): List<Member> {
@@ -124,7 +124,7 @@ object Api {
 
     suspend fun contacts(token: String): Contacts = io {
         val json = request("POST", "/bayx/v3/contacts", JSONObject(), token)
-        Contacts(briefList(json, "friends"), briefList(json, "incoming"), briefList(json, "outgoing"))
+        Contacts(briefList(json, "friends"), briefList(json, "incoming"), briefList(json, "outgoing"), briefList(json, "blocked"))
     }
 
     suspend fun contactFind(token: String, username: String): ContactFind = io {
@@ -143,6 +143,8 @@ object Api {
     }
     suspend fun contactAccept(token: String, username: String) = io { request("POST", "/bayx/v3/contacts/accept", JSONObject().put("username", username), token); Unit }
     suspend fun contactReject(token: String, username: String) = io { request("POST", "/bayx/v3/contacts/reject", JSONObject().put("username", username), token); Unit }
+    suspend fun contactBlock(token: String, username: String) = io { request("POST", "/bayx/v3/contacts/block", JSONObject().put("username", username), token); Unit }
+    suspend fun contactUnblock(token: String, username: String) = io { request("POST", "/bayx/v3/contacts/unblock", JSONObject().put("username", username), token); Unit }
 
     /** Kod ve (varsa) bağlantı döndüren uçlar: web kodu, davet. */
     data class CodeReply(val code: String, val url: String)
