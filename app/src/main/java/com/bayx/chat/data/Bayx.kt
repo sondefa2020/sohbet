@@ -1056,7 +1056,8 @@ object Bayx {
     /** Bir mesaja alıntılı yanıt gönderir. */
     suspend fun sendReply(session: ChatSession, text: String, replyTo: EventOrTransactionId): Boolean = withContext(Dispatchers.IO) {
         val timeline = session.timeline ?: return@withContext false
-        val ok = runCatching { timeline.sendReply(messageEventContentFromMarkdown(text), replyTo) }.isSuccess
+        val eventId = (replyTo as? EventOrTransactionId.EventId)?.eventId ?: return@withContext false
+        val ok = runCatching { timeline.sendReply(messageEventContentFromMarkdown(text), eventId) }.isSuccess
         if (ok) Sounds.play(Sounds.Kind.OUTGOING)
         ok
     }
