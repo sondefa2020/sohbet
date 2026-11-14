@@ -190,7 +190,7 @@ private fun SecretListScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onOpenC
                 IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Geri", tint = Color.White) }
                 Column(Modifier.weight(1f)) {
                     Text("Gizli sohbetler", color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.ExtraBold)
-                    Text("Ekran görüntüsü alınamaz · mesajlar kaybolur", color = Color(0xFFCFC6E8), fontSize = 12.5.sp)
+                    Text(t("Ekran görüntüsü alınamaz · mesajlar kaybolur"), color = Color(0xFFCFC6E8), fontSize = 12.5.sp)
                 }
                 TextButton(onClick = { SecretLock.lock(); onBack() }) { Text("Kilitle", color = SecretAccent) }
             }
@@ -239,7 +239,7 @@ private fun SecretListScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onOpenC
             contentColor = Color(0xFF1B1530),
             modifier = Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(20.dp),
             icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-            text = { Text("Gizli sohbet başlat", fontWeight = FontWeight.Bold) },
+            text = { Text(t("Gizli sohbet başlat"), fontWeight = FontWeight.Bold) },
         )
     }
 
@@ -253,7 +253,7 @@ private fun SecretListScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onOpenC
                 scope.launch {
                     val roomId = Bayx.createSecretChat(member.userId, lifetime)
                     creating = false
-                    if (roomId != null) onOpenChat(roomId) else toast("Gizli sohbet açılamadı. Tekrar dene.")
+                    if (roomId != null) onOpenChat(roomId) else toast(t("Gizli sohbet açılamadı. Tekrar dene."))
                 }
             },
         )
@@ -280,7 +280,7 @@ private fun NewSecretDialog(me: AuthState.LoggedIn, onDismiss: () -> Unit, onCre
         title = { Text("Yeni gizli sohbet") },
         text = {
             Column {
-                Text("Mesajlar şu süre sonra kaybolsun:", fontWeight = FontWeight.SemiBold)
+                Text(t("Mesajlar şu süre sonra kaybolsun:"), fontWeight = FontWeight.SemiBold)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 8.dp)) {
                     lifetimes.forEach { value ->
                         FilterChip(
@@ -298,7 +298,7 @@ private fun NewSecretDialog(me: AuthState.LoggedIn, onDismiss: () -> Unit, onCre
                 when {
                     error != null -> Text(error ?: "", color = Muted)
                     members == null -> CircularProgressIndicator(color = Blue)
-                    members!!.isEmpty() -> Text("Başka üye yok.", color = Muted)
+                    members!!.isEmpty() -> Text(t("Başka üye yok."), color = Muted)
                     else -> Column(Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState())) {
                         members!!.forEach { member ->
                             Row(
@@ -320,9 +320,9 @@ private fun NewSecretDialog(me: AuthState.LoggedIn, onDismiss: () -> Unit, onCre
             }
         },
         confirmButton = {
-            TextButton(enabled = selected != null, onClick = { selected?.let { onCreate(it, lifetime) } }) { Text("Başlat") }
+            TextButton(enabled = selected != null, onClick = { selected?.let { onCreate(it, lifetime) } }) { Text(t("Başlat")) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Vazgeç") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(t("Vazgeç")) } },
     )
 }
 
@@ -339,7 +339,7 @@ fun MediaGalleryDialog(session: ChatSession, onDismiss: () -> Unit) {
         title = { Text("Medya") },
         text = {
             if (media.isEmpty()) {
-                Text("Bu sohbette henüz fotoğraf ya da video yok.", color = Muted)
+                Text(t("Bu sohbette henüz fotoğraf ya da video yok."), color = Muted)
             } else {
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(3),

@@ -87,7 +87,7 @@ private fun LoginScreen(onRegister: () -> Unit, onForgot: () -> Unit) {
         LogoMark(126.dp)
         Spacer(Modifier.height(14.dp))
         Text("Tayfa", color = Ink, fontSize = 44.sp, fontWeight = FontWeight.ExtraBold)
-        Text("Özel ve uçtan uca şifreli sohbet", color = Muted, fontSize = 16.sp)
+        Text(t("Özel ve uçtan uca şifreli sohbet"), color = Muted, fontSize = 16.sp)
         Spacer(Modifier.height(40.dp))
         PillField(user, { user = it.lowercase().trim() }, t("Kullanıcı adı"), Icons.Outlined.Person)
         Spacer(Modifier.height(16.dp))
@@ -108,9 +108,9 @@ private fun LoginScreen(onRegister: () -> Unit, onForgot: () -> Unit) {
         }
         Spacer(Modifier.height(12.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onRegister) { Text("Hesap oluştur", fontSize = 15.sp) }
+            TextButton(onClick = onRegister) { Text(t("Hesap oluştur"), fontSize = 15.sp) }
             Text("·", color = Muted)
-            TextButton(onClick = onForgot) { Text("Şifremi unuttum", fontSize = 15.sp) }
+            TextButton(onClick = onForgot) { Text(t("Şifremi unuttum"), fontSize = 15.sp) }
         }
         Spacer(Modifier.height(24.dp))
     }
@@ -133,9 +133,9 @@ private fun RegisterScreen(onBack: () -> Unit) {
         }
         LogoMark(80.dp)
         Spacer(Modifier.height(10.dp))
-        Text("Hesap oluştur", color = Ink, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
+        Text(t("Hesap oluştur"), color = Ink, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
         Spacer(Modifier.height(6.dp))
-        Text("Hemen giriş yaparsın. E-posta isteğe bağlı; şifreni unutursan sıfırlaman için işine yarar.", color = Muted, fontSize = 15.sp, textAlign = TextAlign.Center)
+        Text(t("Hemen giriş yaparsın. E-posta isteğe bağlı; şifreni unutursan sıfırlaman için işine yarar."), color = Muted, fontSize = 15.sp, textAlign = TextAlign.Center)
         Spacer(Modifier.height(26.dp))
         PillField(user, { user = it.lowercase().trim().take(20) }, t("Kullanıcı adı"), Icons.Outlined.Person)
         Spacer(Modifier.height(14.dp))

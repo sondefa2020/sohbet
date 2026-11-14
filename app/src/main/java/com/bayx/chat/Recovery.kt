@@ -28,7 +28,7 @@ fun RecoveryDialogs() {
     val state by Bayx.recoveryState.collectAsState()
     val prompt by Bayx.recoveryPrompt.collectAsState()
     val prefs = remember { context.getSharedPreferences("tayfa_yedek", Context.MODE_PRIVATE) }
-    // "Şimdi değil" bir kez seçilince kalıcı olarak hatırlanır; sonra yalnızca Ayarlar'dan açılır.
+    // t("Şimdi değil") bir kez seçilince kalıcı olarak hatırlanır; sonra yalnızca Ayarlar'dan açılır.
     var dismissed by remember { mutableStateOf(prefs.getBoolean("sorma", false)) }
 
     // 1) Yeni anahtar: kullanıcı kaydettiğini onaylayana kadar kapanmaz.
@@ -152,7 +152,7 @@ fun RecoveryDialogs() {
     }
 }
 
-/** Ayarlardaki "Mesaj yedeği" satırının durum yazısı. */
+/** Ayarlardaki t("Mesaj yedeği") satırının durum yazısı. */
 fun recoveryLabel(state: RecoveryState): String = when (state) {
     RecoveryState.ENABLED -> t("Açık")
     RecoveryState.INCOMPLETE -> t("Anahtar bekleniyor")

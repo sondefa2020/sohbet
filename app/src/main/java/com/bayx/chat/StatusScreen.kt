@@ -14,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -229,7 +230,7 @@ private fun StatusComposer(onDismiss: () -> Unit, onShare: (String, String) -> U
                     modifier = Modifier.fillMaxWidth().padding(24.dp),
                     decorationBox = { inner ->
                         if (text.isEmpty()) {
-                            Text("Ne düşünüyorsun?", color = Color.White.copy(alpha = 0.7f), fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                            Text(t("Ne düşünüyorsun?"), color = Color.White.copy(alpha = 0.7f), fontSize = 22.sp, fontWeight = FontWeight.Bold)
                         }
                         inner()
                     },
@@ -253,12 +254,12 @@ private fun StatusComposer(onDismiss: () -> Unit, onShare: (String, String) -> U
                 Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.End,
             ) {
-                TextButton(onClick = onDismiss) { Text("Vazgeç") }
+                TextButton(onClick = onDismiss) { Text(t("Vazgeç")) }
                 Spacer(Modifier.width(4.dp))
                 Button(
                     onClick = { if (text.isNotBlank()) onShare(text.trim(), StatusBgColors[bgIndex]) },
                     colors = ButtonDefaults.buttonColors(containerColor = Blue),
-                ) { Text("Paylaş") }
+                ) { Text(t("Paylaş")) }
             }
         }
     }
@@ -273,12 +274,36 @@ private fun StatusViewer(
     onDelete: (Api.StatusItem) -> Unit,
 ) {
     var index by remember(user.userId) { mutableStateOf(0) }
+    var showViewers by remember { mutableStateOf(false) }
     val item = user.items.getOrNull(index) ?: run { onClose(); return }
 
-    LaunchedEffect(index) {
+    LaunchedEffect(index, showViewers) {
         onSeen(item)
+        if (showViewers) return@LaunchedEffect  // liste açıkken otomatik ilerleme durur
         delay(5000)
         if (index < user.items.size - 1) index++ else onClose()
+    }
+    if (showViewers) {
+        AlertDialog(
+            onDismissRequest = { showViewers = false },
+            title = { Text(tf("Görenler (%s)", item.viewers.size)) },
+            text = {
+                if (item.viewers.isEmpty()) {
+                    Text(t("Henüz kimse görmedi."), color = Muted)
+                } else {
+                    Column {
+                        item.viewers.forEach { (_, name) ->
+                            Row(Modifier.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Avatar(name, 34.dp)
+                                Spacer(Modifier.width(10.dp))
+                                Text(name, color = Ink, fontSize = 15.sp)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showViewers = false }) { Text(t("Kapat")) } },
+        )
     }
 
     val photo by produceState<android.graphics.Bitmap?>(initialValue = null, item.id) {
@@ -317,7 +342,14 @@ private fun StatusViewer(
                         Text(formatTime(item.time), color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp)
                     }
                     if (mine) {
-                        IconButton(onClick = { onDelete(item) }) { Icon(Icons.Outlined.Delete, "Sil", tint = Color.White) }
+                        IconButton(onClick = { showViewers = true }) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Outlined.Visibility, t("Görenler"), tint = Color.White)
+                                Spacer(Modifier.width(3.dp))
+                                Text("${item.viewers.size}", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        IconButton(onClick = { onDelete(item) }) { Icon(Icons.Outlined.Delete, t("Sil"), tint = Color.White) }
                     }
                     IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Kapat", tint = Color.White) }
                 }

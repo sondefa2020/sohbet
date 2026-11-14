@@ -294,7 +294,7 @@ fun OfflineScreen() {
     ) {
         Image(painterResource(R.drawable.ic_logo), contentDescription = null, modifier = Modifier.size(80.dp))
         Spacer(Modifier.height(16.dp))
-        Text("Bağlantı kurulamadı", color = Ink, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Text(t("Bağlantı kurulamadı"), color = Ink, fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
         Text(
             t("Oturumun açık, ama sunucuya şu an ulaşılamıyor. İnternet bağlantını kontrol edip tekrar dene."),
@@ -307,7 +307,7 @@ fun OfflineScreen() {
         TextButton(enabled = !busy, onClick = {
             busy = true
             scope.launch { Bayx.logout() }
-        }) { Text("Çıkış yap") }
+        }) { Text(t("Çıkış yap")) }
     }
 }
 
@@ -383,7 +383,7 @@ fun ChatListScreen(
         scope.launch {
             val error = Bayx.sendContactRequest(username)
             if (error == null) {
-                toast("İstek gönderildi.")
+                toast(t("İstek gönderildi."))
                 findResult = null
                 findText = ""
             } else {
@@ -507,7 +507,7 @@ fun ChatListScreen(
                                 ) {
                                     Icon(Icons.Outlined.Archive, null, tint = SoftBlue, modifier = Modifier.size(22.dp))
                                     Spacer(Modifier.width(18.dp))
-                                    Text("Arşivlenenler", color = Ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                                    Text(t("Arşivlenenler"), color = Ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                                     Text("$archivedCount", color = SoftBlue, fontSize = 14.sp)
                                 }
                             }
@@ -543,7 +543,7 @@ fun ChatListScreen(
                                         value = findText,
                                         onValueChange = { findText = it.lowercase().trim(); findResult = null },
                                         singleLine = true,
-                                        placeholder = { Text("Kullanıcı adıyla kişi bul", color = Muted) },
+                                        placeholder = { Text(t("Kullanıcı adıyla kişi bul"), color = Muted) },
                                         leadingIcon = { Icon(Icons.Outlined.PersonSearch, contentDescription = null, tint = Muted) },
                                         trailingIcon = {
                                             TextButton(onClick = { doFind() }, enabled = findText.isNotBlank() && !finding) { Text("Bul") }
@@ -602,9 +602,9 @@ fun ChatListScreen(
                             TextButton(
                                 onClick = { showNewGroup = true },
                                 modifier = Modifier.padding(horizontal = 12.dp),
-                            ) { Text("+ Yeni grup oluştur", fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
+                            ) { Text(t("+ Yeni grup oluştur"), fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
                             if (groups.isEmpty()) {
-                                EmptyHint("Henüz grup yok.")
+                                EmptyHint(t("Henüz grup yok."))
                             } else {
                                 LazyColumn {
                                     items(groups, key = { it.id }) { chat -> ChatRow(chat, onClick = { onOpenChat(chat.id) }) }
@@ -648,7 +648,7 @@ fun ChatListScreen(
                 showNewGroup = false
                 scope.launch {
                     val roomId = Bayx.createGroup(name, ids)
-                    if (roomId != null) onOpenChat(roomId) else toast("Grup oluşturulamadı. Tekrar dene.")
+                    if (roomId != null) onOpenChat(roomId) else toast(t("Grup oluşturulamadı. Tekrar dene."))
                 }
             },
         )
@@ -741,11 +741,11 @@ private fun ArchivedScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Geri", tint = Ink) }
-            Text("Arşivlenenler", color = Ink, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Text(t("Arşivlenenler"), color = Ink, fontSize = 22.sp, fontWeight = FontWeight.Bold)
         }
         if (rooms.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Arşivlenen sohbet yok.", color = Muted, fontSize = 15.sp)
+                Text(t("Arşivlenen sohbet yok."), color = Muted, fontSize = 15.sp)
             }
         } else {
             LazyColumn {
@@ -776,12 +776,12 @@ private fun NewGroupDialog(members: List<Member>, onDismiss: () -> Unit, onCreat
                     value = name,
                     onValueChange = { name = it.take(40) },
                     singleLine = true,
-                    label = { Text("Grup adı") },
+                    label = { Text(t("Grup adı")) },
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(12.dp))
                 if (members.isEmpty()) {
-                    Text("Önce kişi ekle; gruba yalnızca kişilerini davet edebilirsin.", color = Muted)
+                    Text(t("Önce kişi ekle; gruba yalnızca kişilerini davet edebilirsin."), color = Muted)
                 } else {
                     Column(Modifier.heightIn(max = 280.dp).verticalScroll(rememberScrollState())) {
                         members.forEach { member ->
@@ -807,9 +807,9 @@ private fun NewGroupDialog(members: List<Member>, onDismiss: () -> Unit, onCreat
             TextButton(
                 enabled = name.isNotBlank() && selected.isNotEmpty(),
                 onClick = { onCreate(name.trim(), selected.toList()) },
-            ) { Text("Oluştur") }
+            ) { Text(t("Oluştur")) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Vazgeç") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(t("Vazgeç")) } },
     )
 }
 
@@ -918,10 +918,10 @@ private fun FindResultCard(r: Api.ContactFind, onRequest: () -> Unit, onOpen: (S
             }
             when (r.relation) {
                 "friend" -> Button(onClick = { onOpen(r.userId) }, modifier = Modifier.height(40.dp)) { Text("Sohbet") }
-                "outgoing" -> Text("İstek gönderildi", color = Muted, fontSize = 13.sp)
+                "outgoing" -> Text(t("İstek gönderildi"), color = Muted, fontSize = 13.sp)
                 "incoming" -> Button(onClick = onRequest, modifier = Modifier.height(40.dp)) { Text("Kabul et") }
                 "self" -> Text("Bu sensin", color = Muted, fontSize = 13.sp)
-                else -> Button(onClick = onRequest, modifier = Modifier.height(40.dp)) { Text("İstek gönder") }
+                else -> Button(onClick = onRequest, modifier = Modifier.height(40.dp)) { Text(t("İstek gönder")) }
             }
         }
     }
@@ -948,7 +948,7 @@ fun RequestsScreen(onBack: () -> Unit, onOpenChat: (String) -> Unit) {
     Column(Modifier.fillMaxSize().background(PageBrush).systemBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Geri", tint = Ink) }
-            Text("Arkadaş istekleri", color = Ink, fontSize = 21.sp, fontWeight = FontWeight.ExtraBold)
+            Text(t("Arkadaş istekleri"), color = Ink, fontSize = 21.sp, fontWeight = FontWeight.ExtraBold)
         }
         if (contacts.incoming.isEmpty() && contacts.outgoing.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -984,8 +984,8 @@ fun RequestsScreen(onBack: () -> Unit, onOpenChat: (String) -> Unit) {
                             Spacer(Modifier.width(14.dp))
                             Text(m.displayName, color = Ink, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                             TextButton(onClick = {
-                                scope.launch { if (Bayx.unblockContact(m.userId.substringBefore(":").removePrefix("@"))) toast("Engel kaldırıldı.") }
-                            }) { Text("Engeli kaldır") }
+                                scope.launch { if (Bayx.unblockContact(m.userId.substringBefore(":").removePrefix("@"))) toast(t("Engel kaldırıldı.")) }
+                            }) { Text(t("Engeli kaldır")) }
                         }
                     }
                 }
@@ -1010,7 +1010,7 @@ private fun RequestRow(member: Member, incoming: Boolean, onAccept: () -> Unit, 
             TextButton(onClick = onReject) { Text("Yok", color = Muted) }
             Button(onClick = onAccept, modifier = Modifier.height(40.dp)) { Text("Ekle") }
         } else {
-            TextButton(onClick = onReject) { Text("Geri çek", color = Muted) }
+            TextButton(onClick = onReject) { Text(t("Geri çek"), color = Muted) }
         }
     }
 }

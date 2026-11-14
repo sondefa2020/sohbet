@@ -139,7 +139,7 @@ fun ChatScreen(roomId: String, onBack: () -> Unit, onGroupInfo: (String) -> Unit
                 IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Geri", tint = Ink) }
             }
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                if (failed) Text("Sohbet açılamadı.", color = Muted) else CircularProgressIndicator(color = Blue)
+                if (failed) Text(t("Sohbet açılamadı."), color = Muted) else CircularProgressIndicator(color = Blue)
             }
         }
     } else {
@@ -193,12 +193,12 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
     val scope = rememberCoroutineScope()
     val toast = rememberToast()
     val context = LocalContext.current
-    val askCallPermissions = rememberCallPermissions { toast("Arama için mikrofon (ve görüntülü aramada kamera) izni gerekli.") }
+    val askCallPermissions = rememberCallPermissions { toast(t("Arama için mikrofon (ve görüntülü aramada kamera) izni gerekli.")) }
     fun placeCall(video: Boolean) {
         val peer = partner
         when {
-            !session.isDirect -> toast("Grup araması henüz yok; birebir sohbetten arayabilirsin.")
-            peer == null -> toast("Bu sohbette arama yapılamıyor.")
+            !session.isDirect -> toast(t("Grup araması henüz yok; birebir sohbetten arayabilirsin."))
+            peer == null -> toast(t("Bu sohbette arama yapılamıyor."))
             else -> askCallPermissions(video) { Calls.startCall(peer, title.ifBlank { peer }, video) }
         }
     }
@@ -236,7 +236,7 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
             recordSeconds = 0
             recording = true
         } else {
-            toast("Kayıt başlatılamadı.")
+            toast(t("Kayıt başlatılamadı."))
         }
     }
 
@@ -392,10 +392,10 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
             ChipIcon(Icons.Outlined.Vibration, t("Titreşim gönder"), size = 38.dp, tint = Color(0xFF9A6236)) {
                 val now = System.currentTimeMillis()
                 if (now - lastNudge < 5_000) {
-                    toast("Biraz bekle; titreşim 5 saniyede bir gönderilebilir.")
+                    toast(t("Biraz bekle; titreşim 5 saniyede bir gönderilebilir."))
                 } else {
                     lastNudge = now
-                    scope.launch { if (!Bayx.sendNudge(session)) toast("Titreşim gönderilemedi.") }
+                    scope.launch { if (!Bayx.sendNudge(session)) toast(t("Titreşim gönderilemedi.")) }
                 }
             }
             Spacer(Modifier.width(6.dp))
@@ -509,7 +509,7 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
                 onEmoticon = { emo -> draft = (draft.trimEnd() + " " + emo.code + " ").trimStart() },
                 onEffect = { name ->
                     showEmoji = false
-                    scope.launch { if (!Bayx.sendEffect(session, name)) toast("Efekt gönderilemedi.") }
+                    scope.launch { if (!Bayx.sendEffect(session, name)) toast(t("Efekt gönderilemedi.")) }
                 },
             )
         }
@@ -527,7 +527,7 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
                     val result = recorder.stop()
                     recording = false
                     if (result == null) {
-                        toast("Kayıt çok kısa.")
+                        toast(t("Kayıt çok kısa."))
                     } else {
                         sendMedia(t("Sesli mesaj gönderilemedi.")) {
                             Bayx.sendVoice(session, result.bytes, result.mime, result.durationMs, result.waveform)
@@ -610,7 +610,7 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
                                         reply != null && reply.eventId != null -> Bayx.sendReply(session, text, reply.eventId)
                                         else -> Bayx.sendText(session, text)
                                     }
-                                    if (!ok) toast("Mesaj gönderilemedi.")
+                                    if (!ok) toast(t("Mesaj gönderilemedi."))
                                 }
                             } else if (
                                 ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
@@ -647,7 +647,7 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
                     cameraFile = file
                     takePicture.launch(FileProvider.getUriForFile(context, context.packageName + ".dosya", file))
                 }.isSuccess
-                if (!launched) toast("Kamera açılamadı.")
+                if (!launched) toast(t("Kamera açılamadı."))
             },
             onVideo = {
                 showAttach = false
@@ -747,13 +747,13 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
                     }
                 }) { Text("Engelle", color = Color(0xFFB4232A)) }
             },
-            dismissButton = { TextButton(onClick = { blockPeer = null }) { Text("Vazgeç") } },
+            dismissButton = { TextButton(onClick = { blockPeer = null }) { Text(t("Vazgeç")) } },
         )
     }
     deleteTarget?.let { target ->
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
-            title = { Text("Mesajı sil") },
+            title = { Text(t("Mesajı sil")) },
             text = { Text("Bu mesaj herkesten silinsin mi? Sohbette \"Mesaj silindi\" yazar.") },
             confirmButton = {
                 TextButton(onClick = {
@@ -761,7 +761,7 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
                     scope.launch { if (!Bayx.deleteMessage(session, target)) toast("Mesaj silinemedi.") }
                 }) { Text("Herkesten sil", color = Color(0xFFA32117)) }
             },
-            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("Vazgeç") } },
+            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text(t("Vazgeç")) } },
         )
     }
 }
@@ -771,7 +771,7 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
 private fun EmojiPanel(onEmoticon: (Emo) -> Unit, onEffect: (String) -> Unit) {
     Surface(color = Color.White, shadowElevation = 6.dp, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-            Text("İfadeler", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            Text(t("İfadeler"), color = Muted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(6.dp))
             Emo.entries.chunked(7).forEach { row ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
@@ -784,7 +784,7 @@ private fun EmojiPanel(onEmoticon: (Emo) -> Unit, onEffect: (String) -> Unit) {
                 }
             }
             Spacer(Modifier.height(8.dp))
-            Text("Efektler (karşı tarafta da oynar)", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            Text(t("Efektler (karşı tarafta da oynar)"), color = Muted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(6.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Bayx.EFFECTS.forEach { name ->
@@ -1158,7 +1158,7 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
                         ) {
                             Text("♛", color = Color(0xFFF2C14E), fontSize = 12.sp)
                             Spacer(Modifier.width(3.dp))
-                            Text("Yönetici", color = Color(0xFFF2C14E), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text(t("Yönetici"), color = Color(0xFFF2C14E), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -1197,13 +1197,14 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
         SoftCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(horizontal = 18.dp, vertical = 4.dp)) {
                 SettingRow(Icons.Outlined.Person, t("Hesabım")) {
-                    info = "Kullanıcı adı: @$username\nSunucu: ${Api.SERVER_NAME}\n\nŞifren yok: hesabına kurtarma kodu, " +
-                        t("başka cihazdan giriş kodu ya da yöneticinin giriş bağlantısıyla girersin.")
+                    info = tf(
+                        "Kullanıcı adı: @%s\nSunucu: %s\n\nGiriş için kullanıcı adın ve şifren yeterli. Şifreni unutursan giriş ekranındaki Şifremi unuttum bağlantısıyla e-postana kod gönderilir.",
+                        username, Api.SERVER_NAME,
+                    )
                 }
                 HorizontalDivider(color = Line)
                 SettingRow(Icons.Outlined.Lock, t("Gizlilik ve Güvenlik")) {
-                    info = t("Mesajların uçtan uca şifrelidir. Bu cihazdaki oturum ve sohbet verileri şifreli saklanır; gelen ") +
-                        t("fotoğraf, video ve sesler galeriye kaydedilmez. Çıkış yaptığında bu cihazdaki her şey silinir.")
+                    info = t("Mesajların uçtan uca şifrelidir. Bu cihazdaki oturum ve sohbet verileri şifreli saklanır; gelen fotoğraf, video ve sesler galeriye kaydedilmez. Çıkış yaptığında bu cihazdaki her şey silinir.")
                 }
                 HorizontalDivider(color = Line)
                 SettingRow(Icons.Outlined.Notifications, "Bildirimler") { openNotificationSettings(context) }
@@ -1256,8 +1257,8 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
                         when {
                             st == null -> Unit
                             st.email.isBlank() -> Text("Ekle", color = SoftBlue, fontSize = 14.sp)
-                            st.verified -> Text("Doğrulandı ✓", color = Color(0xFF2E9E5B), fontSize = 13.sp)
-                            else -> Text("Doğrula", color = Color(0xFFE5872A), fontSize = 13.sp)
+                            st.verified -> Text(t("Doğrulandı ✓"), color = Color(0xFF2E9E5B), fontSize = 13.sp)
+                            else -> Text(t("Doğrula"), color = Color(0xFFE5872A), fontSize = 13.sp)
                         }
                     },
                 ) { showEmail = true }
@@ -1300,7 +1301,7 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
             onSave = { address ->
                 withToken { token -> emailState = Api.emailSet(token, address) }
             },
-            onResend = { withToken { token -> emailState = Api.emailResend(token); toast("Doğrulama e-postası yeniden gönderildi.") } },
+            onResend = { withToken { token -> emailState = Api.emailResend(token); toast(t("Doğrulama e-postası yeniden gönderildi.")) } },
             onRemove = { withToken { token -> emailState = Api.emailSet(token, "") } },
         )
     }
@@ -1409,9 +1410,9 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
     if (confirmLogout) {
         AlertDialog(
             onDismissRequest = { if (!loggingOut) confirmLogout = false },
-            title = { Text("Çıkış yap") },
+            title = { Text(t("Çıkış yap")) },
             text = {
-                Text("Oturumun kapatılacak ve bu cihazdaki tüm mesajlar, anahtarlar ve önbellek silinecek. Devam edilsin mi?")
+                Text(t("Oturumun kapatılacak ve bu cihazdaki tüm mesajlar, anahtarlar ve önbellek silinecek. Devam edilsin mi?"))
             },
             confirmButton = {
                 TextButton(enabled = !loggingOut, onClick = {
@@ -1420,7 +1421,7 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
                 }) { Text(if (loggingOut) t("Çıkış yapılıyor…") else t("Çıkış yap")) }
             },
             dismissButton = {
-                TextButton(enabled = !loggingOut, onClick = { confirmLogout = false }) { Text("Vazgeç") }
+                TextButton(enabled = !loggingOut, onClick = { confirmLogout = false }) { Text(t("Vazgeç")) }
             },
         )
     }
@@ -1491,7 +1492,7 @@ fun AdminScreen(me: AuthState.LoggedIn, onBack: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Geri", tint = Ink) }
-            Text("Yönetim", color = Ink, fontSize = 21.sp, fontWeight = FontWeight.ExtraBold)
+            Text(t("Yönetim"), color = Ink, fontSize = 21.sp, fontWeight = FontWeight.ExtraBold)
         }
         val current = data
         when {
@@ -1512,7 +1513,7 @@ fun AdminScreen(me: AuthState.LoggedIn, onBack: () -> Unit) {
                     item {
                         Surface(shape = RoundedCornerShape(20.dp), color = Color.White, shadowElevation = 3.dp) {
                             Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                                Text("Üye sayısı", color = Muted, fontSize = 13.sp)
+                                Text(t("Üye sayısı"), color = Muted, fontSize = 13.sp)
                                 Text(tf("%s / %s kişi", current.count, current.max), color = Ink, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
                                 Spacer(Modifier.height(8.dp))
                                 LinearProgressIndicator(
@@ -1536,7 +1537,7 @@ fun AdminScreen(me: AuthState.LoggedIn, onBack: () -> Unit) {
                             value = query,
                             onValueChange = { query = it },
                             singleLine = true,
-                            placeholder = { Text("Üye ara", color = Muted) },
+                            placeholder = { Text(t("Üye ara"), color = Muted) },
                             leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null, tint = Muted) },
                             shape = RoundedCornerShape(20.dp),
                             modifier = Modifier.fillMaxWidth(),
@@ -1549,9 +1550,9 @@ fun AdminScreen(me: AuthState.LoggedIn, onBack: () -> Unit) {
                                 MemberHeader(member)
                                 if (member.userId != me.userId) {
                                     Row {
-                                        TextButton(enabled = !busy, onClick = { resetFor = member }) { Text("Şifre sıfırla") }
+                                        TextButton(enabled = !busy, onClick = { resetFor = member }) { Text(t("Şifre sıfırla")) }
                                         TextButton(enabled = !busy, onClick = { removeFor = member }) {
-                                            Text("Hesabı kapat", color = Color(0xFFA32117))
+                                            Text(t("Hesabı kapat"), color = Color(0xFFA32117))
                                         }
                                     }
                                 }
@@ -1567,7 +1568,7 @@ fun AdminScreen(me: AuthState.LoggedIn, onBack: () -> Unit) {
         var newPassword by remember(member.userId) { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { resetFor = null },
-            title = { Text("Şifre sıfırla") },
+            title = { Text(t("Şifre sıfırla")) },
             text = {
                 Column {
                     Text(tf("%s için yeni bir şifre belirle. Açık oturumları kapatılır; bu şifreyi kendisine ilet.", member.displayName))
@@ -1576,7 +1577,7 @@ fun AdminScreen(me: AuthState.LoggedIn, onBack: () -> Unit) {
                         value = newPassword,
                         onValueChange = { newPassword = it },
                         singleLine = true,
-                        label = { Text("Yeni şifre (en az 8 karakter)") },
+                        label = { Text(t("Yeni şifre (en az 8 karakter)")) },
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
@@ -1587,14 +1588,14 @@ fun AdminScreen(me: AuthState.LoggedIn, onBack: () -> Unit) {
                     resetFor = null
                 }) { Text("Kaydet") }
             },
-            dismissButton = { TextButton(onClick = { resetFor = null }) { Text("Vazgeç") } },
+            dismissButton = { TextButton(onClick = { resetFor = null }) { Text(t("Vazgeç")) } },
         )
     }
 
     removeFor?.let { member ->
         AlertDialog(
             onDismissRequest = { removeFor = null },
-            title = { Text("Hesabı kapat") },
+            title = { Text(t("Hesabı kapat")) },
             text = { Text(tf("%s üyelikten çıkarılacak ve hesabı kapatılacak. Bu işlem geri alınamaz.", member.displayName)) },
             confirmButton = {
                 TextButton(onClick = {
@@ -1602,7 +1603,7 @@ fun AdminScreen(me: AuthState.LoggedIn, onBack: () -> Unit) {
                     removeFor = null
                 }) { Text("Kapat", color = Color(0xFFA32117)) }
             },
-            dismissButton = { TextButton(onClick = { removeFor = null }) { Text("Vazgeç") } },
+            dismissButton = { TextButton(onClick = { removeFor = null }) { Text(t("Vazgeç")) } },
         )
     }
 }
@@ -1621,7 +1622,7 @@ private fun MemberHeader(member: Member) {
             Text(member.displayName, color = Ink, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(member.userId.substringBefore(":").removePrefix("@"), color = Muted, fontSize = 13.sp)
         }
-        if (member.admin) Text("Yönetici", color = Blue, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        if (member.admin) Text(t("Yönetici"), color = Blue, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -1648,7 +1649,7 @@ private fun TextInputDialog(
             )
         },
         confirmButton = { TextButton(onClick = { onSave(value) }) { Text("Kaydet") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Vazgeç") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(t("Vazgeç")) } },
     )
 }
 
@@ -1688,11 +1689,11 @@ private fun EmailDialog(
         text = {
             Column {
                 when {
-                    status == null -> Text("E-posta durumu yükleniyor…", color = Muted)
-                    !status.mailReady -> Text("Sunucuda e-posta gönderimi henüz ayarlı değil. Yönetici ayarladığında kullanabilirsin.", color = Muted, fontSize = 13.5.sp)
-                    status.email.isNotBlank() && status.verified -> Text("E-postan doğrulandı. Şifreni unutursan bu adrese sıfırlama kodu gönderilir.", color = Muted, fontSize = 13.5.sp)
+                    status == null -> Text(t("E-posta durumu yükleniyor…"), color = Muted)
+                    !status.mailReady -> Text(t("Sunucuda e-posta gönderimi henüz ayarlı değil. Yönetici ayarladığında kullanabilirsin."), color = Muted, fontSize = 13.5.sp)
+                    status.email.isNotBlank() && status.verified -> Text(t("E-postan doğrulandı. Şifreni unutursan bu adrese sıfırlama kodu gönderilir."), color = Muted, fontSize = 13.5.sp)
                     status.email.isNotBlank() -> Text(tf("Doğrulama bağlantısı %s adresine gönderildi. Gelen kutunu ve istenmeyen klasörünü kontrol et. Kalan süre: %s gün.", status.email, status.daysLeft), color = Color(0xFFB07A2E), fontSize = 13.5.sp)
-                    else -> Text("Şifreni unutursan e-postayla sıfırlayabilmen için bir adres ekle. İsteğe bağlıdır.", color = Muted, fontSize = 13.5.sp)
+                    else -> Text(t("Şifreni unutursan e-postayla sıfırlayabilmen için bir adres ekle. İsteğe bağlıdır."), color = Muted, fontSize = 13.5.sp)
                 }
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(
@@ -1704,7 +1705,7 @@ private fun EmailDialog(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 if (status != null && status.email.isNotBlank() && !status.verified) {
-                    TextButton(onClick = onResend) { Text("Doğrulama e-postasını yeniden gönder") }
+                    TextButton(onClick = onResend) { Text(t("Doğrulama e-postasını yeniden gönder")) }
                 }
             }
         },
@@ -1716,7 +1717,7 @@ private fun EmailDialog(
         },
         dismissButton = {
             if (status != null && status.email.isNotBlank()) {
-                TextButton(onClick = { onRemove(); onDismiss() }) { Text("Kaldır", color = Muted) }
+                TextButton(onClick = { onRemove(); onDismiss() }) { Text(t("Kaldır"), color = Muted) }
             } else {
                 TextButton(onClick = onDismiss) { Text("Kapat") }
             }
@@ -1745,17 +1746,17 @@ private fun AppConfigCard() {
     }
     Surface(shape = RoundedCornerShape(20.dp), color = Color.White, shadowElevation = 3.dp) {
         Column(Modifier.fillMaxWidth().padding(16.dp)) {
-            Text("Duyuru ve güncelleme", color = Ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+            Text(t("Duyuru ve güncelleme"), color = Ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
             Text(
                 t("Buradan yazdığın duyuru tüm üyelere anında gösterilir. Yeni APK yayınlayınca bağlantısını ve sürüm ") +
-                    t("numarasını gir; eski sürümdeki üyeler \"Yeni sürüm var\" uyarısı alır."),
+                    t("numarasını gir; eski sürümdeki üyeler \"Yeni sürüm var\t(" uyarısı alır.")),
                 color = Muted, fontSize = 12.5.sp,
             )
             Spacer(Modifier.height(12.dp))
             OutlinedTextField(
                 value = announcement,
                 onValueChange = { announcement = it.take(500) },
-                label = { Text("Duyuru (boş bırakılırsa gösterilmez)") },
+                label = { Text(t("Duyuru (boş bırakılırsa gösterilmez)")) },
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 2,
             )
@@ -1764,7 +1765,7 @@ private fun AppConfigCard() {
                 value = apkUrl,
                 onValueChange = { apkUrl = it.trim() },
                 singleLine = true,
-                label = { Text("APK bağlantısı (https://)") },
+                label = { Text(t("APK bağlantısı (https://)")) },
                 modifier = Modifier.fillMaxWidth(),
             )
             Spacer(Modifier.height(10.dp))
@@ -1772,7 +1773,7 @@ private fun AppConfigCard() {
                 value = version,
                 onValueChange = { v -> version = v.filter { it.isDigit() }.take(6) },
                 singleLine = true,
-                label = { Text("En son sürüm numarası (versionCode)") },
+                label = { Text(t("En son sürüm numarası (versionCode)")) },
                 modifier = Modifier.fillMaxWidth(),
             )
             Spacer(Modifier.height(12.dp))
@@ -1814,7 +1815,7 @@ private fun MessageActionSheet(
                     Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly,
                 ) {
-                    listOf("👍", "❤️", "😂", "😮", "😢", "🙏").forEach { e ->
+                    listOf(t("👍"), "❤️", t("😂"), t("😮"), t("😢"), t("🙏")).forEach { e ->
                         val mine = msg.reactions.any { it.key == e && it.mine }
                         Text(
                             e, fontSize = 28.sp,
@@ -1856,10 +1857,10 @@ private fun ForwardDialog(msg: ChatMessage, onDismiss: () -> Unit) {
     var busy by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("İlet") },
+        title = { Text(t("İlet")) },
         text = {
             if (contacts.friends.isEmpty()) {
-                Text("İletebileceğin bir kişi yok.", color = Muted)
+                Text(t("İletebileceğin bir kişi yok."), color = Muted)
             } else {
                 androidx.compose.foundation.lazy.LazyColumn(Modifier.heightIn(max = 380.dp)) {
                     items(contacts.friends, key = { it.userId }) { friend ->

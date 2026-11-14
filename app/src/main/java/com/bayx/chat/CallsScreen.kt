@@ -46,7 +46,7 @@ fun CallsScreen(onBack: () -> Unit, onOpenChat: (String) -> Unit) {
         scope.launch {
             val roomId = Bayx.startDirectChat(peerId)
             opening = false
-            if (roomId != null) onOpenChat(roomId) else toast("Sohbet açılamadı. Tekrar dene.")
+            if (roomId != null) onOpenChat(roomId) else toast(t("Sohbet açılamadı. Tekrar dene."))
         }
     }
 
@@ -72,7 +72,7 @@ fun CallsScreen(onBack: () -> Unit, onOpenChat: (String) -> Unit) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
                     Icon(Icons.Outlined.Call, null, tint = SoftBlue, modifier = Modifier.size(56.dp))
                     Spacer(Modifier.height(14.dp))
-                    Text("Henüz arama yok", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Text(t("Henüz arama yok"), color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(6.dp))
                     Text(
                         t("Bir sohbeti açıp üstteki telefon ya da kamera simgesine dokunarak arama başlat. Aramaların burada listelenir."),
@@ -90,13 +90,13 @@ fun CallsScreen(onBack: () -> Unit, onOpenChat: (String) -> Unit) {
     if (confirmClear) {
         AlertDialog(
             onDismissRequest = { confirmClear = false },
-            title = { Text("Arama geçmişini temizle") },
-            text = { Text("Tüm arama kayıtları silinsin mi? Bu işlem geri alınamaz.") },
+            title = { Text(t("Arama geçmişini temizle")) },
+            text = { Text(t("Tüm arama kayıtları silinsin mi? Bu işlem geri alınamaz.")) },
             confirmButton = {
                 TextButton(onClick = { CallLog.clear(); confirmClear = false }) { Text("Temizle") }
             },
             dismissButton = {
-                TextButton(onClick = { confirmClear = false }) { Text("Vazgeç") }
+                TextButton(onClick = { confirmClear = false }) { Text(t("Vazgeç")) }
             },
         )
     }

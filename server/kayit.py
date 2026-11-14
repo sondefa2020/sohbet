@@ -426,10 +426,18 @@ def status_list(headers):
     now = time.time()
     seen_map = _status_seen()
 
+    def viewers_of(item_id):
+        out = []
+        for vid in seen_map.get(item_id, []):
+            vb = profile_brief(vid)
+            out.append({"user_id": vid, "name": vb["display_name"] if vb else username_of(vid)})
+        return out
+
     def pack(uid):
         items = _active_items(uid, now)
         if not items:
             return None
+        own = uid == me
         brief = profile_brief(uid)
         name = brief["display_name"] if brief else username_of(uid)
         out_items = [
@@ -442,6 +450,8 @@ def status_list(headers):
                 "key": it.get("key", ""),
                 "time": int(it.get("time", 0) * 1000),
                 "seen": me in seen_map.get(it["id"], []),
+                # Görenler yalnızca durumun sahibine gösterilir.
+                "viewers": viewers_of(it["id"]) if own else [],
             }
             for it in sorted(items, key=lambda x: x.get("time", 0))
         ]

@@ -80,7 +80,7 @@ fun WebLinkScreen(onBack: () -> Unit) {
     }
 
     val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) scanning = true else toast("QR okumak için kamera izni gerekli.")
+        if (granted) scanning = true else toast(t("QR okumak için kamera izni gerekli."))
     }
 
     fun startScan() {
@@ -127,7 +127,7 @@ fun WebLinkScreen(onBack: () -> Unit) {
     ) {
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Geri", tint = Ink) }
-            Text("Web'e bağlan", color = Ink, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(t("Web'e bağlan"), color = Ink, fontSize = 20.sp, fontWeight = FontWeight.Bold)
         }
 
         Spacer(Modifier.height(6.dp))
@@ -135,9 +135,9 @@ fun WebLinkScreen(onBack: () -> Unit) {
         if (done) {
             SoftCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("✓", color = Color(0xFF2E8B6E), fontSize = 46.sp, fontWeight = FontWeight.Bold)
+                    Text(t("✓"), color = Color(0xFF2E8B6E), fontSize = 46.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(8.dp))
-                    Text("Web oturumu açıldı", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Text(t("Web oturumu açıldı"), color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(6.dp))
                     Text(
                         t("Bilgisayarındaki Tayfa Web birkaç saniye içinde açılır."),

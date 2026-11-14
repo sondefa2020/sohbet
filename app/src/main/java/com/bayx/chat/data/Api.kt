@@ -132,6 +132,8 @@ object Api {
         val time: Long,
         val seen: Boolean,
         val key: String = "",
+        /** Yalnızca kendi durumumda dolu: (kullanıcı kimliği, ad). */
+        val viewers: List<Pair<String, String>> = emptyList(),
     )
     data class StatusUser(
         val userId: String,
@@ -155,6 +157,9 @@ object Api {
                 time = o.optLong("time"),
                 seen = o.optBoolean("seen"),
                 key = o.optString("key"),
+                viewers = o.optJSONArray("viewers")?.let { v ->
+                    (0 until v.length()).map { j -> v.getJSONObject(j).let { it.optString("user_id") to it.optString("name") } }
+                } ?: emptyList(),
             )
         }
     }

@@ -51,7 +51,7 @@ object Notifier {
         )
         manager.createNotificationChannel(
             NotificationChannel(CH_CALLS, "Aramalar", NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "Gelen sesli ve görüntülü aramalar"
+                description = com.bayx.chat.t("Gelen sesli ve görüntülü aramalar")
                 setSound(
                     RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE),
                     AudioAttributes.Builder()
@@ -64,14 +64,14 @@ object Notifier {
             },
         )
         manager.createNotificationChannel(
-            NotificationChannel(CH_SCREEN, "Ekran paylaşımı", NotificationManager.IMPORTANCE_LOW).apply {
-                description = "Ekran paylaşımı sürerken gösterilir"
+            NotificationChannel(CH_SCREEN, com.bayx.chat.t("Ekran paylaşımı"), NotificationManager.IMPORTANCE_LOW).apply {
+                description = com.bayx.chat.t("Ekran paylaşımı sürerken gösterilir")
                 setShowBadge(false)
             },
         )
         manager.createNotificationChannel(
-            NotificationChannel(CH_BACKGROUND, "Arka planda çalışma", NotificationManager.IMPORTANCE_MIN).apply {
-                description = "Mesaj ve aramaların anında gelmesi için Tayfa arka planda açık kalır"
+            NotificationChannel(CH_BACKGROUND, com.bayx.chat.t("Arka planda çalışma"), NotificationManager.IMPORTANCE_MIN).apply {
+                description = com.bayx.chat.t("Mesaj ve aramaların anında gelmesi için Tayfa arka planda açık kalır")
                 setShowBadge(false)
                 setSound(null, null)
                 enableVibration(false)
@@ -95,8 +95,8 @@ object Notifier {
             @Suppress("DEPRECATION") android.app.Notification.Builder(context)
         }
         return builder
-            .setContentTitle("Tayfa çalışıyor")
-            .setContentText("Mesaj ve aramaların anında gelsin diye arka planda açık")
+            .setContentTitle(com.bayx.chat.t("Tayfa çalışıyor"))
+            .setContentText(com.bayx.chat.t("Mesaj ve aramaların anında gelsin diye arka planda açık"))
             .setSmallIcon(R.drawable.ic_stat_tayfa)
             .setContentIntent(pi)
             .setOngoing(true)
@@ -123,7 +123,7 @@ object Notifier {
             @Suppress("DEPRECATION") android.app.Notification.Builder(context)
         }
         val n = builder
-            .setContentTitle("Yeni arkadaş isteği")
+            .setContentTitle(com.bayx.chat.t("Yeni arkadaş isteği"))
             .setContentText("$name seni eklemek istiyor")
             .setSmallIcon(R.drawable.ic_stat_tayfa)
             .setAutoCancel(true)
@@ -140,8 +140,8 @@ object Notifier {
             @Suppress("DEPRECATION") android.app.Notification.Builder(context)
         }
         return builder
-            .setContentTitle("Tayfa ekran paylaşımı")
-            .setContentText("Ekranın karşı tarafla paylaşılıyor")
+            .setContentTitle(com.bayx.chat.t("Tayfa ekran paylaşımı"))
+            .setContentText(com.bayx.chat.t("Ekranın karşı tarafla paylaşılıyor"))
             .setSmallIcon(R.drawable.ic_stat_tayfa)
             .setOngoing(true)
             .build()
@@ -173,7 +173,7 @@ object Notifier {
         if (!canNotify(context)) return
         if (ChatPrefs.isMuted(roomId)) return
         val id = roomId.hashCode()
-        val text = if (unread > 1) "$unread yeni mesaj" else "Yeni mesajın var"
+        val text = if (unread > 1) com.bayx.chat.tf("%s yeni mesaj", unread) else com.bayx.chat.t("Yeni mesajın var")
         val notification = NotificationCompat.Builder(context, CH_MESSAGES)
             .setSmallIcon(R.drawable.ic_stat_tayfa)
             .setContentTitle(roomName ?: "Tayfa")
@@ -185,13 +185,47 @@ object Notifier {
                 NotificationCompat.Builder(context, CH_MESSAGES)
                     .setSmallIcon(R.drawable.ic_stat_tayfa)
                     .setContentTitle("Tayfa")
-                    .setContentText("Yeni mesaj")
+                    .setContentText(com.bayx.chat.t("Yeni mesaj"))
                     .build(),
             )
             .setAutoCancel(true)
             .setContentIntent(openIntent(context, roomId, id))
+            .addAction(replyAction(context, roomId, id))
+            .addAction(readAction(context, roomId, id))
             .build()
         runCatching { NotificationManagerCompat.from(context).notify(id, notification) }
+    }
+
+    /** Bildirimden uygulamayı açmadan yanıt. */
+    private fun replyAction(context: Context, roomId: String, id: Int): NotificationCompat.Action {
+        val input = androidx.core.app.RemoteInput.Builder(ReplyReceiver.KEY_TEXT)
+            .setLabel(com.bayx.chat.t("Yanıtla"))
+            .build()
+        val intent = android.content.Intent(context, ReplyReceiver::class.java)
+            .setAction(ReplyReceiver.ACTION_REPLY)
+            .putExtra(ReplyReceiver.EXTRA_ROOM, roomId)
+        // Yanıt metni sisteme bu intent üzerinden eklendiği için değiştirilebilir olmalı.
+        val flags = android.app.PendingIntent.FLAG_UPDATE_CURRENT or
+            (if (Build.VERSION.SDK_INT >= 31) android.app.PendingIntent.FLAG_MUTABLE else 0)
+        val pi = android.app.PendingIntent.getBroadcast(context, id * 31 + 1, intent, flags)
+        return NotificationCompat.Action.Builder(R.drawable.ic_stat_tayfa, com.bayx.chat.t("Yanıtla"), pi)
+            .addRemoteInput(input)
+            .setAllowGeneratedReplies(true)
+            .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_REPLY)
+            .build()
+    }
+
+    private fun readAction(context: Context, roomId: String, id: Int): NotificationCompat.Action {
+        val intent = android.content.Intent(context, ReplyReceiver::class.java)
+            .setAction(ReplyReceiver.ACTION_READ)
+            .putExtra(ReplyReceiver.EXTRA_ROOM, roomId)
+        val pi = android.app.PendingIntent.getBroadcast(
+            context, id * 31 + 2, intent,
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE,
+        )
+        return NotificationCompat.Action.Builder(R.drawable.ic_stat_tayfa, com.bayx.chat.t("Okundu"), pi)
+            .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_MARK_AS_READ)
+            .build()
     }
 
     fun showIncomingCall(context: Context, callerName: String, video: Boolean) {
@@ -200,7 +234,7 @@ object Notifier {
         val notification = NotificationCompat.Builder(context, CH_CALLS)
             .setSmallIcon(R.drawable.ic_stat_tayfa)
             .setContentTitle(callerName.ifBlank { "Tayfa" })
-            .setContentText(if (video) "Görüntülü arama geliyor" else "Sesli arama geliyor")
+            .setContentText(if (video) com.bayx.chat.t("Görüntülü arama geliyor") else "Sesli arama geliyor")
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setOngoing(true)
@@ -214,6 +248,22 @@ object Notifier {
 
     fun cancelCall(context: Context) {
         runCatching { NotificationManagerCompat.from(context).cancel(CALL_NOTIFICATION_ID) }
+    }
+
+    /** Bildirimden gönderilen yanıt gitmediyse sessizce haber ver. */
+    fun showReplyFailed(context: Context, roomId: String) {
+        if (!canNotify(context)) return
+        val id = roomId.hashCode()
+        val notification = NotificationCompat.Builder(context, CH_MESSAGES)
+            .setSmallIcon(R.drawable.ic_stat_tayfa)
+            .setContentTitle("Tayfa")
+            .setContentText(com.bayx.chat.t("Yanıt gönderilemedi. Uygulamayı açıp tekrar dene."))
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setSilent(true)
+            .setAutoCancel(true)
+            .setContentIntent(openIntent(context, roomId, id))
+            .build()
+        runCatching { NotificationManagerCompat.from(context).notify(id, notification) }
     }
 
     fun cancelRoom(context: Context, roomId: String) {

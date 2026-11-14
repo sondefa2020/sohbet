@@ -66,6 +66,9 @@
                 android:value="Ozel mesajlasma uygulamasinin anlik mesaj ve arama baglantisini acik tutar" />
         </service>
         <receiver
+            android:name=".data.ReplyReceiver"
+            android:exported="false" />
+        <receiver
             android:name=".data.BootReceiver"
             android:exported="false">
             <intent-filter>

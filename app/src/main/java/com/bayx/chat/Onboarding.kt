@@ -62,7 +62,7 @@ fun OnboardingScreen() {
         Spacer(Modifier.height(56.dp))
         LogoMark(120.dp)
         Spacer(Modifier.height(16.dp))
-        Text("Tayfa'ya hoş geldin", color = Ink, fontSize = 30.sp, fontWeight = FontWeight.ExtraBold, textAlign = TextAlign.Center)
+        Text(t("Tayfa'ya hoş geldin"), color = Ink, fontSize = 30.sp, fontWeight = FontWeight.ExtraBold, textAlign = TextAlign.Center)
         Spacer(Modifier.height(8.dp))
         Text(
             t("Özel, davetli bir sohbet uygulaması. Devam etmeden önce birkaç kısa noktaya göz at."),
@@ -79,16 +79,16 @@ fun OnboardingScreen() {
         Spacer(Modifier.weight(1f))
         Spacer(Modifier.height(28.dp))
         val notice = buildAnnotatedString {
-            append("Devam ederek ")
+            append(t("Devam ederek "))
             withStyle(SpanStyle(color = Blue, fontWeight = FontWeight.SemiBold)) { append(t("Kullanıcı Sözleşmesi")) }
-            append(" ve ")
+            append(t(" ve "))
             withStyle(SpanStyle(color = Blue, fontWeight = FontWeight.SemiBold)) { append(t("Gizlilik Politikası")) }
             append(t("'nı kabul etmiş olursun."))
         }
         Text(notice, color = Muted, fontSize = 14.sp, textAlign = TextAlign.Center, lineHeight = 20.sp)
         Row(horizontalArrangement = Arrangement.Center) {
-            TextButton(onClick = { legal = t("Kullanıcı Sözleşmesi") to Legal.TERMS }) { Text("Sözleşmeyi oku", fontSize = 13.sp) }
-            TextButton(onClick = { legal = t("Gizlilik Politikası") to Legal.PRIVACY }) { Text("Gizliliği oku", fontSize = 13.sp) }
+            TextButton(onClick = { legal = t("Kullanıcı Sözleşmesi") to Legal.TERMS }) { Text(t("Sözleşmeyi oku"), fontSize = 13.sp) }
+            TextButton(onClick = { legal = t("Gizlilik Politikası") to Legal.PRIVACY }) { Text(t("Gizliliği oku"), fontSize = 13.sp) }
         }
         Spacer(Modifier.height(8.dp))
         SandButton("Kabul et ve devam et") { Gate.acceptOnboarding() }

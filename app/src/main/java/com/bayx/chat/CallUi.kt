@@ -90,7 +90,7 @@ fun CallOverlay() {
     val context = LocalContext.current
     val toast = rememberToast()
     val askPermissions = rememberCallPermissions {
-        toast("Arama için mikrofon izni gerekli.")
+        toast(t("Arama için mikrofon izni gerekli."))
         Calls.reject()
     }
 

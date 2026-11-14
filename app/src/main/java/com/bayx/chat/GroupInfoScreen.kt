@@ -76,7 +76,7 @@ fun GroupInfoScreen(roomId: String, onBack: () -> Unit, onLeft: () -> Unit) {
         }
         if (g == null) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Grup bilgisi alınamadı.", color = Muted)
+                Text(t("Grup bilgisi alınamadı."), color = Muted)
             }
             return@Column
         }
@@ -115,7 +115,7 @@ fun GroupInfoScreen(roomId: String, onBack: () -> Unit, onLeft: () -> Unit) {
                             contentAlignment = Alignment.Center,
                         ) { Icon(Icons.Outlined.PersonAddAlt, null, tint = Color(0xFF2E8B6E)) }
                         Spacer(Modifier.width(14.dp))
-                        Text("Üye ekle", color = Ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                        Text(t("Üye ekle"), color = Ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -161,7 +161,7 @@ fun GroupInfoScreen(roomId: String, onBack: () -> Unit, onLeft: () -> Unit) {
                 ) {
                     Icon(Icons.AutoMirrored.Filled.Logout, null, tint = LeaveRed, modifier = Modifier.size(24.dp))
                     Spacer(Modifier.width(16.dp))
-                    Text("Gruptan ayrıl", color = LeaveRed, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Text(t("Gruptan ayrıl"), color = LeaveRed, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                 }
                 Spacer(Modifier.height(20.dp))
             }
@@ -173,7 +173,7 @@ fun GroupInfoScreen(roomId: String, onBack: () -> Unit, onLeft: () -> Unit) {
         var name by remember { mutableStateOf(info!!.name) }
         AlertDialog(
             onDismissRequest = { renaming = false },
-            title = { Text("Grup adı") },
+            title = { Text(t("Grup adı")) },
             text = {
                 OutlinedTextField(
                     value = name, onValueChange = { name = it }, singleLine = true,
@@ -187,7 +187,7 @@ fun GroupInfoScreen(roomId: String, onBack: () -> Unit, onLeft: () -> Unit) {
                     if (n.isNotEmpty()) act({ Bayx.renameGroup(roomId, n) }, t("Ad değiştirilemedi."))
                 }) { Text("Kaydet") }
             },
-            dismissButton = { TextButton(onClick = { renaming = false }) { Text("Vazgeç") } },
+            dismissButton = { TextButton(onClick = { renaming = false }) { Text(t("Vazgeç")) } },
         )
     }
 
@@ -208,17 +208,17 @@ fun GroupInfoScreen(roomId: String, onBack: () -> Unit, onLeft: () -> Unit) {
     if (leaving) {
         AlertDialog(
             onDismissRequest = { leaving = false },
-            title = { Text("Gruptan ayrıl") },
-            text = { Text("Bu gruptan ayrılmak istediğine emin misin? Tekrar katılman için yeniden davet edilmen gerekir.") },
+            title = { Text(t("Gruptan ayrıl")) },
+            text = { Text(t("Bu gruptan ayrılmak istediğine emin misin? Tekrar katılman için yeniden davet edilmen gerekir.")) },
             confirmButton = {
                 TextButton(onClick = {
                     leaving = false
                     scope.launch {
-                        if (Bayx.leaveGroup(roomId)) onLeft() else toast("Gruptan ayrılınamadı.")
+                        if (Bayx.leaveGroup(roomId)) onLeft() else toast(t("Gruptan ayrılınamadı."))
                     }
-                }) { Text("Ayrıl", color = LeaveRed) }
+                }) { Text(t("Ayrıl"), color = LeaveRed) }
             },
-            dismissButton = { TextButton(onClick = { leaving = false }) { Text("Vazgeç") } },
+            dismissButton = { TextButton(onClick = { leaving = false }) { Text(t("Vazgeç")) } },
         )
     }
 
@@ -273,7 +273,7 @@ private fun MemberActionSheet(
             ) {
                 Icon(Icons.Outlined.PersonRemove, null, tint = LeaveRed, modifier = Modifier.size(24.dp))
                 Spacer(Modifier.width(20.dp))
-                Text("Gruptan çıkar", color = LeaveRed, fontSize = 16.sp)
+                Text(t("Gruptan çıkar"), color = LeaveRed, fontSize = 16.sp)
             }
         }
     }
@@ -286,10 +286,10 @@ private fun AddMembersDialog(existing: Set<String>, onDismiss: () -> Unit, onAdd
     val selected = remember { mutableStateListOf<String>() }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Üye ekle") },
+        title = { Text(t("Üye ekle")) },
         text = {
             if (candidates.isEmpty()) {
-                Text("Eklenebilecek kişi yok. Önce Kişiler'den arkadaş ekle.", color = Muted)
+                Text(t("Eklenebilecek kişi yok. Önce Kişiler'den arkadaş ekle."), color = Muted)
             } else {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
                     candidates.forEach { f ->
@@ -311,6 +311,6 @@ private fun AddMembersDialog(existing: Set<String>, onDismiss: () -> Unit, onAdd
             }
         },
         confirmButton = { TextButton(onClick = { onAdd(selected.toList()) }) { Text("Ekle") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Vazgeç") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(t("Vazgeç")) } },
     )
 }

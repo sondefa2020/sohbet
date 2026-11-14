@@ -245,7 +245,7 @@ internal fun MediaContent(msg: ChatMessage, tint: Color, onOpen: (ChatMessage) -
                     val opened = runCatching {
                         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("geo:$coordinates?q=$coordinates")))
                     }.isSuccess
-                    if (!opened) toast("Harita uygulaması bulunamadı.")
+                    if (!opened) toast(t("Harita uygulaması bulunamadı."))
                 },
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -512,7 +512,7 @@ internal fun RecordingBar(seconds: Int, onCancel: () -> Unit, onSend: () -> Unit
                     fontSize = 16.sp,
                     modifier = Modifier.weight(1f),
                 )
-                TextButton(onClick = onCancel) { Text("İptal", color = Color(0xFFA32117)) }
+                TextButton(onClick = onCancel) { Text(t("İptal"), color = Color(0xFFA32117)) }
             }
         }
         Spacer(Modifier.width(10.dp))

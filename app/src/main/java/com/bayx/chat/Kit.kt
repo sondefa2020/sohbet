@@ -218,7 +218,7 @@ internal fun formatCode(raw: String, length: Int): String {
     return clean.chunked(4).joinToString("-")
 }
 
-/** Ad soyaddan kullanıcı adı önerisi: t("Ayşe Yılmaz") → "ayse.yilmaz". */
+/** Ad soyaddan kullanıcı adı önerisi: "Ayşe Yılmaz" → "ayse.yilmaz". */
 internal fun suggestUsername(name: String): String {
     val map = mapOf('ç' to 'c', 'ğ' to 'g', 'ı' to 'i', 'ö' to 'o', 'ş' to 's', 'ü' to 'u', 'â' to 'a', 'î' to 'i', 'û' to 'u')
     val base = name.lowercase(java.util.Locale.forLanguageTag("tr"))
@@ -286,8 +286,7 @@ internal fun RecoveryCodeDialog(code: String, onDone: () -> Unit) {
         text = {
             Column {
                 Text(
-                    t("Çıkış yaptığında ya da telefon değiştirdiğinde hesabına bu kodla girersin. ") +
-                        t("Bir kağıda yaz ya da güvendiğin bir yere kaydet. Bir daha gösterilmez."),
+                    t("Çıkış yaptığında ya da telefon değiştirdiğinde hesabına bu kodla girersin. Bir kağıda yaz ya da güvendiğin bir yere kaydet. Bir daha gösterilmez."),
                     color = Muted,
                     fontSize = 14.sp,
                 )
@@ -305,7 +304,7 @@ internal fun RecoveryCodeDialog(code: String, onDone: () -> Unit) {
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { saved = !saved }) {
                     Checkbox(checked = saved, onCheckedChange = { saved = it })
-                    Text("Kodu güvenli bir yere kaydettim", fontSize = 14.sp)
+                    Text(t("Kodu güvenli bir yere kaydettim"), fontSize = 14.sp)
                 }
             }
         },
@@ -349,7 +348,7 @@ internal fun ShareCodeDialog(
                         TextButton(onClick = { shareText(context, shareMessage) }) {
                             Icon(Icons.Outlined.Share, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("Paylaş")
+                            Text(t("Paylaş"))
                         }
                     }
                 }

@@ -78,7 +78,7 @@ private fun tokenize(text: String): List<Any> {
     var i = 0
     while (i < text.length) {
         val match = allCodes.firstOrNull { (code, _) -> text.startsWith(code, i) }
-        // "8)t(" gibi kodlar ancak kelime başında ifade sayılır (ör. ")18)" sayı olarak kalır).
+        // "8)" gibi kodlar ancak kelime başında ifade sayılır (ör. ")18)" sayı olarak kalır).
         val ok = match != null && (match.first[0].isLetterOrDigit().not() || i == 0 || !text[i - 1].isLetterOrDigit())
         if (match != null && ok) {
             if (buf.isNotEmpty()) {

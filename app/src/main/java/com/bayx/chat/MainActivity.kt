@@ -348,8 +348,8 @@ private fun MainNav(me: AuthState.LoggedIn) {
         if (!updateDismissed && cfg.latestVersion > myVersion && cfg.apkUrl.isNotBlank()) {
             AlertDialog(
                 onDismissRequest = { updateDismissed = true },
-                title = { Text("Yeni sürüm var") },
-                text = { Text("Tayfa'nın yeni bir sürümü yayınlandı. Güncellemek için indir ve kur.") },
+                title = { Text(t("Yeni sürüm var")) },
+                text = { Text(t("Tayfa'nın yeni bir sürümü yayınlandı. Güncellemek için indir ve kur.")) },
                 confirmButton = {
                     TextButton(onClick = {
                         updateDismissed = true
@@ -358,7 +358,7 @@ private fun MainNav(me: AuthState.LoggedIn) {
                                 Intent(Intent.ACTION_VIEW, Uri.parse(cfg.apkUrl)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                             )
                         }
-                    }) { Text("Güncelle") }
+                    }) { Text(t("Güncelle")) }
                 },
                 dismissButton = { TextButton(onClick = { updateDismissed = true }) { Text("Sonra") } },
             )

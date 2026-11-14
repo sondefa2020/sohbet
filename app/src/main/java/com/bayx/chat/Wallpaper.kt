@@ -106,7 +106,7 @@ fun WallpaperPicker(context: Context, current: String, onDismiss: () -> Unit) {
     var picked by remember { mutableStateOf(current) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Sohbet arka planı", fontWeight = FontWeight.Bold) },
+        title = { Text(t("Sohbet arka planı"), fontWeight = FontWeight.Bold) },
         text = {
             LazyVerticalGrid(columns = GridCells.Fixed(3), verticalArrangement = Arrangement.spacedBy(10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 items(Wallpaper.options, key = { it.id }) { option ->
@@ -134,6 +134,6 @@ fun WallpaperPicker(context: Context, current: String, onDismiss: () -> Unit) {
         confirmButton = {
             TextButton(onClick = { Wallpaper.set(context, picked); onDismiss() }) { Text("Uygula") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Vazgeç") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(t("Vazgeç")) } },
     )
 }
