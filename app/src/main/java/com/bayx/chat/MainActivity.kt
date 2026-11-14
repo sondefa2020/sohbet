@@ -280,6 +280,14 @@ private fun MainNav(me: AuthState.LoggedIn) {
             ChatScreen(
                 roomId = entry.arguments?.getString("id").orEmpty(),
                 onBack = { nav.popBackStack() },
+                onGroupInfo = { roomId -> nav.navigate("group/" + Uri.encode(roomId)) },
+            )
+        }
+        composable("group/{id}") { entry ->
+            GroupInfoScreen(
+                roomId = entry.arguments?.getString("id").orEmpty(),
+                onBack = { nav.popBackStack() },
+                onLeft = { nav.popBackStack(route = "chats", inclusive = false) },
             )
         }
         composable("profile") {

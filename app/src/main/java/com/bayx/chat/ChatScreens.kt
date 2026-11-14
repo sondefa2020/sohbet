@@ -112,7 +112,7 @@ import java.util.Locale
 // ---------- Sohbet ----------
 
 @Composable
-fun ChatScreen(roomId: String, onBack: () -> Unit) {
+fun ChatScreen(roomId: String, onBack: () -> Unit, onGroupInfo: (String) -> Unit = {}) {
     var session by remember { mutableStateOf<ChatSession?>(null) }
     var failed by remember { mutableStateOf(false) }
 
@@ -135,12 +135,12 @@ fun ChatScreen(roomId: String, onBack: () -> Unit) {
             }
         }
     } else {
-        ChatContent(current, onBack)
+        ChatContent(current, onBack, onGroupInfo)
     }
 }
 
 @Composable
-internal fun ChatContent(session: ChatSession, onBack: () -> Unit) {
+internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: (String) -> Unit = {}) {
     val messages by session.messages.collectAsState()
     val title by session.title.collectAsState()
     val partner by session.dmUserId.collectAsState()
@@ -295,9 +295,14 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Geri", tint = Ink) }
+            val isGroup = !session.isDirect && !session.secret
             Avatar(title, 44.dp, url = headerAvatar, mode = partnerPresence?.mode ?: if (partnerOnline) "online" else null)
             Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
+            Column(
+                Modifier.weight(1f).then(
+                    if (isGroup) Modifier.clickable { onGroupInfo(session.roomId) } else Modifier,
+                ),
+            ) {
                 Text(
                     title.ifEmpty { "Sohbet" },
                     color = Ink,
