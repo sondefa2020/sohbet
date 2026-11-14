@@ -1101,7 +1101,8 @@ object Bayx {
                 setDataAndType(uri, media.mime)
                 addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-            context.startActivity(android.content.Intent.createChooser(intent, null).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+            // Seçici yerine doğrudan açılır: okuma izni böylece hedef uygulamaya kesin geçer.
+            context.startActivity(intent)
         }.isSuccess
     }
 
