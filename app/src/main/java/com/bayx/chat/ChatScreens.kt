@@ -1493,7 +1493,7 @@ private fun AppConfigCard() {
             Text("Duyuru ve güncelleme", color = Ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
             Text(
                 t("Buradan yazdığın duyuru tüm üyelere anında gösterilir. Yeni APK yayınlayınca bağlantısını ve sürüm ") +
-                    "numarasını gir; eski sürümdeki üyeler \"Yeni sürüm var\t(" uyarısı alır."),
+                    t("numarasını gir; eski sürümdeki üyeler \"Yeni sürüm var\" uyarısı alır."),
                 color = Muted, fontSize = 12.5.sp,
             )
             Spacer(Modifier.height(12.dp))
