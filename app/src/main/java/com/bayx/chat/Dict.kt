@@ -424,6 +424,11 @@ object Dict {
         "Yeni anahtar oluştur" to ("Create new key" to "إنشاء مفتاح جديد"),
         "Yedeği aç" to ("Turn on backup" to "تفعيل النسخ الاحتياطي"),
 
+        "Yeni yedek başlatılsın mı?" to ("Start a new backup?" to "بدء نسخة احتياطية جديدة؟"),
+        "Eski şifreli mesajlar bu cihazda açılamayacak. Bundan sonraki mesajların yeni bir anahtarla yedeklenir ve bu uyarı bir daha çıkmaz." to ("Old encrypted messages won't open on this device. Your messages from now on are backed up with a new key and this notice won't appear again." to "لن تُفتح الرسائل المشفّرة القديمة على هذا الجهاز. ستُنسخ رسائلك من الآن بمفتاح جديد ولن يظهر هذا التنبيه مجددًا."),
+        "Yeni yedek başlat" to ("Start new backup" to "بدء نسخة جديدة"),
+        "Anahtarım yok, yeni yedek başlat" to ("I don't have a key, start a new backup" to "ليس لدي مفتاح، ابدأ نسخة جديدة"),
+
         // --- durum hataları
         "Sunucu Durum özelliğini henüz tanımıyor. Sunucuda kurulum komutunu (kur.sh) yeniden çalıştır." to ("The server doesn't support Status yet. Re-run the setup command (kur.sh) on the server." to "الخادم لا يدعم ميزة الحالة بعد. أعد تشغيل أمر الإعداد (kur.sh) على الخادم."),
         "Sunucuya ulaşılamadı. İnternet bağlantını kontrol et." to ("Couldn't reach the server. Check your internet connection." to "تعذّر الوصول إلى الخادم. تحقق من اتصالك بالإنترنت."),

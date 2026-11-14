@@ -27,7 +27,9 @@ fun RecoveryDialogs() {
     val newKey by Bayx.newRecoveryKey.collectAsState()
     val state by Bayx.recoveryState.collectAsState()
     val prompt by Bayx.recoveryPrompt.collectAsState()
-    var dismissed by remember { mutableStateOf(false) }
+    val prefs = remember { context.getSharedPreferences("tayfa_yedek", Context.MODE_PRIVATE) }
+    // "Şimdi değil" bir kez seçilince kalıcı olarak hatırlanır; sonra yalnızca Ayarlar'dan açılır.
+    var dismissed by remember { mutableStateOf(prefs.getBoolean("sorma", false)) }
 
     // 1) Yeni anahtar: kullanıcı kaydettiğini onaylayana kadar kapanmaz.
     newKey?.let { key ->
@@ -75,9 +77,35 @@ fun RecoveryDialogs() {
         var key by remember { mutableStateOf("") }
         var busy by remember { mutableStateOf(false) }
         var error by remember { mutableStateOf<String?>(null) }
+        var noKey by remember { mutableStateOf(false) }
         fun close() {
             dismissed = true
+            prefs.edit().putBoolean("sorma", true).apply()
             Bayx.recoveryPrompt.value = false
+        }
+        if (noKey) {
+            AlertDialog(
+                onDismissRequest = { if (!busy) noKey = false },
+                title = { Text(t("Yeni yedek başlatılsın mı?")) },
+                text = {
+                    Text(
+                        t("Eski şifreli mesajlar bu cihazda açılamayacak. Bundan sonraki mesajların yeni bir anahtarla yedeklenir ve bu uyarı bir daha çıkmaz."),
+                        color = Muted, fontSize = 14.sp,
+                    )
+                },
+                confirmButton = {
+                    TextButton(enabled = !busy, onClick = {
+                        busy = true
+                        scope.launch {
+                            val err = Bayx.createRecoveryKey()
+                            busy = false
+                            if (err == null) { noKey = false; close() } else { error = t(err); noKey = false }
+                        }
+                    }) { Text(if (busy) t("Bekle…") else t("Yeni yedek başlat")) }
+                },
+                dismissButton = { TextButton(enabled = !busy, onClick = { noKey = false }) { Text(t("Vazgeç")) } },
+            )
+            return
         }
         AlertDialog(
             onDismissRequest = { if (!busy) close() },
@@ -99,6 +127,10 @@ fun RecoveryDialogs() {
                     error?.let {
                         Spacer(Modifier.height(8.dp))
                         Text(it, color = androidx.compose.ui.graphics.Color(0xFFB4232A), fontSize = 13.sp)
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    TextButton(enabled = !busy, onClick = { noKey = true }) {
+                        Text(t("Anahtarım yok, yeni yedek başlat"), color = Blue)
                     }
                 }
             },
