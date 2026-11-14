@@ -30,9 +30,10 @@ jobs:
           if [ -n "$KEYSTORE_B64" ]; then
             echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/bayx.jks"
             echo "BAYX_KEYSTORE_FILE=$RUNNER_TEMP/bayx.jks" >> "$GITHUB_ENV"
-            echo "Kalıcı imzalama anahtarı kullanılacak."
+            echo "HAS_RELEASE_KEY=1" >> "$GITHUB_ENV"
+            echo "Gizli anahtar var: yayın sürümü de derlenecek."
           else
-            echo "Kalıcı anahtar tanımlı değil; debug anahtarıyla imzalanacak."
+            echo "Gizli anahtar tanımlı değil; yalnızca test sürümü derlenecek (sabit test anahtarıyla)."
           fi
       - name: Debug APK derle
         env:
@@ -58,6 +59,17 @@ jobs:
           name: tayfa-ekranlar
           path: app/build/outputs/roborazzi
           if-no-files-found: ignore
+      - name: Yayın APK derle
+        if: env.HAS_RELEASE_KEY == '1'
+        env:
+          BAYX_KEYSTORE_PASS: ${{ secrets.BAYX_KEYSTORE_PASS }}
+        run: gradle :app:assembleRelease --stacktrace
+      - uses: actions/upload-artifact@v4
+        if: env.HAS_RELEASE_KEY == '1'
+        with:
+          name: tayfa-release-apk
+          path: app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
           name: tayfa-debug-apk

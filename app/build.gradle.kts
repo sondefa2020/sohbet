@@ -48,9 +48,13 @@ android {
 
     buildTypes {
         debug {
-            signingConfig = signingConfigs.getByName(if (hasKeystore) "bayx" else "sabit")
+            // Test sürümü HER ZAMAN sabit anahtarla imzalanır; gizli anahtar eklense bile
+            // telefondaki test sürümünün imzası değişmez, güncellemeler veri silmeden kurulur.
+            signingConfig = signingConfigs.getByName("sabit")
         }
         release {
+            // Yayın (mağaza / müşteri) sürümü yalnızca sahibinin gizli anahtarıyla imzalanır.
+            if (hasKeystore) signingConfig = signingConfigs.getByName("bayx")
             isMinifyEnabled = false
         }
     }

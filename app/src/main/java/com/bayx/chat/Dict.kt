@@ -482,6 +482,8 @@ object Dict {
         "Arka planda çalışma" to ("Running in background" to "العمل في الخلفية"),
         "Mesaj ve aramaların anında gelmesi için Tayfa arka planda açık kalır" to ("Tayfa stays open in the background so messages and calls arrive instantly" to "يبقى Tayfa مفتوحًا في الخلفية لتصل الرسائل والمكالمات فورًا"),
 
+        "Bu mesaj herkesten silinsin mi? Sohbette \"Mesaj silindi\" yazar." to ("Delete this message for everyone? The chat will show \"Message deleted\"." to "حذف هذه الرسالة لدى الجميع؟ ستظهر في المحادثة \"تم حذف الرسالة\"."),
+
         // --- durum hataları
         "Sunucu Durum özelliğini henüz tanımıyor. Sunucuda kurulum komutunu (kur.sh) yeniden çalıştır." to ("The server doesn't support Status yet. Re-run the setup command (kur.sh) on the server." to "الخادم لا يدعم ميزة الحالة بعد. أعد تشغيل أمر الإعداد (kur.sh) على الخادم."),
         "Sunucuya ulaşılamadı. İnternet bağlantını kontrol et." to ("Couldn't reach the server. Check your internet connection." to "تعذّر الوصول إلى الخادم. تحقق من اتصالك بالإنترنت."),

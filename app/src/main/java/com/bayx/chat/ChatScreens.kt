@@ -754,7 +754,7 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
             title = { Text(t("Mesajı sil")) },
-            text = { Text("Bu mesaj herkesten silinsin mi? Sohbette \"Mesaj silindi\" yazar.") },
+            text = { Text(t("Bu mesaj herkesten silinsin mi? Sohbette \"Mesaj silindi\" yazar.")) },
             confirmButton = {
                 TextButton(onClick = {
                     deleteTarget = null
@@ -1749,7 +1749,7 @@ private fun AppConfigCard() {
             Text(t("Duyuru ve güncelleme"), color = Ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
             Text(
                 t("Buradan yazdığın duyuru tüm üyelere anında gösterilir. Yeni APK yayınlayınca bağlantısını ve sürüm ") +
-                    t("numarasını gir; eski sürümdeki üyeler \"Yeni sürüm var\t(" uyarısı alır.")),
+                    t("numarasını gir; eski sürümdeki üyeler \"Yeni sürüm var\" uyarısı alır."),
                 color = Muted, fontSize = 12.5.sp,
             )
             Spacer(Modifier.height(12.dp))
