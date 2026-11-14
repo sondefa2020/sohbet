@@ -49,7 +49,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.navigation.compose.NavHost
@@ -399,7 +401,7 @@ private fun TabPage(current: AppTab, nav: androidx.navigation.NavHostController,
             Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .consumeWindowInsets(androidx.compose.foundation.layout.WindowInsets.navigationBars),
+                .consumeWindowInsets(WindowInsets.navigationBars),
         ) { content() }
         Box(Modifier.navigationBarsPadding()) {
             BottomNav(current) { tab ->
