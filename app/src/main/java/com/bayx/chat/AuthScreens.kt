@@ -89,13 +89,13 @@ private fun LoginScreen(onRegister: () -> Unit, onForgot: () -> Unit) {
         Text("Tayfa", color = Ink, fontSize = 44.sp, fontWeight = FontWeight.ExtraBold)
         Text("Özel ve uçtan uca şifreli sohbet", color = Muted, fontSize = 16.sp)
         Spacer(Modifier.height(40.dp))
-        PillField(user, { user = it.lowercase().trim() }, "Kullanıcı adı", Icons.Outlined.Person)
+        PillField(user, { user = it.lowercase().trim() }, t("Kullanıcı adı"), Icons.Outlined.Person)
         Spacer(Modifier.height(16.dp))
-        PillField(pass, { pass = it }, "Şifre", Icons.Outlined.Lock, isPassword = true)
+        PillField(pass, { pass = it }, t("Şifre"), Icons.Outlined.Lock, isPassword = true)
         Spacer(Modifier.height(30.dp))
-        SandButton("Giriş yap", busy = busy) {
+        SandButton(t("Giriş yap"), busy = busy) {
             if (user.isBlank() || pass.isEmpty()) {
-                info = "Kullanıcı adını ve şifreni yaz."
+                info = t("Kullanıcı adını ve şifreni yaz.")
             } else {
                 busy = true
                 scope.launch {
@@ -137,20 +137,20 @@ private fun RegisterScreen(onBack: () -> Unit) {
         Spacer(Modifier.height(6.dp))
         Text("Hemen giriş yaparsın. E-posta isteğe bağlı; şifreni unutursan sıfırlaman için işine yarar.", color = Muted, fontSize = 15.sp, textAlign = TextAlign.Center)
         Spacer(Modifier.height(26.dp))
-        PillField(user, { user = it.lowercase().trim().take(20) }, "Kullanıcı adı", Icons.Outlined.Person)
+        PillField(user, { user = it.lowercase().trim().take(20) }, t("Kullanıcı adı"), Icons.Outlined.Person)
         Spacer(Modifier.height(14.dp))
-        PillField(pass, { pass = it }, "Şifre (en az 8 karakter)", Icons.Outlined.Lock, isPassword = true)
+        PillField(pass, { pass = it }, t("Şifre (en az 8 karakter)"), Icons.Outlined.Lock, isPassword = true)
         Spacer(Modifier.height(14.dp))
-        PillField(pass2, { pass2 = it }, "Şifre (tekrar)", Icons.Outlined.Lock, isPassword = true)
+        PillField(pass2, { pass2 = it }, t("Şifre (tekrar)"), Icons.Outlined.Lock, isPassword = true)
         Spacer(Modifier.height(14.dp))
-        PillField(email, { email = it.trim() }, "E-posta (isteğe bağlı)", Icons.Outlined.AlternateEmail, keyboardType = KeyboardType.Email)
+        PillField(email, { email = it.trim() }, t("E-posta (isteğe bağlı)"), Icons.Outlined.AlternateEmail, keyboardType = KeyboardType.Email)
         Spacer(Modifier.height(28.dp))
-        SandButton("Kayıt ol ve gir", busy = busy) {
+        SandButton(t("Kayıt ol ve gir"), busy = busy) {
             when {
                 !USERNAME.matches(user) ->
-                    info = "Kullanıcı adı 3-20 karakter olmalı; küçük harf, rakam, nokta, tire ve alt çizgi kullanılabilir."
-                pass.length < 8 -> info = "Şifre en az 8 karakter olmalı."
-                pass != pass2 -> info = "Şifreler aynı değil."
+                    info = t("Kullanıcı adı 3-20 karakter olmalı; küçük harf, rakam, nokta, tire ve alt çizgi kullanılabilir.")
+                pass.length < 8 -> info = t("Şifre en az 8 karakter olmalı.")
+                pass != pass2 -> info = t("Şifreler aynı değil.")
                 else -> {
                     busy = true
                     scope.launch {
@@ -194,18 +194,18 @@ private fun ForgotScreen(onBack: () -> Unit) {
         Text("Şifremi unuttum", color = Ink, fontSize = 27.sp, fontWeight = FontWeight.ExtraBold)
         Spacer(Modifier.height(6.dp))
         Text(
-            "Hesabına doğrulanmış e-posta bağlıysa 6 haneli kod gönderilir. E-postası olmayan hesapların şifresini yönetici sıfırlar.",
+            t("Hesabına doğrulanmış e-posta bağlıysa 6 haneli kod gönderilir. E-postası olmayan hesapların şifresini yönetici sıfırlar."),
             color = Muted,
             fontSize = 14.5.sp,
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(24.dp))
         if (step == 1) {
-            PillField(login, { login = it.trim() }, "Kullanıcı adı ya da e-posta", Icons.Outlined.Person)
+            PillField(login, { login = it.trim() }, t("Kullanıcı adı ya da e-posta"), Icons.Outlined.Person)
             Spacer(Modifier.height(24.dp))
-            SandButton("Kod gönder", busy = busy) {
+            SandButton(t("Kod gönder"), busy = busy) {
                 if (login.isBlank()) {
-                    info = "Kullanıcı adını ya da e-postanı yaz."
+                    info = t("Kullanıcı adını ya da e-postanı yaz.")
                 } else {
                     busy = true
                     scope.launch {
@@ -222,15 +222,15 @@ private fun ForgotScreen(onBack: () -> Unit) {
         } else {
             PillField(code, { code = it.filter { c -> c.isDigit() }.take(6) }, "6 haneli kod", Icons.Outlined.Password, keyboardType = KeyboardType.Number)
             Spacer(Modifier.height(14.dp))
-            PillField(pass, { pass = it }, "Yeni şifre (en az 8 karakter)", Icons.Outlined.Lock, isPassword = true)
+            PillField(pass, { pass = it }, t("Yeni şifre (en az 8 karakter)"), Icons.Outlined.Lock, isPassword = true)
             Spacer(Modifier.height(14.dp))
-            PillField(pass2, { pass2 = it }, "Yeni şifre (tekrar)", Icons.Outlined.Lock, isPassword = true)
+            PillField(pass2, { pass2 = it }, t("Yeni şifre (tekrar)"), Icons.Outlined.Lock, isPassword = true)
             Spacer(Modifier.height(24.dp))
-            SandButton("Şifreyi değiştir", busy = busy) {
+            SandButton(t("Şifreyi değiştir"), busy = busy) {
                 when {
                     code.length != 6 -> info = "6 haneli kodu yaz."
-                    pass.length < 8 -> info = "Şifre en az 8 karakter olmalı."
-                    pass != pass2 -> info = "Şifreler aynı değil."
+                    pass.length < 8 -> info = t("Şifre en az 8 karakter olmalı.")
+                    pass != pass2 -> info = t("Şifreler aynı değil.")
                     else -> {
                         busy = true
                         scope.launch {
@@ -249,5 +249,5 @@ private fun ForgotScreen(onBack: () -> Unit) {
         Spacer(Modifier.height(24.dp))
     }
     info?.let { message -> InfoDialog(message) { info = null } }
-    if (done) InfoDialog("Şifren değiştirildi. Yeni şifrenle giriş yapabilirsin.") { onBack() }
+    if (done) InfoDialog(t("Şifren değiştirildi. Yeni şifrenle giriş yapabilirsin.")) { onBack() }
 }

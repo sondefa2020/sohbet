@@ -145,7 +145,7 @@ internal fun MediaContent(msg: ChatMessage, tint: Color, onOpen: (ChatMessage) -
                 if (current != null) {
                     Image(
                         bitmap = current.asImageBitmap(),
-                        contentDescription = if (msg.kind == MsgKind.IMAGE) "Fotoğraf" else "Video",
+                        contentDescription = if (msg.kind == MsgKind.IMAGE) t("Fotoğraf") else "Video",
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop,
                     )
@@ -205,7 +205,7 @@ internal fun MediaContent(msg: ChatMessage, tint: Color, onOpen: (ChatMessage) -
                     } else {
                         Icon(
                             if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                            if (playing) "Durdur" else "Sesli mesajı oynat",
+                            if (playing) "Durdur" else t("Sesli mesajı oynat"),
                             tint = iconTint,
                         )
                     }
@@ -262,7 +262,7 @@ internal fun MediaViewerDialog(msg: ChatMessage, onDismiss: () -> Unit) {
                 if (current != null) {
                     Image(
                         bitmap = current.asImageBitmap(),
-                        contentDescription = "Fotoğraf",
+                        contentDescription = t("Fotoğraf"),
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Fit,
                     )
@@ -455,7 +455,7 @@ internal fun RecordingBar(seconds: Int, onCancel: () -> Unit, onSend: () -> Unit
         ) {
             Icon(
                 Icons.AutoMirrored.Filled.Send,
-                "Sesli mesajı gönder",
+                t("Sesli mesajı gönder"),
                 tint = Color.White,
             )
         }

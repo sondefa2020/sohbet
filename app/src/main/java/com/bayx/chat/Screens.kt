@@ -152,11 +152,11 @@ internal fun modeColor(mode: String?): Color? = when (mode) {
 }
 
 internal fun modeLabel(mode: String?): String = when (mode) {
-    "online" -> "Çevrimiçi"
-    "busy" -> "Meşgul"
-    "away" -> "Dışarıda"
-    "invisible" -> "Çevrimdışı görün"
-    else -> "Çevrimdışı"
+    "online" -> t("Çevrimiçi")
+    "busy" -> t("Meşgul")
+    "away" -> t("Dışarıda")
+    "invisible" -> t("Çevrimdışı görün")
+    else -> t("Çevrimdışı")
 }
 
 @Composable
@@ -219,7 +219,7 @@ internal fun PillField(
                 IconButton(onClick = { visible = !visible }) {
                     Icon(
                         if (visible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
-                        contentDescription = if (visible) "Şifreyi gizle" else "Şifreyi göster",
+                        contentDescription = if (visible) t("Şifreyi gizle") else t("Şifreyi göster"),
                         tint = Ink,
                     )
                 }
@@ -296,7 +296,7 @@ fun OfflineScreen() {
         Text("Bağlantı kurulamadı", color = Ink, fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
         Text(
-            "Oturumun açık, ama sunucuya şu an ulaşılamıyor. İnternet bağlantını kontrol edip tekrar dene.",
+            t("Oturumun açık, ama sunucuya şu an ulaşılamıyor. İnternet bağlantını kontrol edip tekrar dene."),
             color = Muted,
             textAlign = TextAlign.Center,
         )
@@ -358,7 +358,7 @@ fun ChatListScreen(
     val context = LocalContext.current
     val tabs = listOf(
         "Sohbetler" to Icons.Outlined.ChatBubbleOutline,
-        "Kişiler" to Icons.Outlined.Group,
+        t("Kişiler") to Icons.Outlined.Group,
         "Gruplar" to Icons.Outlined.Groups,
     )
 
@@ -416,7 +416,7 @@ fun ChatListScreen(
                     Text(me.displayName.ifEmpty { "Sohbet" }, color = Muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 Box {
-                    ChipIcon(Icons.Outlined.PersonAddAlt, "Arkadaş istekleri", size = 44.dp, onClick = onRequests)
+                    ChipIcon(Icons.Outlined.PersonAddAlt, t("Arkadaş istekleri"), size = 44.dp, onClick = onRequests)
                     if (contacts.incoming.isNotEmpty()) {
                         Box(
                             Modifier.align(Alignment.TopEnd).size(18.dp).clip(CircleShape).background(Color(0xFFE5484D)),
@@ -576,7 +576,7 @@ fun ChatListScreen(
                             if (friends.isEmpty()) {
                                 item {
                                     Text(
-                                        "Henüz kişin yok. Yukarıdan kullanıcı adıyla birini bul ve istek gönder.",
+                                        t("Henüz kişin yok. Yukarıdan kullanıcı adıyla birini bul ve istek gönder."),
                                         color = Muted, textAlign = TextAlign.Center, lineHeight = 22.sp,
                                         modifier = Modifier.fillMaxWidth().padding(28.dp),
                                     )
@@ -701,15 +701,15 @@ private fun ChatActionSheet(
             )
             SheetAction(
                 if (flags.pinned) Icons.Outlined.PushPin else Icons.Outlined.PushPin,
-                if (flags.pinned) "Sabitlemeyi kaldır" else "Sabitle", onPin,
+                if (flags.pinned) t("Sabitlemeyi kaldır") else "Sabitle", onPin,
             )
             SheetAction(
                 Icons.Outlined.NotificationsOff,
-                if (flags.muted) "Sesi aç" else "Sessize al", onMute,
+                if (flags.muted) t("Sesi aç") else "Sessize al", onMute,
             )
             SheetAction(
                 Icons.Outlined.Archive,
-                if (flags.archived) "Arşivden çıkar" else "Arşivle", onArchive,
+                if (flags.archived) t("Arşivden çıkar") else t("Arşivle"), onArchive,
             )
         }
     }
@@ -950,7 +950,7 @@ private fun RequestRow(member: Member, incoming: Boolean, onAccept: () -> Unit, 
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Text(member.displayName, color = Ink, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(if (incoming) "seni kişi olarak eklemek istiyor" else "istek bekliyor", color = Muted, fontSize = 13.sp)
+            Text(if (incoming) t("seni kişi olarak eklemek istiyor") else "istek bekliyor", color = Muted, fontSize = 13.sp)
         }
         if (incoming) {
             TextButton(onClick = onReject) { Text("Yok", color = Muted) }
@@ -1018,7 +1018,7 @@ private fun ChatRow(
             Spacer(Modifier.height(4.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    chat.lastMessage.ifEmpty { "Uçtan uca şifreli sohbet" },
+                    chat.lastMessage.ifEmpty { t("Uçtan uca şifreli sohbet") },
                     modifier = Modifier.weight(1f),
                     color = Muted,
                     fontSize = 15.sp,

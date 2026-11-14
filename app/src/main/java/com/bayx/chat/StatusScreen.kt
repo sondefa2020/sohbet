@@ -80,7 +80,7 @@ fun StatusScreen(onBack: () -> Unit) {
                     Column(Modifier.weight(1f)) {
                         Text("Durumum", color = Ink, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
                         Text(
-                            if (mine != null) "${mine.items.size} güncelleme · dokunup gör" else "Durum paylaşmak için dokun",
+                            if (mine != null) "${mine.items.size} güncelleme · dokunup gör" else t("Durum paylaşmak için dokun"),
                             color = SoftBlue, fontSize = 13.sp,
                         )
                     }
@@ -96,7 +96,7 @@ fun StatusScreen(onBack: () -> Unit) {
             if (friends.isNotEmpty()) {
                 item {
                     Text(
-                        "Son güncellemeler",
+                        t("Son güncellemeler"),
                         color = SoftBlue, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.padding(start = 22.dp, top = 10.dp, bottom = 4.dp),
                     )

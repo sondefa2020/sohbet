@@ -53,7 +53,7 @@ fun MediaHubScreen(onBack: () -> Unit) {
             Text("Medya", fontSize = 22.sp, fontWeight = FontWeight.Bold)
         }
         Text(
-            "Fotoğraf ve videolarını görmek istediğin sohbeti seç.",
+            t("Fotoğraf ve videolarını görmek istediğin sohbeti seç."),
             color = Color(0xFF5B6B7C),
             fontSize = 14.sp,
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),

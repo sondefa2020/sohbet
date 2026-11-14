@@ -182,26 +182,26 @@ fun CallOverlay() {
                     ) {
                         RoundAction(
                             if (current.muted) Icons.Filled.MicOff else Icons.Filled.Mic,
-                            if (current.muted) "Mikrofonu aç" else "Sessize al",
+                            if (current.muted) t("Mikrofonu aç") else "Sessize al",
                             if (current.muted) Color.White else Color(0x22FFFFFF),
                             tint = if (current.muted) Color(0xFF0A1A33) else Color.White,
                             size = 56,
                         ) { Calls.toggleMute() }
                         RoundAction(
                             if (current.speaker) Icons.AutoMirrored.Filled.VolumeUp else Icons.AutoMirrored.Filled.VolumeOff,
-                            if (current.speaker) "Hoparlörü kapat" else "Hoparlörü aç",
+                            if (current.speaker) t("Hoparlörü kapat") else t("Hoparlörü aç"),
                             if (current.speaker) Color.White else Color(0x22FFFFFF),
                             tint = if (current.speaker) Color(0xFF0A1A33) else Color.White,
                             size = 56,
                         ) { Calls.toggleSpeaker() }
                         RoundAction(
                             Icons.Filled.PauseCircle,
-                            if (current.held) "Beklemeden çıkar" else "Beklet",
+                            if (current.held) t("Beklemeden çıkar") else "Beklet",
                             if (current.held) Color.White else Color(0x22FFFFFF),
                             tint = if (current.held) Color(0xFF0A1A33) else Color.White,
                             size = 56,
                         ) { Calls.toggleHold() }
-                        RoundAction(Icons.Filled.Dialpad, "Tuş takımı", Color(0x22FFFFFF), size = 56) { dialpad = true }
+                        RoundAction(Icons.Filled.Dialpad, t("Tuş takımı"), Color(0x22FFFFFF), size = 56) { dialpad = true }
                     }
                     if (current.video) {
                         Spacer(Modifier.height(14.dp))
@@ -212,13 +212,13 @@ fun CallOverlay() {
                         ) {
                             RoundAction(
                                 if (current.cameraOn) Icons.Filled.Videocam else Icons.Filled.VideocamOff,
-                                if (current.cameraOn) "Kamerayı kapat" else "Kamerayı aç",
+                                if (current.cameraOn) t("Kamerayı kapat") else t("Kamerayı aç"),
                                 Color(0x22FFFFFF), size = 56,
                             ) { Calls.toggleCamera() }
-                            RoundAction(Icons.Filled.Cameraswitch, "Kamerayı çevir", Color(0x22FFFFFF), size = 56) { Calls.switchCamera() }
+                            RoundAction(Icons.Filled.Cameraswitch, t("Kamerayı çevir"), Color(0x22FFFFFF), size = 56) { Calls.switchCamera() }
                             RoundAction(
                                 Icons.Filled.ScreenShare,
-                                if (current.screenSharing) "Paylaşımı durdur" else "Ekranı paylaş",
+                                if (current.screenSharing) t("Paylaşımı durdur") else t("Ekranı paylaş"),
                                 if (current.screenSharing) Color.White else Color(0x22FFFFFF),
                                 tint = if (current.screenSharing) Color(0xFF0A1A33) else Color.White,
                                 size = 56,
@@ -258,12 +258,12 @@ private fun statusText(call: CallState): String {
     }
     return when (call.phase) {
         CallPhase.OUTGOING -> when {
-            !call.peerOnline -> "Çevrimdışı · aranıyor…"
-            call.video -> "Görüntülü arama · çalıyor…"
-            else -> "Çalıyor…"
+            !call.peerOnline -> t("Çevrimdışı · aranıyor…")
+            call.video -> t("Görüntülü arama · çalıyor…")
+            else -> t("Çalıyor…")
         }
-        CallPhase.INCOMING -> if (call.video) "Görüntülü arama geliyor" else "Sesli arama geliyor"
-        CallPhase.CONNECTING -> "Bağlanıyor…"
+        CallPhase.INCOMING -> if (call.video) t("Görüntülü arama geliyor") else "Sesli arama geliyor"
+        CallPhase.CONNECTING -> t("Bağlanıyor…")
         CallPhase.ACTIVE -> {
             val seconds = ((now - call.startedAt) / 1000).coerceAtLeast(0)
             val time = "%02d:%02d".format(seconds / 60, seconds % 60)
@@ -339,7 +339,7 @@ private fun DialpadOverlay(onDismiss: () -> Unit) {
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.systemBarsPadding().padding(24.dp)) {
-            Text(typed.ifEmpty { "Tuş takımı" }, color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+            Text(typed.ifEmpty { t("Tuş takımı") }, color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(24.dp))
             keys.chunked(3).forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {

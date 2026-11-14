@@ -75,7 +75,7 @@ fun CallsScreen(onBack: () -> Unit, onOpenChat: (String) -> Unit) {
                     Text("Henüz arama yok", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        "Bir sohbeti açıp üstteki telefon ya da kamera simgesine dokunarak arama başlat. Aramaların burada listelenir.",
+                        t("Bir sohbeti açıp üstteki telefon ya da kamera simgesine dokunarak arama başlat. Aramaların burada listelenir."),
                         color = SoftBlue, fontSize = 14.sp,
                     )
                 }
@@ -111,8 +111,8 @@ private fun CallRow(e: CallEntry, onClick: () -> Unit) {
         else -> Icons.AutoMirrored.Filled.CallReceived
     }
     val label = when {
-        missed -> "Cevapsız"
-        e.outgoing && !e.answered -> "Giden · ulaşılamadı"
+        missed -> t("Cevapsız")
+        e.outgoing && !e.answered -> t("Giden · ulaşılamadı")
         e.outgoing -> "Giden arama"
         else -> "Gelen arama"
     }
@@ -147,7 +147,7 @@ private fun CallRow(e: CallEntry, onClick: () -> Unit) {
         Spacer(Modifier.width(10.dp))
         Icon(
             if (e.video) Icons.Outlined.Videocam else Icons.Outlined.Call,
-            contentDescription = if (e.video) "Görüntülü ara" else "Sesli ara",
+            contentDescription = if (e.video) t("Görüntülü ara") else "Sesli ara",
             tint = Blue,
             modifier = Modifier.size(24.dp),
         )

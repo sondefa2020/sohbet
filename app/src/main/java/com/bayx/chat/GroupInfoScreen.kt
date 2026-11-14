@@ -94,7 +94,7 @@ fun GroupInfoScreen(roomId: String, onBack: () -> Unit, onLeft: () -> Unit) {
                         if (g.canManage) {
                             Spacer(Modifier.width(8.dp))
                             Icon(
-                                Icons.Outlined.Edit, "Adı değiştir", tint = Blue,
+                                Icons.Outlined.Edit, t("Adı değiştir"), tint = Blue,
                                 modifier = Modifier.size(20.dp).clickable { renaming = true },
                             )
                         }
@@ -122,7 +122,7 @@ fun GroupInfoScreen(roomId: String, onBack: () -> Unit, onLeft: () -> Unit) {
 
             item {
                 Text(
-                    "Üyeler", color = SoftBlue, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                    t("Üyeler"), color = SoftBlue, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(start = 22.dp, top = 8.dp, bottom = 2.dp),
                 )
             }
@@ -145,8 +145,8 @@ fun GroupInfoScreen(roomId: String, onBack: () -> Unit, onLeft: () -> Unit) {
                         )
                         val sub = when {
                             m.invited -> "Davet edildi"
-                            m.isAdmin -> "Yönetici"
-                            else -> "Üye"
+                            m.isAdmin -> t("Yönetici")
+                            else -> t("Üye")
                         }
                         Text(sub, color = if (m.isAdmin) Color(0xFF2E8B6E) else SoftBlue, fontSize = 13.sp)
                     }
@@ -184,7 +184,7 @@ fun GroupInfoScreen(roomId: String, onBack: () -> Unit, onLeft: () -> Unit) {
                 TextButton(onClick = {
                     val n = name.trim()
                     renaming = false
-                    if (n.isNotEmpty()) act({ Bayx.renameGroup(roomId, n) }, "Ad değiştirilemedi.")
+                    if (n.isNotEmpty()) act({ Bayx.renameGroup(roomId, n) }, t("Ad değiştirilemedi."))
                 }) { Text("Kaydet") }
             },
             dismissButton = { TextButton(onClick = { renaming = false }) { Text("Vazgeç") } },
@@ -199,7 +199,7 @@ fun GroupInfoScreen(roomId: String, onBack: () -> Unit, onLeft: () -> Unit) {
             onDismiss = { adding = false },
             onAdd = { ids ->
                 adding = false
-                if (ids.isNotEmpty()) act({ Bayx.addGroupMembers(roomId, ids) }, "Üye eklenemedi.")
+                if (ids.isNotEmpty()) act({ Bayx.addGroupMembers(roomId, ids) }, t("Üye eklenemedi."))
             },
         )
     }
@@ -231,11 +231,11 @@ fun GroupInfoScreen(roomId: String, onBack: () -> Unit, onLeft: () -> Unit) {
             onDismiss = { actionMember = null },
             onToggleAdmin = {
                 actionMember = null
-                act({ Bayx.setGroupAdmin(roomId, m.userId, !m.isAdmin) }, "Yetki değiştirilemedi.")
+                act({ Bayx.setGroupAdmin(roomId, m.userId, !m.isAdmin) }, t("Yetki değiştirilemedi."))
             },
             onRemove = {
                 actionMember = null
-                act({ Bayx.removeGroupMember(roomId, m.userId) }, "Üye çıkarılamadı.")
+                act({ Bayx.removeGroupMember(roomId, m.userId) }, t("Üye çıkarılamadı."))
             },
         )
     }
@@ -264,7 +264,7 @@ private fun MemberActionSheet(
                 ) {
                     Icon(Icons.Outlined.Shield, null, tint = Blue, modifier = Modifier.size(24.dp))
                     Spacer(Modifier.width(20.dp))
-                    Text(if (member.isAdmin) "Yöneticiliği kaldır" else "Yönetici yap", color = Ink, fontSize = 16.sp)
+                    Text(if (member.isAdmin) t("Yöneticiliği kaldır") else t("Yönetici yap"), color = Ink, fontSize = 16.sp)
                 }
             }
             Row(

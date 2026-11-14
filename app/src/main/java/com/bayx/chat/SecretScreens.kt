@@ -82,7 +82,7 @@ private fun PinScreen(onBack: () -> Unit) {
     var first by remember { mutableStateOf<String?>(null) }
     var pin by remember { mutableStateOf("") }
     var message by remember {
-        mutableStateOf(if (creating) "Gizli sohbetler için 4 haneli bir PIN belirle" else "PIN'ini gir")
+        mutableStateOf(if (creating) t("Gizli sohbetler için 4 haneli bir PIN belirle") else "PIN'ini gir")
     }
 
     fun submit(value: String) {
@@ -96,14 +96,14 @@ private fun PinScreen(onBack: () -> Unit) {
             } else {
                 first = null
                 pin = ""
-                message = "PIN'ler aynı değil. Baştan belirle."
+                message = t("PIN'ler aynı değil. Baştan belirle.")
             }
         } else {
             when (val result = SecretLock.tryUnlock(value)) {
                 SecretLock.Result.Ok -> Unit
                 SecretLock.Result.Wrong -> {
                     pin = ""
-                    message = "PIN yanlış. Tekrar dene."
+                    message = t("PIN yanlış. Tekrar dene.")
                 }
                 is SecretLock.Result.Wait -> {
                     pin = ""

@@ -49,20 +49,20 @@ import kotlin.random.Random
 
 /** Tayfa'nın özgün hareketli ifadeleri; MSN tarzı yazı kodlarıyla çağrılır. */
 enum class Emo(val codes: List<String>, val label: String) {
-    SMILE(listOf(":)", ":-)"), "Gülümseme"),
+    SMILE(listOf(":)", ":-)"), t("Gülümseme")),
     LAUGH(listOf(":D", ":-D", ":d"), "Kahkaha"),
-    WINK(listOf(";)", ";-)"), "Göz kırpma"),
-    TONGUE(listOf(":P", ":p", ":-P"), "Dil çıkarma"),
-    SAD(listOf(":(", ":-("), "Üzgün"),
-    CRY(listOf(":'("), "Ağlama"),
-    SURPRISED(listOf(":O", ":o", ":-O"), "Şaşkın"),
-    COOL(listOf("(H)", "(h)", "8)"), "Havalı"),
-    ANGRY(listOf(":@"), "Kızgın"),
+    WINK(listOf(";)", ";-)"), t("Göz kırpma")),
+    TONGUE(listOf(":P", ":p", ":-P"), t("Dil çıkarma")),
+    SAD(listOf(":(", ":-("), t("Üzgün")),
+    CRY(listOf(":'("), t("Ağlama")),
+    SURPRISED(listOf(":O", ":o", ":-O"), t("Şaşkın")),
+    COOL(listOf("(H)", "(h)", "8)"), t("Havalı")),
+    ANGRY(listOf(":@"), t("Kızgın")),
     BLUSH(listOf(":$"), "Utanma"),
-    KISS(listOf("(K)", "(k)", ":*"), "Öpücük"),
+    KISS(listOf("(K)", "(k)", ":*"), t("Öpücük")),
     HEART(listOf("<3", "(L)", "(l)"), "Kalp"),
-    THUMBS(listOf("(Y)", "(y)"), "Beğendim"),
-    BROKEN(listOf("</3", "(U)", "(u)"), "Kırık kalp"),
+    THUMBS(listOf("(Y)", "(y)"), t("Beğendim")),
+    BROKEN(listOf("</3", "(U)", "(u)"), t("Kırık kalp")),
     ;
 
     val code: String get() = codes.first()
@@ -78,7 +78,7 @@ private fun tokenize(text: String): List<Any> {
     var i = 0
     while (i < text.length) {
         val match = allCodes.firstOrNull { (code, _) -> text.startsWith(code, i) }
-        // "8)" gibi kodlar ancak kelime başında ifade sayılır (ör. "18)" sayı olarak kalır).
+        // "8)t(" gibi kodlar ancak kelime başında ifade sayılır (ör. ")18)" sayı olarak kalır).
         val ok = match != null && (match.first[0].isLetterOrDigit().not() || i == 0 || !text[i - 1].isLetterOrDigit())
         if (match != null && ok) {
             if (buf.isNotEmpty()) {
@@ -543,9 +543,9 @@ private fun DrawScope.drawFireworks(particles: List<Particle>, p: Float, fade: F
 
 /** İfade panelindeki efekt düğmeleri için küçük önizleme adı. */
 fun effectTitle(name: String): String = when (name) {
-    "kalp" -> "Kalp yağmuru"
+    "kalp" -> t("Kalp yağmuru")
     "konfeti" -> "Konfeti"
     "kar" -> "Kar"
-    "havaifisek" -> "Havai fişek"
+    "havaifisek" -> t("Havai fişek")
     else -> name
 }

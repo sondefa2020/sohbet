@@ -209,7 +209,7 @@ internal fun formatCode(raw: String, length: Int): String {
     return clean.chunked(4).joinToString("-")
 }
 
-/** Ad soyaddan kullanıcı adı önerisi: "Ayşe Yılmaz" → "ayse.yilmaz". */
+/** Ad soyaddan kullanıcı adı önerisi: t("Ayşe Yılmaz") → "ayse.yilmaz". */
 internal fun suggestUsername(name: String): String {
     val map = mapOf('ç' to 'c', 'ğ' to 'g', 'ı' to 'i', 'ö' to 'o', 'ş' to 's', 'ü' to 'u', 'â' to 'a', 'î' to 'i', 'û' to 'u')
     val base = name.lowercase(java.util.Locale.forLanguageTag("tr"))
@@ -259,7 +259,7 @@ internal fun copySensitive(context: Context, label: String, text: String) {
 
 internal fun shareText(context: Context, text: String) {
     val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
-    runCatching { context.startActivity(Intent.createChooser(send, "Paylaş").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+    runCatching { context.startActivity(Intent.createChooser(send, t("Paylaş")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
 }
 
 // ----------------------------------------------------------------- diyaloglar
@@ -277,8 +277,8 @@ internal fun RecoveryCodeDialog(code: String, onDone: () -> Unit) {
         text = {
             Column {
                 Text(
-                    "Çıkış yaptığında ya da telefon değiştirdiğinde hesabına bu kodla girersin. " +
-                        "Bir kağıda yaz ya da güvendiğin bir yere kaydet. Bir daha gösterilmez.",
+                    t("Çıkış yaptığında ya da telefon değiştirdiğinde hesabına bu kodla girersin. ") +
+                        t("Bir kağıda yaz ya da güvendiğin bir yere kaydet. Bir daha gösterilmez."),
                     color = Muted,
                     fontSize = 14.sp,
                 )
@@ -365,7 +365,7 @@ internal fun LockScreen() {
         }
         val info = BiometricPrompt.PromptInfo.Builder()
             .setTitle("Tayfa kilitli")
-            .setSubtitle("Devam etmek için parmak izini ya da ekran kilidini kullan")
+            .setSubtitle(t("Devam etmek için parmak izini ya da ekran kilidini kullan"))
             .setAllowedAuthenticators(Gate.AUTHENTICATORS)
             .build()
         BiometricPrompt(
@@ -391,7 +391,7 @@ internal fun LockScreen() {
             Spacer(Modifier.height(18.dp))
             Text("Tayfa kilitli", color = Ink, fontSize = 24.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(28.dp))
-            SandButton("Kilidi aç", icon = Icons.Outlined.Fingerprint, modifier = Modifier.width(220.dp)) { tries++ }
+            SandButton(t("Kilidi aç"), icon = Icons.Outlined.Fingerprint, modifier = Modifier.width(220.dp)) { tries++ }
         }
     }
 }

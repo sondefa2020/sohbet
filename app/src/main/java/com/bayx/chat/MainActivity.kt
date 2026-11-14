@@ -139,8 +139,9 @@ fun BayxTheme(content: @Composable () -> Unit) {
         }
     }
     MaterialTheme(colorScheme = scheme) {
-        // Arayüz Türkçe olduğu için telefonun dili sağdan sola olsa bile soldan sağa çizilir.
-        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr, content = content)
+        // Arapça seçilince sağdan sola, diğer dillerde soldan sağa çizilir.
+        val dir = if (L.rtl) LayoutDirection.Rtl else LayoutDirection.Ltr
+        CompositionLocalProvider(LocalLayoutDirection provides dir, content = content)
     }
 }
 

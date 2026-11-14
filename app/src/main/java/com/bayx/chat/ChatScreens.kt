@@ -1,6 +1,8 @@
 package com.bayx.chat
 
 import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.Language
+import androidx.compose.material3.RadioButton
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material.icons.outlined.Delete
@@ -235,7 +237,7 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
 
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) {
-            sendMedia("Fotoğraf gönderilemedi.") {
+            sendMedia(t("Fotoğraf gönderilemedi.")) {
                 val image = withContext(Dispatchers.IO) { MediaTools.prepareImage(context, uri) }
                 if (image == null) false else Bayx.sendImage(session, image.bytes, image.width, image.height)
             }
@@ -243,7 +245,7 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
     }
     val pickVideo = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) {
-            sendMedia("Video gönderilemedi. En fazla 50 MB'lık videolar gönderilebilir.") {
+            sendMedia(t("Video gönderilemedi. En fazla 50 MB'lık videolar gönderilebilir.")) {
                 val video = withContext(Dispatchers.IO) { MediaTools.prepareVideo(context, uri) }
                 if (video == null) {
                     false
@@ -260,7 +262,7 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
         val file = cameraFile
         cameraFile = null
         if (taken && file != null) {
-            sendMedia("Fotoğraf gönderilemedi.") {
+            sendMedia(t("Fotoğraf gönderilemedi.")) {
                 val image = withContext(Dispatchers.IO) {
                     val prepared = MediaTools.prepareImage(context, Uri.fromFile(file))
                     file.delete()
@@ -274,7 +276,7 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
     }
     val locationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
         if (result.values.any { it }) {
-            sendMedia("Konum alınamadı. Konum servisinin açık olduğunu kontrol et.") {
+            sendMedia(t("Konum alınamadı. Konum servisinin açık olduğunu kontrol et.")) {
                 val location = MediaTools.currentLocation(context)
                 if (location == null) false else Bayx.sendLocation(session, location.latitude, location.longitude)
             }
@@ -317,13 +319,13 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
                     Spacer(Modifier.width(4.dp))
                     Text(
                         when {
-                            typing.isNotEmpty() -> if (session.isDirect || session.secret) "yazıyor…" else typing.joinToString() + " yazıyor…"
+                            typing.isNotEmpty() -> if (session.isDirect || session.secret) t("yazıyor…") else typing.joinToString() + t(" yazıyor…")
                             session.secret -> "Gizli · mesajlar ${lifetimeLabel(session.lifetimeMs)} sonra kaybolur"
-                            partner == null -> "Uçtan uca şifreli"
+                            partner == null -> t("Uçtan uca şifreli")
                             !partnerPresence?.status.isNullOrBlank() -> modeLabel(partnerPresence?.mode) + " · " + partnerPresence?.status
-                            partnerPresence != null -> modeLabel(partnerPresence.mode) + " · şifreli"
-                            partnerOnline -> "Çevrimiçi · şifreli"
-                            else -> "Çevrimdışı · şifreli"
+                            partnerPresence != null -> modeLabel(partnerPresence.mode) + t(" · şifreli")
+                            partnerOnline -> t("Çevrimiçi · şifreli")
+                            else -> t("Çevrimdışı · şifreli")
                         },
                         color = when {
                             typing.isNotEmpty() -> Blue
@@ -336,7 +338,7 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
                     )
                 }
             }
-            ChipIcon(Icons.Outlined.Vibration, "Titreşim gönder", size = 38.dp, tint = Color(0xFF9A6236)) {
+            ChipIcon(Icons.Outlined.Vibration, t("Titreşim gönder"), size = 38.dp, tint = Color(0xFF9A6236)) {
                 val now = System.currentTimeMillis()
                 if (now - lastNudge < 5_000) {
                     toast("Biraz bekle; titreşim 5 saniyede bir gönderilebilir.")
@@ -348,9 +350,9 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
             Spacer(Modifier.width(6.dp))
             ChipIcon(Icons.Outlined.Call, "Sesli ara", size = 38.dp) { placeCall(false) }
             Spacer(Modifier.width(6.dp))
-            ChipIcon(Icons.Outlined.Videocam, "Görüntülü ara", size = 38.dp) { placeCall(true) }
+            ChipIcon(Icons.Outlined.Videocam, t("Görüntülü ara"), size = 38.dp) { placeCall(true) }
             Box {
-                IconButton(onClick = { menuOpen = true }) { Icon(Icons.Filled.MoreVert, "Diğer", tint = Ink) }
+                IconButton(onClick = { menuOpen = true }) { Icon(Icons.Filled.MoreVert, t("Diğer"), tint = Ink) }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     DropdownMenuItem(
                         text = { Text("Mesajlarda ara") },
@@ -390,7 +392,7 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (searchQuery.isNotBlank()) Text("$hits sonuç", color = Muted, fontSize = 13.sp)
                         IconButton(onClick = { searchOpen = false; searchQuery = "" }) {
-                            Icon(Icons.Filled.Close, "Aramayı kapat", tint = Muted)
+                            Icon(Icons.Filled.Close, t("Aramayı kapat"), tint = Muted)
                         }
                     }
                 },
@@ -401,7 +403,7 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
         if (session.secret) {
             Text(
                 "Bu gizli sohbette mesajlar ${lifetimeLabel(session.lifetimeMs)} sonra hem cihazlardan hem sunucudan silinir. " +
-                    "Ekran görüntüsü alınamaz.",
+                    t("Ekran görüntüsü alınamaz."),
                 color = Color(0xFF4A2FB0),
                 fontSize = 12.5.sp,
                 textAlign = TextAlign.Center,
@@ -458,14 +460,14 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
                     if (result == null) {
                         toast("Kayıt çok kısa.")
                     } else {
-                        sendMedia("Sesli mesaj gönderilemedi.") {
+                        sendMedia(t("Sesli mesaj gönderilemedi.")) {
                             Bayx.sendVoice(session, result.bytes, result.mime, result.durationMs, result.waveform)
                         }
                     }
                 },
             )
         } else {
-            val banner = editTarget?.let { "Düzenleniyor" to it } ?: replyTarget?.let { (if (it.mine) "Sen" else it.sender) to it }
+            val banner = editTarget?.let { t("Düzenleniyor") to it } ?: replyTarget?.let { (if (it.mine) "Sen" else it.sender) to it }
             banner?.let { (who, msg) ->
                 Row(
                     Modifier.fillMaxWidth().background(GlassBar).padding(start = 16.dp, end = 8.dp, top = 8.dp),
@@ -474,7 +476,7 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
                     Box(Modifier.width(3.dp).height(36.dp).clip(RoundedCornerShape(2.dp)).background(Blue))
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(if (editTarget != null) "Mesajı düzenle" else "$who yanıtlanıyor", color = Blue, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Text(if (editTarget != null) t("Mesajı düzenle") else "$who yanıtlanıyor", color = Blue, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         Text(
                             msg.text.ifBlank { "Medya" },
                             color = Muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -506,7 +508,7 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
                         placeholder = { Text("Mesaj yaz...", color = Muted) },
                         trailingIcon = {
                             IconButton(onClick = { showEmoji = !showEmoji }) {
-                                Icon(Icons.Outlined.EmojiEmotions, "İfadeler ve efektler", tint = if (showEmoji) Blue else Muted)
+                                Icon(Icons.Outlined.EmojiEmotions, t("İfadeler ve efektler"), tint = if (showEmoji) Blue else Muted)
                             }
                         },
                         maxLines = 4,
@@ -555,7 +557,7 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
                     if (draft.isBlank()) {
                         Icon(Icons.Filled.Mic, "Sesli mesaj kaydet", tint = Color.White, modifier = Modifier.size(26.dp))
                     } else {
-                        Icon(Icons.AutoMirrored.Filled.Send, "Gönder", tint = Color.White)
+                        Icon(Icons.AutoMirrored.Filled.Send, t("Gönder"), tint = Color.White)
                     }
                 }
             }
@@ -714,7 +716,7 @@ private fun MessageRow(
                 Icon(Icons.Outlined.Vibration, contentDescription = null, tint = Color(0xFF6B4A00), modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    (if (msg.mine) "Titreşim gönderdin" else "${msg.sender} sana titreşim gönderdi") + " · " + formatClock(msg.time),
+                    (if (msg.mine) t("Titreşim gönderdin") else "${msg.sender} sana titreşim gönderdi") + " · " + formatClock(msg.time),
                     color = Color(0xFF6B4A00),
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -788,10 +790,10 @@ private fun MessageRow(
                 ) {
                     Text(formatClock(msg.time), color = sub, fontSize = 12.sp)
                     val stateIcon = when (msg.state) {
-                        MsgState.SENDING -> Icons.Outlined.Schedule to "Gönderiliyor"
-                        MsgState.SENT -> Icons.Filled.Done to "Gönderildi"
+                        MsgState.SENDING -> Icons.Outlined.Schedule to t("Gönderiliyor")
+                        MsgState.SENT -> Icons.Filled.Done to t("Gönderildi")
                         MsgState.READ -> Icons.Filled.DoneAll to "Okundu"
-                        MsgState.FAILED -> Icons.Outlined.ErrorOutline to "Gönderilemedi"
+                        MsgState.FAILED -> Icons.Outlined.ErrorOutline to t("Gönderilemedi")
                         MsgState.NONE -> null
                     }
                     if (stateIcon != null) {
@@ -814,6 +816,7 @@ private fun MessageRow(
 @Composable
 fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Unit, onWebLink: () -> Unit) {
     var confirmLogout by remember { mutableStateOf(false) }
+    var langPick by remember { mutableStateOf(false) }
     var loggingOut by remember { mutableStateOf(false) }
     var info by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
@@ -835,7 +838,7 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
                 val jpeg = withContext(Dispatchers.IO) { avatarJpeg(context, uri) }
                 val ok = jpeg != null && Bayx.setAvatar(jpeg)
                 uploading = false
-                toast(if (ok) "Profil fotoğrafı güncellendi." else "Fotoğraf yüklenemedi.")
+                toast(if (ok) t("Profil fotoğrafı güncellendi.") else t("Fotoğraf yüklenemedi."))
             }
         }
     }
@@ -914,7 +917,7 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
                     if (uploading) {
                         CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
                     } else {
-                        Icon(Icons.Outlined.PhotoCamera, "Fotoğrafı değiştir", tint = Color.White, modifier = Modifier.size(19.dp))
+                        Icon(Icons.Outlined.PhotoCamera, t("Fotoğrafı değiştir"), tint = Color.White, modifier = Modifier.size(19.dp))
                     }
                 }
             }
@@ -935,7 +938,7 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
                     }
                 }
                 Text(
-                    myStatus.ifBlank { "Durum mesajı ekle…" },
+                    myStatus.ifBlank { t("Durum mesajı ekle…") },
                     color = if (myStatus.isBlank()) SoftBlue else Muted,
                     fontSize = 16.sp,
                     fontStyle = if (myStatus.isBlank()) FontStyle.Italic else FontStyle.Normal,
@@ -968,14 +971,14 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
         Spacer(Modifier.height(14.dp))
         SoftCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(horizontal = 18.dp, vertical = 4.dp)) {
-                SettingRow(Icons.Outlined.Person, "Hesabım") {
+                SettingRow(Icons.Outlined.Person, t("Hesabım")) {
                     info = "Kullanıcı adı: @$username\nSunucu: ${Api.SERVER_NAME}\n\nŞifren yok: hesabına kurtarma kodu, " +
-                        "başka cihazdan giriş kodu ya da yöneticinin giriş bağlantısıyla girersin."
+                        t("başka cihazdan giriş kodu ya da yöneticinin giriş bağlantısıyla girersin.")
                 }
                 HorizontalDivider(color = Line)
-                SettingRow(Icons.Outlined.Lock, "Gizlilik ve Güvenlik") {
-                    info = "Mesajların uçtan uca şifrelidir. Bu cihazdaki oturum ve sohbet verileri şifreli saklanır; gelen " +
-                        "fotoğraf, video ve sesler galeriye kaydedilmez. Çıkış yaptığında bu cihazdaki her şey silinir."
+                SettingRow(Icons.Outlined.Lock, t("Gizlilik ve Güvenlik")) {
+                    info = t("Mesajların uçtan uca şifrelidir. Bu cihazdaki oturum ve sohbet verileri şifreli saklanır; gelen ") +
+                        t("fotoğraf, video ve sesler galeriye kaydedilmez. Çıkış yaptığında bu cihazdaki her şey silinir.")
                 }
                 HorizontalDivider(color = Line)
                 SettingRow(Icons.Outlined.Notifications, "Bildirimler") { openNotificationSettings(context) }
@@ -985,7 +988,7 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
                         checked = lockOn,
                         onCheckedChange = { on ->
                             if (on && !Gate.lockAvailable()) {
-                                info = "Uygulama kilidi için önce telefonuna ekran kilidi ya da parmak izi tanımla."
+                                info = t("Uygulama kilidi için önce telefonuna ekran kilidi ya da parmak izi tanımla.")
                             } else {
                                 Gate.lockEnabled = on
                                 lockOn = on
@@ -993,12 +996,17 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
                         },
                     )
                 }) {
-                    info = "Açıksa, Tayfa'ya 30 saniyeden uzun süre sonra döndüğünde parmak izi ya da ekran kilidi istenir."
+                    info = t("Açıksa, Tayfa'ya 30 saniyeden uzun süre sonra döndüğünde parmak izi ya da ekran kilidi istenir.")
                 }
-                SettingRow(Icons.Outlined.DarkMode, "Karanlık mod", trailing = {
+                SettingRow(Icons.Outlined.DarkMode, t("Karanlık mod"), trailing = {
                     Switch(checked = ThemeState.dark, onCheckedChange = { ThemeState.set(it) })
                 }) {
                     ThemeState.toggle()
+                }
+                SettingRow(Icons.Outlined.Language, t("Dil"), trailing = {
+                    Text(L.lang.native, color = Muted, fontSize = 14.sp)
+                }) {
+                    langPick = true
                 }
             }
         }
@@ -1019,32 +1027,32 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
                     },
                 ) { showEmail = true }
                 HorizontalDivider(color = Line)
-                SettingRow(Icons.Outlined.Computer, "Web'e bağlan", onClick = onWebLink)
+                SettingRow(Icons.Outlined.Computer, t("Web'e bağlan"), onClick = onWebLink)
                 HorizontalDivider(color = Line)
-                SettingRow(Icons.Outlined.Password, "Web için geçici şifre") {
+                SettingRow(Icons.Outlined.Password, t("Web için geçici şifre")) {
                     withToken { token ->
                         shareDialog = Triple(
-                            "Web için geçici şifre",
-                            "Tayfa Web bir güvenlik adımında şifre sorarsa bunu yaz (tireler dahil). 5 dakika sonra geçersiz olur.",
+                            t("Web için geçici şifre"),
+                            t("Tayfa Web bir güvenlik adımında şifre sorarsa bunu yaz (tireler dahil). 5 dakika sonra geçersiz olur."),
                             Api.CodeReply(Api.webPassword(token), ""),
                         )
                     }
                 }
                 if (isAdmin) {
                     HorizontalDivider(color = Line)
-                    SettingRow(Icons.Outlined.HowToReg, "Yönetim ve davetler", onClick = onAdmin)
+                    SettingRow(Icons.Outlined.HowToReg, t("Yönetim ve davetler"), onClick = onAdmin)
                 }
             }
         }
         Spacer(Modifier.height(14.dp))
         SoftCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(horizontal = 18.dp, vertical = 4.dp)) {
-                SettingRow(Icons.Outlined.Info, "Uygulama Hakkında") {
+                SettingRow(Icons.Outlined.Info, t("Uygulama Hakkında")) {
                     val version = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull()
                     info = "Tayfa ${version.orEmpty()}\nÖzel, şifresiz ve uçtan uca şifreli sohbet."
                 }
                 HorizontalDivider(color = Line)
-                SettingRow(Icons.AutoMirrored.Outlined.Logout, "Çıkış Yap", tint = Color(0xFFB4232A)) { confirmLogout = true }
+                SettingRow(Icons.AutoMirrored.Outlined.Logout, t("Çıkış Yap"), tint = Color(0xFFB4232A)) { confirmLogout = true }
             }
         }
         Spacer(Modifier.height(28.dp))
@@ -1074,20 +1082,20 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
     }
     if (editName) {
         TextInputDialog(
-            title = "Görünen ad",
+            title = t("Görünen ad"),
             initial = name,
             maxLength = 40,
             onDismiss = { editName = false },
         ) { value ->
             editName = false
             if (value.isNotBlank() && value != name) {
-                scope.launch { toast(if (Bayx.setDisplayName(value.trim())) "Adın güncellendi." else "Ad değiştirilemedi.") }
+                scope.launch { toast(if (Bayx.setDisplayName(value.trim())) t("Adın güncellendi.") else t("Ad değiştirilemedi.")) }
             }
         }
     }
     if (editStatus) {
         TextInputDialog(
-            title = "Durum mesajı",
+            title = t("Durum mesajı"),
             initial = myStatus,
             maxLength = 80,
             onDismiss = { editStatus = false },
@@ -1122,6 +1130,27 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
     }
     info?.let { message -> InfoDialog(message) { info = null } }
 
+    if (langPick) {
+        AlertDialog(
+            onDismissRequest = { langPick = false },
+            title = { Text(t("Dil")) },
+            text = {
+                Column {
+                    AppLang.entries.forEach { lang ->
+                        Row(
+                            Modifier.fillMaxWidth().clickable { L.set(lang); langPick = false }.padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(selected = L.lang == lang, onClick = { L.set(lang); langPick = false })
+                            Spacer(Modifier.width(8.dp))
+                            Text(lang.native, color = Ink, fontSize = 16.sp)
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { langPick = false }) { Text(t("Vazgeç")) } },
+        )
+    }
     if (confirmLogout) {
         AlertDialog(
             onDismissRequest = { if (!loggingOut) confirmLogout = false },
@@ -1133,7 +1162,7 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
                 TextButton(enabled = !loggingOut, onClick = {
                     loggingOut = true
                     scope.launch { Bayx.logout() }
-                }) { Text(if (loggingOut) "Çıkış yapılıyor…" else "Çıkış yap") }
+                }) { Text(if (loggingOut) t("Çıkış yapılıyor…") else t("Çıkış yap")) }
             },
             dismissButton = {
                 TextButton(enabled = !loggingOut, onClick = { confirmLogout = false }) { Text("Vazgeç") }
@@ -1194,7 +1223,7 @@ fun AdminScreen(me: AuthState.LoggedIn, onBack: () -> Unit) {
                 Api.adminAction(token, action, member.userId, newPassword)
                 toast(done)
             } catch (e: ApiException) {
-                toast(e.message ?: "İşlem tamamlanamadı.")
+                toast(e.message ?: t("İşlem tamamlanamadı."))
             }
             busy = false
             reload++
@@ -1239,7 +1268,7 @@ fun AdminScreen(me: AuthState.LoggedIn, onBack: () -> Unit) {
                                 )
                                 Spacer(Modifier.height(6.dp))
                                 Text(
-                                    "Yönetici olarak her üyenin şifresini sıfırlayabilir ya da hesabını kapatabilirsin.",
+                                    t("Yönetici olarak her üyenin şifresini sıfırlayabilir ya da hesabını kapatabilirsin."),
                                     color = Muted,
                                     fontSize = 12.5.sp,
                                 )
@@ -1299,7 +1328,7 @@ fun AdminScreen(me: AuthState.LoggedIn, onBack: () -> Unit) {
             },
             confirmButton = {
                 TextButton(enabled = newPassword.length >= 8, onClick = {
-                    act("reset-password", member, newPassword, done = "Şifre değiştirildi.")
+                    act("reset-password", member, newPassword, done = t("Şifre değiştirildi."))
                     resetFor = null
                 }) { Text("Kaydet") }
             },
@@ -1314,7 +1343,7 @@ fun AdminScreen(me: AuthState.LoggedIn, onBack: () -> Unit) {
             text = { Text("${member.displayName} üyelikten çıkarılacak ve hesabı kapatılacak. Bu işlem geri alınamaz.") },
             confirmButton = {
                 TextButton(onClick = {
-                    act("remove", member, done = "Hesap kapatıldı.")
+                    act("remove", member, done = t("Hesap kapatıldı."))
                     removeFor = null
                 }) { Text("Kapat", color = Color(0xFFA32117)) }
             },
@@ -1463,8 +1492,8 @@ private fun AppConfigCard() {
         Column(Modifier.fillMaxWidth().padding(16.dp)) {
             Text("Duyuru ve güncelleme", color = Ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
             Text(
-                "Buradan yazdığın duyuru tüm üyelere anında gösterilir. Yeni APK yayınlayınca bağlantısını ve sürüm " +
-                    "numarasını gir; eski sürümdeki üyeler \"Yeni sürüm var\" uyarısı alır.",
+                t("Buradan yazdığın duyuru tüm üyelere anında gösterilir. Yeni APK yayınlayınca bağlantısını ve sürüm ") +
+                    "numarasını gir; eski sürümdeki üyeler \"Yeni sürüm var\t(" uyarısı alır."),
                 color = Muted, fontSize = 12.5.sp,
             )
             Spacer(Modifier.height(12.dp))
@@ -1524,9 +1553,9 @@ private fun MessageActionSheet(
 ) {
     androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color.White) {
         Column(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
-            ActionRow(Icons.AutoMirrored.Outlined.Reply, "Yanıtla", onReply)
-            if (msg.kind == MsgKind.TEXT) ActionRow(Icons.AutoMirrored.Outlined.Send, "İlet", onForward)
-            if (canEdit) ActionRow(Icons.Outlined.Edit, "Düzenle", onEdit)
+            ActionRow(Icons.AutoMirrored.Outlined.Reply, t("Yanıtla"), onReply)
+            if (msg.kind == MsgKind.TEXT) ActionRow(Icons.AutoMirrored.Outlined.Send, t("İlet"), onForward)
+            if (canEdit) ActionRow(Icons.Outlined.Edit, t("Düzenle"), onEdit)
             if (canDelete) ActionRow(Icons.Outlined.Delete, "Sil", onDelete, tint = Color(0xFFB4232A))
         }
     }
@@ -1567,7 +1596,7 @@ private fun ForwardDialog(msg: ChatMessage, onDismiss: () -> Unit) {
                                     val roomId = Bayx.startDirectChat(friend.userId)
                                     val ok = roomId != null && Bayx.forwardText(roomId, msg.text)
                                     busy = false
-                                    toast(if (ok) "${friend.displayName} kişisine iletildi." else "İletilemedi.")
+                                    toast(if (ok) "${friend.displayName} kişisine iletildi." else t("İletilemedi."))
                                     onDismiss()
                                 }
                             }.padding(vertical = 10.dp),

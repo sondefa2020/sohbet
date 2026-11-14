@@ -65,30 +65,30 @@ fun OnboardingScreen() {
         Text("Tayfa'ya hoş geldin", color = Ink, fontSize = 30.sp, fontWeight = FontWeight.ExtraBold, textAlign = TextAlign.Center)
         Spacer(Modifier.height(8.dp))
         Text(
-            "Özel, davetli bir sohbet uygulaması. Devam etmeden önce birkaç kısa noktaya göz at.",
+            t("Özel, davetli bir sohbet uygulaması. Devam etmeden önce birkaç kısa noktaya göz at."),
             color = Muted,
             fontSize = 16.sp,
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(32.dp))
-        Point(Icons.Outlined.Lock, "Uçtan uca şifreli", "Mesajların yalnızca sen ve karşındaki arasında okunur; gelen medya telefonun galerisine kaydedilmez.")
+        Point(Icons.Outlined.Lock, t("Uçtan uca şifreli"), t("Mesajların yalnızca sen ve karşındaki arasında okunur; gelen medya telefonun galerisine kaydedilmez."))
         Spacer(Modifier.height(20.dp))
-        Point(Icons.Outlined.PersonAddAlt, "Kişi onayı ile", "Biri seninle ancak sen kabul edersen sohbet edebilir. Kabul etmediğin kimse profilini göremez.")
+        Point(Icons.Outlined.PersonAddAlt, t("Kişi onayı ile"), t("Biri seninle ancak sen kabul edersen sohbet edebilir. Kabul etmediğin kimse profilini göremez."))
         Spacer(Modifier.height(20.dp))
-        Point(Icons.Outlined.Shield, "Senin sorumluluğunda", "Hesabını ve paylaştıklarını sen yönetirsin. Yöneticinin kuralları ihlal eden hesapları kısıtlama yetkisi vardır.")
+        Point(Icons.Outlined.Shield, t("Senin sorumluluğunda"), t("Hesabını ve paylaştıklarını sen yönetirsin. Yöneticinin kuralları ihlal eden hesapları kısıtlama yetkisi vardır."))
         Spacer(Modifier.weight(1f))
         Spacer(Modifier.height(28.dp))
         val notice = buildAnnotatedString {
             append("Devam ederek ")
-            withStyle(SpanStyle(color = Blue, fontWeight = FontWeight.SemiBold)) { append("Kullanıcı Sözleşmesi") }
+            withStyle(SpanStyle(color = Blue, fontWeight = FontWeight.SemiBold)) { append(t("Kullanıcı Sözleşmesi")) }
             append(" ve ")
-            withStyle(SpanStyle(color = Blue, fontWeight = FontWeight.SemiBold)) { append("Gizlilik Politikası") }
-            append("'nı kabul etmiş olursun.")
+            withStyle(SpanStyle(color = Blue, fontWeight = FontWeight.SemiBold)) { append(t("Gizlilik Politikası")) }
+            append(t("'nı kabul etmiş olursun."))
         }
         Text(notice, color = Muted, fontSize = 14.sp, textAlign = TextAlign.Center, lineHeight = 20.sp)
         Row(horizontalArrangement = Arrangement.Center) {
-            TextButton(onClick = { legal = "Kullanıcı Sözleşmesi" to Legal.TERMS }) { Text("Sözleşmeyi oku", fontSize = 13.sp) }
-            TextButton(onClick = { legal = "Gizlilik Politikası" to Legal.PRIVACY }) { Text("Gizliliği oku", fontSize = 13.sp) }
+            TextButton(onClick = { legal = t("Kullanıcı Sözleşmesi") to Legal.TERMS }) { Text("Sözleşmeyi oku", fontSize = 13.sp) }
+            TextButton(onClick = { legal = t("Gizlilik Politikası") to Legal.PRIVACY }) { Text("Gizliliği oku", fontSize = 13.sp) }
         }
         Spacer(Modifier.height(8.dp))
         SandButton("Kabul et ve devam et") { Gate.acceptOnboarding() }

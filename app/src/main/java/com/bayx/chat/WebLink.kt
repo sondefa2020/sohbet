@@ -91,7 +91,7 @@ fun WebLinkScreen(onBack: () -> Unit) {
         QrScanner(
             onResult = { text ->
                 if (text.startsWith("tayfaweb:")) approve(text, null)
-                else { scanning = false; error = "Bu bir Tayfa Web kodu değil." }
+                else { scanning = false; error = t("Bu bir Tayfa Web kodu değil.") }
             },
             onCancel = { scanning = false },
         )
@@ -121,7 +121,7 @@ fun WebLinkScreen(onBack: () -> Unit) {
                     Text("Web oturumu açıldı", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        "Bilgisayarındaki Tayfa Web birkaç saniye içinde açılır.",
+                        t("Bilgisayarındaki Tayfa Web birkaç saniye içinde açılır."),
                         color = SoftBlue, fontSize = 14.sp, textAlign = TextAlign.Center,
                     )
                     Spacer(Modifier.height(18.dp))
@@ -134,7 +134,7 @@ fun WebLinkScreen(onBack: () -> Unit) {
         SoftCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(20.dp)) {
                 Text(
-                    "Bilgisayarda web adresini aç. Ekranda bir QR kod ve 6 haneli numara göreceksin.",
+                    t("Bilgisayarda web adresini aç. Ekranda bir QR kod ve 6 haneli numara göreceksin."),
                     color = SoftBlue, fontSize = 14.5.sp,
                 )
                 Spacer(Modifier.height(18.dp))
@@ -224,11 +224,11 @@ private fun QrScanner(onResult: (String) -> Unit, onCancel: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
-                "QR kodu çerçeveye hizala",
+                t("QR kodu çerçeveye hizala"),
                 color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold,
             )
             Spacer(Modifier.height(18.dp))
-            GhostButton("Vazgeç", modifier = Modifier.fillMaxWidth(0.6f)) { onCancel() }
+            GhostButton(t("Vazgeç"), modifier = Modifier.fillMaxWidth(0.6f)) { onCancel() }
         }
 
         IconButton(

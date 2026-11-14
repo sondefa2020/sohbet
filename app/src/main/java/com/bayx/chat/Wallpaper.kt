@@ -52,8 +52,8 @@ object Wallpaper {
 
     val options = listOf(
         Option("krem", "Krem", listOf(Color(0xFFFCFAF7), Color(0xFFF1E9DF))),
-        Option("yesil", "Yeşil doodle", listOf(Color(0xFFE9F3EC), Color(0xFFDDEBE0)), doodle = true, doodleColor = Color(0x1A2E8B6E)),
-        Option("gun", "Gün batımı", listOf(Color(0xFFFCE9D6), Color(0xFFF3C9A8))),
+        Option("yesil", t("Yeşil doodle"), listOf(Color(0xFFE9F3EC), Color(0xFFDDEBE0)), doodle = true, doodleColor = Color(0x1A2E8B6E)),
+        Option("gun", t("Gün batımı"), listOf(Color(0xFFFCE9D6), Color(0xFFF3C9A8))),
         Option("mavi", "Okyanus", listOf(Color(0xFFE3EEF7), Color(0xFFCADEEE)), doodle = true, doodleColor = Color(0x163B6EA5)),
         Option("lila", "Lila", listOf(Color(0xFFEDE7FB), Color(0xFFDBD0F2))),
     )
@@ -122,7 +122,7 @@ fun WallpaperPicker(context: Context, current: String, onDismiss: () -> Unit) {
                             ChatBackground(option.id, Modifier.clip(RoundedCornerShape(14.dp)))
                             if (picked == option.id) {
                                 Box(Modifier.size(30.dp).clip(RoundedCornerShape(15.dp)).background(Color(0xFF2E8B6E)), contentAlignment = Alignment.Center) {
-                                    Icon(Icons.Filled.Check, "Seçili", tint = Color.White, modifier = Modifier.size(20.dp))
+                                    Icon(Icons.Filled.Check, t("Seçili"), tint = Color.White, modifier = Modifier.size(20.dp))
                                 }
                             }
                         }
