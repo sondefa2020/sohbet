@@ -359,6 +359,27 @@ object Dict {
         "ya da 6 haneli kodu gir" to ("or enter the 6-digit code" to "أو أدخل الرمز المكوّن من 6 خانات"),
         "6 haneli kodu gir." to ("Enter the 6-digit code." to "أدخل الرمز المكوّن من 6 خانات."),
 
+        // --- değişkenli kalıplar (%s)
+        "%s sonuç" to ("%s results" to "%s نتيجة"),
+        "%s yanıtlanıyor" to ("Replying to %s" to "الرد على %s"),
+        "@%s engellensin mi? Artık sana istek gönderemez ve kişilerinden çıkar." to ("Block @%s? They can no longer send you requests and will be removed from your contacts." to "حظر @%s؟ لن يتمكن من إرسال طلبات إليك وسيُزال من جهات اتصالك."),
+        "%s sana titreşim gönderdi" to ("%s sent you a nudge" to "%s أرسل إليك نكزة"),
+        "%s sana titreşim gönderdi!" to ("%s sent you a nudge!" to "%s أرسل إليك نكزة!"),
+        "%s / %s kişi" to ("%s / %s people" to "%s / %s شخص"),
+        "Üyeler (%s)" to ("Members (%s)" to "الأعضاء (%s)"),
+        "%s için yeni bir şifre belirle. Açık oturumları kapatılır; bu şifreyi kendisine ilet." to ("Set a new password for %s. Their open sessions will be closed; pass this password on to them." to "عيّن كلمة مرور جديدة لـ %s. ستُغلق جلساته المفتوحة؛ أبلغه بكلمة المرور."),
+        "%s üyelikten çıkarılacak ve hesabı kapatılacak. Bu işlem geri alınamaz." to ("%s will be removed and their account deactivated. This cannot be undone." to "ستتم إزالة %s وتعطيل حسابه. لا يمكن التراجع عن ذلك."),
+        "Doğrulama bağlantısı %s adresine gönderildi. Gelen kutunu ve istenmeyen klasörünü kontrol et. Kalan süre: %s gün." to ("A verification link was sent to %s. Check your inbox and spam folder. Time left: %s days." to "أُرسل رابط التحقق إلى %s. تحقق من البريد الوارد ومجلد الرسائل غير المرغوب فيها. الوقت المتبقي: %s يوم."),
+        "%s kişisine iletildi." to ("Forwarded to %s." to "تمت إعادة التوجيه إلى %s."),
+        "%s üye" to ("%s members" to "%s عضو"),
+        "%s gün" to ("%s days" to "%s يوم"),
+        "Çok fazla yanlış deneme. %s saniye bekle." to ("Too many wrong attempts. Wait %s seconds." to "محاولات خاطئة كثيرة. انتظر %s ثانية."),
+        "@%s adında bir kullanıcı bulunamadı." to ("No user named @%s was found." to "لم يُعثر على مستخدم باسم @%s."),
+        "%s artık kişilerinde." to ("%s is now in your contacts." to "%s الآن ضمن جهات اتصالك."),
+        "Gönderilen istekler (%s)" to ("Sent requests (%s)" to "الطلبات المرسلة (%s)"),
+        "Kişilerim (%s)" to ("My contacts (%s)" to "جهات اتصالي (%s)"),
+        "%s güncelleme · dokunup gör" to ("%s updates · tap to view" to "%s تحديث · اضغط للعرض"),
+
         // --- kişiler boş durum
         "Henüz kişin yok. Yukarıdan kullanıcı adıyla birini bul ve istek gönder." to ("You have no contacts yet. Find someone by username above and send a request." to "ليس لديك جهات اتصال بعد. ابحث عن شخص باسم المستخدم أعلاه وأرسل طلبًا."),
     )

@@ -100,7 +100,7 @@ fun GroupInfoScreen(roomId: String, onBack: () -> Unit, onLeft: () -> Unit) {
                         }
                     }
                     Spacer(Modifier.height(4.dp))
-                    Text("${g.members.size} üye", color = SoftBlue, fontSize = 14.sp)
+                    Text(tf("%s üye", g.members.size), color = SoftBlue, fontSize = 14.sp)
                 }
             }
 

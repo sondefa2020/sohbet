@@ -80,7 +80,7 @@ fun StatusScreen(onBack: () -> Unit) {
                     Column(Modifier.weight(1f)) {
                         Text("Durumum", color = Ink, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
                         Text(
-                            if (mine != null) "${mine.items.size} güncelleme · dokunup gör" else t("Durum paylaşmak için dokun"),
+                            if (mine != null) tf("%s güncelleme · dokunup gör", mine.items.size) else t("Durum paylaşmak için dokun"),
                             color = SoftBlue, fontSize = 13.sp,
                         )
                     }

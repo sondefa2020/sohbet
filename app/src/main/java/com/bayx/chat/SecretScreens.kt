@@ -61,7 +61,7 @@ fun lifetimeLabel(ms: Long): String = when {
     ms <= 0L -> "kaybolmaz"
     ms < 3_600_000L -> "${ms / 60_000} dakika"
     ms < 86_400_000L -> "${ms / 3_600_000} saat"
-    else -> "${ms / 86_400_000} gün"
+    else -> tf("%s gün", ms / 86_400_000)
 }
 
 /** Gizli sohbetler bölümü: PIN ile açılır, içeride yalnızca gizli sohbetler listelenir. */
@@ -107,7 +107,7 @@ private fun PinScreen(onBack: () -> Unit) {
                 }
                 is SecretLock.Result.Wait -> {
                     pin = ""
-                    message = "Çok fazla yanlış deneme. ${result.seconds} saniye bekle."
+                    message = tf("Çok fazla yanlış deneme. %s saniye bekle.", result.seconds)
                 }
             }
         }

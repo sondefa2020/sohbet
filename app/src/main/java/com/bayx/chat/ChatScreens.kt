@@ -390,7 +390,7 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
                 leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null, tint = Muted) },
                 trailingIcon = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (searchQuery.isNotBlank()) Text("$hits sonuç", color = Muted, fontSize = 13.sp)
+                        if (searchQuery.isNotBlank()) Text(tf("%s sonuç", hits), color = Muted, fontSize = 13.sp)
                         IconButton(onClick = { searchOpen = false; searchQuery = "" }) {
                             Icon(Icons.Filled.Close, t("Aramayı kapat"), tint = Muted)
                         }
@@ -476,7 +476,7 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
                     Box(Modifier.width(3.dp).height(36.dp).clip(RoundedCornerShape(2.dp)).background(Blue))
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(if (editTarget != null) t("Mesajı düzenle") else "$who yanıtlanıyor", color = Blue, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Text(if (editTarget != null) t("Mesajı düzenle") else tf("%s yanıtlanıyor", who), color = Blue, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         Text(
                             msg.text.ifBlank { "Medya" },
                             color = Muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -617,7 +617,7 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
         AlertDialog(
             onDismissRequest = { blockPeer = null },
             title = { Text("Engelle") },
-            text = { Text("@$uname engellensin mi? Artık sana istek gönderemez ve kişilerinden çıkar.") },
+            text = { Text(tf("@%s engellensin mi? Artık sana istek gönderemez ve kişilerinden çıkar.", uname)) },
             confirmButton = {
                 TextButton(onClick = {
                     blockPeer = null
@@ -716,7 +716,7 @@ private fun MessageRow(
                 Icon(Icons.Outlined.Vibration, contentDescription = null, tint = Color(0xFF6B4A00), modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    (if (msg.mine) t("Titreşim gönderdin") else "${msg.sender} sana titreşim gönderdi") + " · " + formatClock(msg.time),
+                    (if (msg.mine) t("Titreşim gönderdin") else tf("%s sana titreşim gönderdi", msg.sender)) + " · " + formatClock(msg.time),
                     color = Color(0xFF6B4A00),
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -1258,7 +1258,7 @@ fun AdminScreen(me: AuthState.LoggedIn, onBack: () -> Unit) {
                         Surface(shape = RoundedCornerShape(20.dp), color = Color.White, shadowElevation = 3.dp) {
                             Column(Modifier.fillMaxWidth().padding(16.dp)) {
                                 Text("Üye sayısı", color = Muted, fontSize = 13.sp)
-                                Text("${current.count} / ${current.max} kişi", color = Ink, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
+                                Text(tf("%s / %s kişi", current.count, current.max), color = Ink, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
                                 Spacer(Modifier.height(8.dp))
                                 LinearProgressIndicator(
                                     progress = { (current.count.toFloat() / current.max.coerceAtLeast(1)).coerceIn(0f, 1f) },
@@ -1287,7 +1287,7 @@ fun AdminScreen(me: AuthState.LoggedIn, onBack: () -> Unit) {
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }
-                    item { SectionTitle("Üyeler (${shown.size})") }
+                    item { SectionTitle(tf("Üyeler (%s)", shown.size)) }
                     items(shown, key = { it.userId }) { member ->
                         Surface(shape = RoundedCornerShape(20.dp), color = Color.White, shadowElevation = 3.dp) {
                             Column(Modifier.fillMaxWidth().padding(14.dp)) {
@@ -1315,7 +1315,7 @@ fun AdminScreen(me: AuthState.LoggedIn, onBack: () -> Unit) {
             title = { Text("Şifre sıfırla") },
             text = {
                 Column {
-                    Text("${member.displayName} için yeni bir şifre belirle. Açık oturumları kapatılır; bu şifreyi kendisine ilet.")
+                    Text(tf("%s için yeni bir şifre belirle. Açık oturumları kapatılır; bu şifreyi kendisine ilet.", member.displayName))
                     Spacer(Modifier.height(12.dp))
                     OutlinedTextField(
                         value = newPassword,
@@ -1340,7 +1340,7 @@ fun AdminScreen(me: AuthState.LoggedIn, onBack: () -> Unit) {
         AlertDialog(
             onDismissRequest = { removeFor = null },
             title = { Text("Hesabı kapat") },
-            text = { Text("${member.displayName} üyelikten çıkarılacak ve hesabı kapatılacak. Bu işlem geri alınamaz.") },
+            text = { Text(tf("%s üyelikten çıkarılacak ve hesabı kapatılacak. Bu işlem geri alınamaz.", member.displayName)) },
             confirmButton = {
                 TextButton(onClick = {
                     act("remove", member, done = t("Hesap kapatıldı."))
@@ -1436,7 +1436,7 @@ private fun EmailDialog(
                     status == null -> Text("E-posta durumu yükleniyor…", color = Muted)
                     !status.mailReady -> Text("Sunucuda e-posta gönderimi henüz ayarlı değil. Yönetici ayarladığında kullanabilirsin.", color = Muted, fontSize = 13.5.sp)
                     status.email.isNotBlank() && status.verified -> Text("E-postan doğrulandı. Şifreni unutursan bu adrese sıfırlama kodu gönderilir.", color = Muted, fontSize = 13.5.sp)
-                    status.email.isNotBlank() -> Text("Doğrulama bağlantısı ${status.email} adresine gönderildi. Gelen kutunu ve istenmeyen klasörünü kontrol et. Kalan süre: ${status.daysLeft} gün.", color = Color(0xFFB07A2E), fontSize = 13.5.sp)
+                    status.email.isNotBlank() -> Text(tf("Doğrulama bağlantısı %s adresine gönderildi. Gelen kutunu ve istenmeyen klasörünü kontrol et. Kalan süre: %s gün.", status.email, status.daysLeft), color = Color(0xFFB07A2E), fontSize = 13.5.sp)
                     else -> Text("Şifreni unutursan e-postayla sıfırlayabilmen için bir adres ekle. İsteğe bağlıdır.", color = Muted, fontSize = 13.5.sp)
                 }
                 Spacer(Modifier.height(12.dp))
@@ -1596,7 +1596,7 @@ private fun ForwardDialog(msg: ChatMessage, onDismiss: () -> Unit) {
                                     val roomId = Bayx.startDirectChat(friend.userId)
                                     val ok = roomId != null && Bayx.forwardText(roomId, msg.text)
                                     busy = false
-                                    toast(if (ok) "${friend.displayName} kişisine iletildi." else t("İletilemedi."))
+                                    toast(if (ok) tf("%s kişisine iletildi.", friend.displayName) else t("İletilemedi."))
                                     onDismiss()
                                 }
                             }.padding(vertical = 10.dp),

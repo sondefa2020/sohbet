@@ -55,3 +55,6 @@ object L {
 
 /** Kısa yardımcı: t("..."). */
 fun t(tr: String): String = L.t(tr)
+
+/** Değişkenli metin: tf("%s artık kişilerinde.", ad). Kalıp çevrilir, sonra değerler yerleştirilir. */
+fun tf(tr: String, vararg args: Any?): String = runCatching { String.format(L.t(tr), *args) }.getOrElse { tr }

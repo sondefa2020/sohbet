@@ -374,7 +374,7 @@ fun ChatListScreen(
         scope.launch {
             findResult = Bayx.findUser(name)
             finding = false
-            if (findResult?.found != true) toast("@$name adında bir kullanıcı bulunamadı.")
+            if (findResult?.found != true) toast(tf("@%s adında bir kullanıcı bulunamadı.", name))
         }
     }
 
@@ -561,18 +561,18 @@ fun ChatListScreen(
                                 item { SectionLabel("Gelen istekler (${contacts.incoming.size})") }
                                 items(contacts.incoming, key = { "in-" + it.userId }) { m ->
                                     RequestRow(m, incoming = true,
-                                        onAccept = { scope.launch { if (Bayx.acceptContact(m.userId.substringBefore(":").removePrefix("@"))) toast("${m.displayName} artık kişilerinde.") } },
+                                        onAccept = { scope.launch { if (Bayx.acceptContact(m.userId.substringBefore(":").removePrefix("@"))) toast(tf("%s artık kişilerinde.", m.displayName)) } },
                                         onReject = { scope.launch { Bayx.rejectContact(m.userId.substringBefore(":").removePrefix("@")) } })
                                 }
                             }
                             if (contacts.outgoing.isNotEmpty()) {
-                                item { SectionLabel("Gönderilen istekler (${contacts.outgoing.size})") }
+                                item { SectionLabel(tf("Gönderilen istekler (%s)", contacts.outgoing.size)) }
                                 items(contacts.outgoing, key = { "out-" + it.userId }) { m ->
                                     RequestRow(m, incoming = false, onAccept = {},
                                         onReject = { scope.launch { Bayx.rejectContact(m.userId.substringBefore(":").removePrefix("@")) } })
                                 }
                             }
-                            item { SectionLabel("Kişilerim (${friends.size})") }
+                            item { SectionLabel(tf("Kişilerim (%s)", friends.size)) }
                             if (friends.isEmpty()) {
                                 item {
                                     Text(
@@ -884,7 +884,7 @@ fun RequestsScreen(onBack: () -> Unit, onOpenChat: (String) -> Unit) {
     fun handle(username: String, accept: Boolean, name: String) {
         scope.launch {
             if (accept) {
-                if (Bayx.acceptContact(username)) toast("$name artık kişilerinde.")
+                if (Bayx.acceptContact(username)) toast(tf("%s artık kişilerinde.", name))
             } else {
                 Bayx.rejectContact(username)
             }
@@ -913,7 +913,7 @@ fun RequestsScreen(onBack: () -> Unit, onOpenChat: (String) -> Unit) {
                     }
                 }
                 if (contacts.outgoing.isNotEmpty()) {
-                    item { SectionLabel("Gönderilen istekler (${contacts.outgoing.size})") }
+                    item { SectionLabel(tf("Gönderilen istekler (%s)", contacts.outgoing.size)) }
                     items(contacts.outgoing, key = { "out-" + it.userId }) { m ->
                         val u = m.userId.substringBefore(":").removePrefix("@")
                         RequestRow(m, incoming = false, onAccept = {}, onReject = { handle(u, false, m.displayName) })

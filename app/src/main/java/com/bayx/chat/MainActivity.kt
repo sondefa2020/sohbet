@@ -169,7 +169,7 @@ fun BayxApp() {
     LaunchedEffect(Unit) {
         Bayx.nudges.collect { event ->
             Sounds.nudge()
-            if (!event.mine) Toast.makeText(context, "${event.sender} sana titreşim gönderdi!", Toast.LENGTH_SHORT).show()
+            if (!event.mine) Toast.makeText(context, tf("%s sana titreşim gönderdi!", event.sender), Toast.LENGTH_SHORT).show()
             repeat(6) {
                 shake.animateTo(18f, tween(40))
                 shake.animateTo(-18f, tween(40))
