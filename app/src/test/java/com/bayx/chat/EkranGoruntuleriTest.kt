@@ -80,7 +80,7 @@ class EkranGoruntuleriTest {
             ),
             ChatMessage("4", MsgKind.TEXT, "<3", true, "Ben", now - 100_000, MsgState.SENT),
         )
-        compose.setContent { BayxTheme { ChatContent(session) {} } }
+        compose.setContent { BayxTheme { ChatContent(session, onBack = {}) } }
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/3-sohbet.png")
     }
 
