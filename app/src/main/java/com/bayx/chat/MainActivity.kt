@@ -39,6 +39,7 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -57,14 +58,14 @@ import androidx.navigation.compose.rememberNavController
 
 // Tayfa tasarım dili: sıcak krem zemin, kum/karamel vurgu, koyu mürekkep yazı.
 // (Adlar eski sürümden kalma; "Blue" artık karamel vurgu rengidir.)
-val Blue = Color(0xFFB07A4E)
+val Blue: Color get() = if (ThemeState.dark) Color(0xFFC79A6E) else Color(0xFFB07A4E)
 val BlueLight = Color(0xFFE6C9A6)
 val BlueDark = Color(0xFFC79A6E)
-val Ink = Color(0xFF1F1B18)
-val Muted = Color(0xFF6E655C)
-val SoftBlue = Color(0xFF8C7F72)
-val Bg = Color(0xFFF8F4EF)
-val Line = Color(0xFFECE4DA)
+val Ink: Color get() = if (ThemeState.dark) Color(0xFFF2ECE4) else Color(0xFF1F1B18)
+val Muted: Color get() = if (ThemeState.dark) Color(0xFF9A9088) else Color(0xFF6E655C)
+val SoftBlue: Color get() = if (ThemeState.dark) Color(0xFFA09589) else Color(0xFF8C7F72)
+val Bg: Color get() = if (ThemeState.dark) Color(0xFF14110F) else Color(0xFFF8F4EF)
+val Line: Color get() = if (ThemeState.dark) Color(0xFF2C2622) else Color(0xFFECE4DA)
 val Online = Color(0xFF34C759)
 
 class MainActivity : FragmentActivity() {
@@ -107,18 +108,37 @@ class MainActivity : FragmentActivity() {
 
 @Composable
 fun BayxTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = lightColorScheme(
+    val scheme = if (ThemeState.dark) {
+        darkColorScheme(
+            primary = Blue,
+            onPrimary = Color(0xFF14110F),
+            background = Bg,
+            onBackground = Ink,
+            surface = CardBg,
+            onSurface = Ink,
+            onSurfaceVariant = Muted,
+            outline = Line,
+        )
+    } else {
+        lightColorScheme(
             primary = Blue,
             onPrimary = Color.White,
             background = Bg,
             onBackground = Ink,
-            surface = Color.White,
+            surface = CardBg,
             onSurface = Ink,
             onSurfaceVariant = Muted,
             outline = Line,
-        ),
-    ) {
+        )
+    }
+    val view = androidx.compose.ui.platform.LocalView.current
+    if (!view.isInEditMode) {
+        androidx.compose.runtime.SideEffect {
+            val window = (view.context as? android.app.Activity)?.window ?: return@SideEffect
+            androidx.core.view.WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !ThemeState.dark
+        }
+    }
+    MaterialTheme(colorScheme = scheme) {
         // Arayüz Türkçe olduğu için telefonun dili sağdan sola olsa bile soldan sağa çizilir.
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr, content = content)
     }

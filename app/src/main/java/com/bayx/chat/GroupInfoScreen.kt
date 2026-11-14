@@ -250,7 +250,7 @@ private fun MemberActionSheet(
     onToggleAdmin: () -> Unit,
     onRemove: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color.White) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = CardBg) {
         Column(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
             Text(
                 member.name, color = Ink, fontSize = 17.sp, fontWeight = FontWeight.Bold,

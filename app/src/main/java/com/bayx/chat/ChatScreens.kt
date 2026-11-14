@@ -1,5 +1,6 @@
 package com.bayx.chat
 
+import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material.icons.outlined.Delete
@@ -993,6 +994,11 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
                     )
                 }) {
                     info = "Açıksa, Tayfa'ya 30 saniyeden uzun süre sonra döndüğünde parmak izi ya da ekran kilidi istenir."
+                }
+                SettingRow(Icons.Outlined.DarkMode, "Karanlık mod", trailing = {
+                    Switch(checked = ThemeState.dark, onCheckedChange = { ThemeState.set(it) })
+                }) {
+                    ThemeState.toggle()
                 }
             }
         }

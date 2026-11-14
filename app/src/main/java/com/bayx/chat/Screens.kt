@@ -82,7 +82,12 @@ import java.util.Locale
 
 internal val BlueBrush = Brush.verticalGradient(listOf(BlueLight, BlueDark))
 internal val SoftShadow = Color(0x26825A32)
-internal val PageBrush = Brush.verticalGradient(listOf(Color(0xFFFCFAF7), Color(0xFFF8F3ED), Color(0xFFF1E9DF)))
+internal val PageBrush: Brush
+    get() = if (ThemeState.dark) {
+        Brush.verticalGradient(listOf(Color(0xFF17130F), Color(0xFF14110F), Color(0xFF100D0B)))
+    } else {
+        Brush.verticalGradient(listOf(Color(0xFFFCFAF7), Color(0xFFF8F3ED), Color(0xFFF1E9DF)))
+    }
 
 // ---------- Ortak parçalar ----------
 
@@ -129,7 +134,7 @@ internal fun Avatar(name: String, size: Dp, online: Boolean = false, url: String
                     .align(Alignment.BottomEnd)
                     .size(size * 0.24f)
                     .clip(CircleShape)
-                    .background(Color.White)
+                    .background(Bg)
                     .padding(2.dp)
                     .clip(CircleShape)
                     .background(dot),
@@ -441,7 +446,7 @@ fun ChatListScreen(
                                 .fillMaxHeight()
                                 .then(if (selected) Modifier.shadow(3.dp, RoundedCornerShape(22.dp)) else Modifier)
                                 .clip(RoundedCornerShape(22.dp))
-                                .then(if (selected) Modifier.background(Color.White) else Modifier)
+                                .then(if (selected) Modifier.background(CardBg) else Modifier)
                                 .clickable { tab = index },
                             contentAlignment = Alignment.Center,
                         ) {
@@ -686,7 +691,7 @@ private fun ChatActionSheet(
     onMute: () -> Unit,
     onArchive: () -> Unit,
 ) {
-    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color.White) {
+    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss, containerColor = CardBg) {
         Column(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
             Text(
                 name,

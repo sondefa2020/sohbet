@@ -19,5 +19,6 @@ class BayxApplication : Application() {
         Wallpaper.init(this)
         com.bayx.chat.data.CallLog.init(this)
         com.bayx.chat.data.ChatPrefs.init(this)
+        ThemeState.init(this)
     }
 }

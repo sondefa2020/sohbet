@@ -171,7 +171,7 @@ private fun StatusComposer(onDismiss: () -> Unit, onShare: (String, String) -> U
 
     Dialog(onDismissRequest = onDismiss) {
         Column(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(Color.White),
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(CardBg),
         ) {
             Box(
                 Modifier.fillMaxWidth().height(260.dp).background(animated),

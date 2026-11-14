@@ -79,8 +79,8 @@ internal val SandBrush = Brush.verticalGradient(listOf(Color(0xFFE6C9A6), Color(
 internal val SandInk = Color(0xFF2A1C10)
 
 /** Buzlu cam yüzeyler: arka planın hafifçe geçtiği yarı saydam beyaz (modern görünüm). */
-internal val GlassBar = Color.White.copy(alpha = 0.66f)
-internal val GlassPill = Color.White.copy(alpha = 0.86f)
+internal val GlassBar: Color get() = if (ThemeState.dark) Color(0xFF1C1915).copy(alpha = 0.78f) else Color.White.copy(alpha = 0.66f)
+internal val GlassPill: Color get() = if (ThemeState.dark) Color(0xFF221E19).copy(alpha = 0.92f) else Color.White.copy(alpha = 0.86f)
 
 /** Kendi mesaj balonum: açık şeftali. */
 internal val PeachBrush = Brush.linearGradient(listOf(Color(0xFFFBEEDF), Color(0xFFF3DDC6)))
@@ -152,7 +152,7 @@ internal fun SoftCard(modifier: Modifier = Modifier, content: @Composable () -> 
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(26.dp),
-        color = Color.White,
+        color = CardBg,
         shadowElevation = 4.dp,
         content = content,
     )
@@ -192,8 +192,8 @@ internal fun CodeField(value: String, onValueChange: (String) -> Unit, placehold
 
 @Composable
 internal fun fieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedContainerColor = Color.White,
-    unfocusedContainerColor = Color(0xFFFCFAF7),
+    focusedContainerColor = CardBg,
+    unfocusedContainerColor = FieldBg,
     unfocusedBorderColor = Line,
     focusedBorderColor = Blue,
     cursorColor = Blue,
@@ -272,7 +272,7 @@ internal fun RecoveryCodeDialog(code: String, onDone: () -> Unit) {
     SecureWindow()
     AlertDialog(
         onDismissRequest = {},
-        containerColor = Color.White,
+        containerColor = CardBg,
         title = { Text("Kurtarma kodun", fontWeight = FontWeight.Bold) },
         text = {
             Column {
@@ -319,7 +319,7 @@ internal fun ShareCodeDialog(
     if (sensitive) SecureWindow()
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Color.White,
+        containerColor = CardBg,
         title = { Text(title, fontWeight = FontWeight.Bold) },
         text = {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
@@ -438,7 +438,7 @@ internal fun GhostButton(text: String, modifier: Modifier = Modifier.fillMaxWidt
             .height(58.dp)
             .shadow(3.dp, shape, ambientColor = Color(0x22000000), spotColor = Color(0x22000000))
             .clip(shape)
-            .background(Color.White)
+            .background(CardBg)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
