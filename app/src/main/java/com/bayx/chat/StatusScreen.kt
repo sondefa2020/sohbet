@@ -28,7 +28,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.material.icons.outlined.PhotoCamera
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import com.bayx.chat.data.Api
+import com.bayx.chat.data.MediaTools
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.bayx.chat.data.Bayx
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -48,6 +59,21 @@ fun StatusScreen(onBack: () -> Unit) {
     var composing by remember { mutableStateOf(false) }
     var viewing by remember { mutableStateOf<Api.StatusUser?>(null) }
 
+    val context = LocalContext.current
+    val toast = rememberToast()
+    var uploading by remember { mutableStateOf(false) }
+    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null && !uploading) {
+            uploading = true
+            scope.launch {
+                val image = withContext(Dispatchers.IO) { MediaTools.prepareImage(context, uri) }
+                val ok = image != null && Bayx.addImageStatus(image.bytes, "")
+                uploading = false
+                if (!ok) toast(t("Fotoğraf yüklenemedi."))
+            }
+        }
+    }
+
     LaunchedEffect(Unit) { Bayx.refreshStatuses() }
 
     Column(Modifier.fillMaxSize().background(PageBrush).systemBarsPadding()) {
@@ -56,7 +82,7 @@ fun StatusScreen(onBack: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Geri", tint = Ink) }
-            Text("Durum", color = Ink, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Text(t("Durum"), color = Ink, fontSize = 22.sp, fontWeight = FontWeight.Bold)
         }
 
         LazyColumn(Modifier.fillMaxSize()) {
@@ -78,15 +104,24 @@ fun StatusScreen(onBack: () -> Unit) {
                     }
                     Spacer(Modifier.width(16.dp))
                     Column(Modifier.weight(1f)) {
-                        Text("Durumum", color = Ink, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                        Text(t("Durumum"), color = Ink, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
                         Text(
                             if (mine != null) tf("%s güncelleme · dokunup gör", mine.items.size) else t("Durum paylaşmak için dokun"),
                             color = SoftBlue, fontSize = 13.sp,
                         )
                     }
+                    if (uploading) {
+                        CircularProgressIndicator(color = Blue, strokeWidth = 2.dp, modifier = Modifier.size(22.dp))
+                        Spacer(Modifier.width(10.dp))
+                    }
+                    IconButton(onClick = {
+                        pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                    }) {
+                        Icon(Icons.Outlined.PhotoCamera, t("Fotoğraf"), tint = Blue)
+                    }
                     if (mine != null) {
                         IconButton(onClick = { composing = true }) {
-                            Icon(Icons.Filled.Add, "Ekle", tint = Blue)
+                            Icon(Icons.Filled.Add, t("Ekle"), tint = Blue)
                         }
                     }
                 }
@@ -237,10 +272,24 @@ private fun StatusViewer(
         if (index < user.items.size - 1) index++ else onClose()
     }
 
+    val photo by produceState<android.graphics.Bitmap?>(initialValue = null, item.id) {
+        value = if (item.type == "image" && item.media.isNotBlank()) {
+            Bayx.loadStatusImage(item.media)?.let { MediaTools.decodeSampled(it, 1600) }
+        } else null
+    }
+
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(
             Modifier.fillMaxSize().background(parseColor(item.bg, Color(0xFF14110F))),
         ) {
+            photo?.let { bmp ->
+                Image(
+                    bitmap = bmp.asImageBitmap(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
             Column(Modifier.fillMaxSize().systemBarsPadding()) {
                 // İlerleme çubukları
                 Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -255,7 +304,7 @@ private fun StatusViewer(
                     Avatar(user.name, 36.dp)
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(if (mine) "Durumum" else user.name, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                        Text(if (mine) t("Durumum") else user.name, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                         Text(formatTime(item.time), color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp)
                     }
                     if (mine) {

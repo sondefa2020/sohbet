@@ -183,6 +183,11 @@ object Api {
         request("POST", "/bayx/v3/status/add", body, token).optString("id")
     }
 
+    suspend fun statusAddImage(token: String, media: String, caption: String): String = io {
+        val body = JSONObject().put("type", "image").put("media", media).put("text", caption).put("bg", "#14110F")
+        request("POST", "/bayx/v3/status/add", body, token).optString("id")
+    }
+
     suspend fun statusDelete(token: String, id: String) = io {
         request("POST", "/bayx/v3/status/delete", JSONObject().put("id", id), token); Unit
     }

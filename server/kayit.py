@@ -348,7 +348,7 @@ def status_add(headers, body):
     media = str(body.get("media", ""))[:400]
     if kind == "text" and not text.strip():
         raise ApiError(400, "BOS", "Durum metni boş olamaz.")
-    if kind == "image" and not media:
+    if kind == "image" and not media.startswith("mxc://"):
         raise ApiError(400, "BOS", "Görsel bulunamadı.")
     now = time.time()
     item = {

@@ -1117,6 +1117,20 @@ object Bayx {
         return ok
     }
 
+    /** Fotoğraf durumu: görseli sunucuya yükler, adresini durum olarak paylaşır. */
+    suspend fun addImageStatus(jpeg: ByteArray, caption: String): Boolean = withContext(Dispatchers.IO) {
+        val token = accessToken ?: return@withContext false
+        val c = client ?: return@withContext false
+        val mxc = runCatching { c.uploadMedia("image/jpeg", jpeg, null) }.getOrNull() ?: return@withContext false
+        val ok = runCatching { Api.statusAddImage(token, mxc, caption) }.isSuccess
+        if (ok) refreshStatuses()
+        ok
+    }
+
+    /** Durum görselini indirir (bellek önbelleği loadMedia içinde). */
+    suspend fun loadStatusImage(mxc: String): ByteArray? =
+        runCatching { MediaSource.fromUrl(mxc).use { loadMedia(it) } }.getOrNull()
+
     suspend fun deleteStatus(id: String) {
         val token = accessToken ?: return
         runCatching { Api.statusDelete(token, id) }
