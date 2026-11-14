@@ -24,6 +24,7 @@ object Notifier {
     private const val CH_MESSAGES = "mesajlar_v2"
     private const val CH_CALLS = "aramalar"
     private const val CH_SCREEN = "ekran_paylasimi"
+    private const val CH_BACKGROUND = "arka_plan"
     private const val CALL_NOTIFICATION_ID = 1001
     const val EXTRA_ROOM_ID = "tayfa_room_id"
 
@@ -68,6 +69,38 @@ object Notifier {
                 setShowBadge(false)
             },
         )
+        manager.createNotificationChannel(
+            NotificationChannel(CH_BACKGROUND, "Arka planda çalışma", NotificationManager.IMPORTANCE_MIN).apply {
+                description = "Mesaj ve aramaların anında gelmesi için Tayfa arka planda açık kalır"
+                setShowBadge(false)
+                setSound(null, null)
+                enableVibration(false)
+            },
+        )
+    }
+
+    /** Uygulama arka planda çalışırken gösterilen sessiz, kalıcı bildirim. */
+    fun backgroundNotification(context: Context): android.app.Notification {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) createChannels(context)
+        val open = android.content.Intent(context, Class.forName("com.bayx.chat.MainActivity")).apply {
+            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        }
+        val pi = android.app.PendingIntent.getActivity(
+            context, 7, open,
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE,
+        )
+        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            android.app.Notification.Builder(context, CH_BACKGROUND)
+        } else {
+            @Suppress("DEPRECATION") android.app.Notification.Builder(context)
+        }
+        return builder
+            .setContentTitle("Tayfa çalışıyor")
+            .setContentText("Mesaj ve aramaların anında gelsin diye arka planda açık")
+            .setSmallIcon(R.drawable.ic_stat_tayfa)
+            .setContentIntent(pi)
+            .setOngoing(true)
+            .build()
     }
 
     /** Ekran paylaşımı ön plan servisi için sessiz, düşük öncelikli bildirim. */

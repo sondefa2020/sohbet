@@ -157,6 +157,18 @@ fun BayxApp() {
         }
     }
 
+    // Oturum açıkken uygulama arka plana atılsa bile çalışmaya devam etsin: kalıcı servis.
+    LaunchedEffect(auth) {
+        when (auth) {
+            is AuthState.LoggedIn, AuthState.Offline -> {
+                com.bayx.chat.data.SyncService.start(context)
+                requestBatteryExemptionOnce(context)
+            }
+            AuthState.LoggedOut -> com.bayx.chat.data.SyncService.stop(context)
+            else -> {}
+        }
+    }
+
     val accepted by Gate.onboardingAccepted.collectAsState()
     Box(Modifier.fillMaxSize().offset { IntOffset(shake.value.dp.roundToPx(), 0) }) {
         when {
@@ -313,5 +325,25 @@ private fun MainNav(me: AuthState.LoggedIn) {
             text = { Text(text) },
             confirmButton = { TextButton(onClick = { announcement = null }) { Text("Tamam") } },
         )
+    }
+}
+
+/** Pil optimizasyonundan muafiyet iste (yalnızca bir kez). Böylece sistem uygulamayı öldürmez. */
+private fun requestBatteryExemptionOnce(context: android.content.Context) {
+    val prefs = context.getSharedPreferences("tayfa_arka_plan", android.content.Context.MODE_PRIVATE)
+    if (prefs.getBoolean("pil_soruldu", false)) return
+    val pm = context.getSystemService(android.os.PowerManager::class.java) ?: return
+    if (pm.isIgnoringBatteryOptimizations(context.packageName)) {
+        prefs.edit().putBoolean("pil_soruldu", true).apply()
+        return
+    }
+    prefs.edit().putBoolean("pil_soruldu", true).apply()
+    runCatching {
+        @android.annotation.SuppressLint("BatteryLife")
+        val intent = android.content.Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+            data = android.net.Uri.parse("package:" + context.packageName)
+            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
     }
 }
