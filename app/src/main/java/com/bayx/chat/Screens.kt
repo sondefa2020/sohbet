@@ -597,7 +597,7 @@ fun ChatListScreen(
                                 EmptyHint("Henüz grup yok.")
                             } else {
                                 LazyColumn {
-                                    items(groups, key = { it.id }) { chat -> ChatRow(chat) { onOpenChat(chat.id) } }
+                                    items(groups, key = { it.id }) { chat -> ChatRow(chat, onClick = { onOpenChat(chat.id) }) }
                                 }
                             }
                         }

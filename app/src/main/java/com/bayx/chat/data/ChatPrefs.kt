@@ -37,7 +37,7 @@ object ChatPrefs {
         it.copy(archived = archived, pinned = if (archived) false else it.pinned)
     }
 
-    private inline fun update(roomId: String, change: (ChatFlags) -> ChatFlags) {
+    private fun update(roomId: String, change: (ChatFlags) -> ChatFlags) {
         if (!::app.isInitialized) return
         val current = state.value[roomId] ?: ChatFlags()
         val next = change(current)
