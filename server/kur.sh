@@ -513,6 +513,111 @@ fi
 "$NGINX_BIN" -s reload -c "$NGINX_CONF"
 sleep 2
 
+# ------------------------------------------------------------ 4b. Otomatik yedek
+say "Otomatik yedek"
+cat > /usr/local/bin/tayfa-yedek <<'YEDEKCMD'
+#!/usr/bin/env bash
+# Tayfa günlük yedeği: veritabanı, ayarlar ve giriş kayıtları (son 7 gün) + medya kopyası.
+# Gizli anahtarlar da içerdiği için yedek klasörünü yalnızca root okuyabilir.
+set -u
+ROOT="${TAYFA_YEDEK_KOK:-/var/backups/tayfa}"
+ETC="${TAYFA_SYNAPSE_ETC:-/etc/matrix-synapse}"
+STATE="${TAYFA_DURUM_DIR:-/var/lib/bayx}"
+DAY="$(date +%Y-%m-%d)"
+DEST="$ROOT/gunluk/$DAY"
+umask 077
+mkdir -p "$DEST" "$ROOT/medya"
+chmod 700 "$ROOT"
+log() { echo "$(date '+%F %T') $*"; }
+
+FREE_MB="$(df -Pm "$ROOT" | awk 'NR==2{print $4}')"
+if [ "${FREE_MB:-0}" -lt 1024 ]; then
+    log "HATA: diskte 1 GB'tan az boş yer var, yedek alınmadı."
+    echo "$DAY hata disk" > "$ROOT/son"
+    exit 1
+fi
+
+OK=1
+DB="$(grep -rhoE "/[^ \"']*homeserver\.db" "$ETC" 2>/dev/null | head -1)"
+DB="${DB:-/var/lib/matrix-synapse/homeserver.db}"
+MEDIA="$(grep -rhE '^media_store_path:' "$ETC" 2>/dev/null | head -1 | sed -E 's/^media_store_path:[[:space:]]*"?([^"]*)"?[[:space:]]*$/\1/')"
+MEDIA="${MEDIA:-/var/lib/matrix-synapse/media}"
+
+if grep -rqE 'name:[[:space:]]*psycopg2' "$ETC" 2>/dev/null; then
+    # PostgreSQL kullanılıyorsa
+    if runuser -u postgres -- pg_dump -Fc synapse > "$DEST/synapse.pgdump" 2>/dev/null; then :; else OK=0; log "HATA: PostgreSQL yedeği alınamadı."; fi
+elif [ -f "$DB" ]; then
+    # SQLite: çalışırken bile tutarlı kopya için SQLite'ın kendi yedekleme yöntemi
+    if python3 - "$DB" "$DEST/synapse.db" <<'PY'
+import sqlite3, sys
+src = sqlite3.connect(sys.argv[1], timeout=120)
+dst = sqlite3.connect(sys.argv[2])
+src.backup(dst)
+dst.close()
+src.close()
+PY
+    then gzip -f "$DEST/synapse.db" || OK=0
+    else OK=0; log "HATA: veritabanı yedeği alınamadı."; fi
+else
+    OK=0; log "UYARI: veritabanı bulunamadı ($DB)."
+fi
+
+tar czf "$DEST/ayarlar.tar.gz" --ignore-failed-read "$ETC" /etc/bayx /etc/turnserver.conf 2>/dev/null || true
+if [ -d "$STATE" ]; then tar czf "$DEST/tayfa-durum.tar.gz" "$STATE" 2>/dev/null || OK=0; fi
+if [ -d "$MEDIA" ]; then cp -a -u "$MEDIA/." "$ROOT/medya/" 2>/dev/null || OK=0; fi
+
+# 7 günden eski günlük yedekleri sil
+find "$ROOT/gunluk" -mindepth 1 -maxdepth 1 -type d -mtime +7 -exec rm -rf {} + 2>/dev/null
+
+if [ "$OK" = 1 ]; then echo "$DAY tamam" > "$ROOT/son"; log "Yedek tamam: $DEST"; else echo "$DAY eksik" > "$ROOT/son"; log "Yedek eksik: $DEST"; exit 1; fi
+YEDEKCMD
+chmod 755 /usr/local/bin/tayfa-yedek
+
+cat > /usr/local/bin/tayfa-yedek-geri <<'GERICMD'
+#!/usr/bin/env bash
+# Sunucuyu seçilen günün yedeğine döndürür (veritabanı + giriş kayıtları).
+set -eu
+ROOT="${TAYFA_YEDEK_KOK:-/var/backups/tayfa}"
+ETC="${TAYFA_SYNAPSE_ETC:-/etc/matrix-synapse}"
+if [ $# -lt 1 ]; then
+    echo "Kullanım: sudo tayfa-yedek-geri TARİH   (ör. sudo tayfa-yedek-geri 2026-11-14)"
+    echo "Mevcut yedekler:"; ls -1 "$ROOT/gunluk" 2>/dev/null || echo "  (yok)"
+    exit 1
+fi
+SRC="$ROOT/gunluk/$1"
+[ -d "$SRC" ] || { echo "Bu tarihte yedek yok: $1"; exit 1; }
+[ -f "$SRC/synapse.db.gz" ] || { echo "Bu yedekte SQLite veritabanı yok; elle geri yüklenmeli."; exit 1; }
+echo "DİKKAT: Sunucu $1 tarihli yedeğe döndürülecek."
+echo "O tarihten sonra gönderilen mesajlar ve açılan hesaplar kaybolur. Şu anki veritabanı ayrıca saklanır."
+read -r -p "Devam etmek için büyük harflerle EVET yaz: " ans
+[ "$ans" = "EVET" ] || { echo "Vazgeçildi."; exit 1; }
+DB="$(grep -rhoE "/[^ \"']*homeserver\.db" "$ETC" 2>/dev/null | head -1)"
+DB="${DB:-/var/lib/matrix-synapse/homeserver.db}"
+systemctl stop bayx-kayit matrix-synapse
+KEEP="$DB.geri-yuklemeden-once-$(date +%Y%m%d%H%M%S)"
+cp -a "$DB" "$KEEP"
+rm -f "$DB-wal" "$DB-shm"
+gunzip -c "$SRC/synapse.db.gz" > "$DB"
+chown --reference="$KEEP" "$DB"; chmod --reference="$KEEP" "$DB"
+[ -f "$SRC/tayfa-durum.tar.gz" ] && tar xzf "$SRC/tayfa-durum.tar.gz" -C /
+systemctl start matrix-synapse bayx-kayit
+echo "Geri yükleme tamam. Önceki veritabanı şurada duruyor: $KEEP"
+GERICMD
+chmod 755 /usr/local/bin/tayfa-yedek-geri
+
+cat > /etc/cron.d/tayfa-yedek <<'CRONEOF'
+# Tayfa: her gece 04:17'de yedek al
+17 4 * * * root /usr/local/bin/tayfa-yedek >> /var/log/tayfa-yedek.log 2>&1
+CRONEOF
+chmod 644 /etc/cron.d/tayfa-yedek
+
+BACKUP_OK="hayır"
+if /usr/local/bin/tayfa-yedek >> /var/log/tayfa-yedek.log 2>&1; then
+    BACKUP_OK="evet (her gece 04:17, /var/backups/tayfa, son 7 gün; geri yüklemek için: sudo tayfa-yedek-geri)"
+else
+    BACKUP_OK="sorunlu (ayrıntı: /var/log/tayfa-yedek.log)"
+fi
+
 # ------------------------------------------------------------ 5. Kontrol
 say "Kontrol"
 LOCAL_OK="hayır"; PUBLIC_OK="hayır"; KAYIT_OK="hayır"; TURN_OK="hayır"
@@ -530,6 +635,7 @@ Kayıt servisi (https üzerinden)        : $KAYIT_OK
 Arama aktarma sunucusu (coturn)        : $TURN_OK
 Bildirim servisi (Firebase)            : $PUSH_OK
 Tayfa Web                              : $WEB_OK
+Otomatik yedek                         : $BACKUP_OK
 E-posta (doğrulama, şifre sıfırlama)   : $MAIL_OK
 $FIREWALL_NOTE
 $ADMIN_NOTE
