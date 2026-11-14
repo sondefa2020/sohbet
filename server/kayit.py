@@ -16,6 +16,7 @@ import json
 import os
 import re
 import secrets
+import signal
 import subprocess
 import tempfile
 import threading
@@ -50,6 +51,7 @@ REGISTRATIONS_PER_HOUR = 10
 
 PRESENCE_WINDOW = 90  # saniye: bu süre içinde yoklama gönderen üye çevrimiçi sayılır
 TOKEN_CACHE_SECONDS = 300
+TOKEN_CACHE_MAX = 20000  # 5000 kullanıcı × birkaç cihaz rahatça sığar
 
 _presence_lock = threading.Lock()
 _last_seen = {}
@@ -927,8 +929,14 @@ def member_from_token(headers):
         return cached[0]
     uid = require_member(headers)
     with _presence_lock:
-        if len(_token_cache) > 500:
-            _token_cache.clear()
+        if len(_token_cache) > TOKEN_CACHE_MAX:
+            # Önce süresi dolanları at; hâlâ doluysa en eskilerin yarısını at (hepsini silme:
+            # yoksa binlerce kullanıcıda her istek yeniden Synapse'e sorulur).
+            for k in [k for k, v in _token_cache.items() if v[1] <= now]:
+                del _token_cache[k]
+            if len(_token_cache) > TOKEN_CACHE_MAX:
+                for k in sorted(_token_cache, key=lambda k: _token_cache[k][1])[: TOKEN_CACHE_MAX // 2]:
+                    del _token_cache[k]
         _token_cache[key] = (uid, now + TOKEN_CACHE_SECONDS)
     return uid
 
@@ -1550,8 +1558,23 @@ def main():
             FCM = Fcm(FCM_CREDENTIALS)
         except Exception:
             FCM = None
-    server = ThreadingHTTPServer((LISTEN_HOST, LISTEN_PORT), Handler)
-    server.serve_forever()
+    server = Server((LISTEN_HOST, LISTEN_PORT), Handler)
+
+    def stop(signum, frame):
+        raise SystemExit(0)
+
+    signal.signal(signal.SIGTERM, stop)
+    try:
+        server.serve_forever()
+    finally:
+        # systemctl stop/restart sırasında bekleyen giriş kayıtları diske yazılsın.
+        GIRIS.flush()
+
+
+class Server(ThreadingHTTPServer):
+    # Aynı anda gelen çok sayıda bağlantı için daha büyük bekleme kuyruğu (varsayılan 5).
+    request_queue_size = 256
+    daemon_threads = True
 
 
 if __name__ == "__main__":

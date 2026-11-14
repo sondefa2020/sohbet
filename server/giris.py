@@ -57,6 +57,10 @@ class Store:
     def __init__(self, path):
         self.path = path
         self.lock = threading.RLock()
+        self._io_lock = threading.Lock()
+        self._wake = threading.Event()
+        self._dirty = False
+        self._writer = None
         self.data = {
             "invites": {}, "recovery": {}, "links": {}, "tickets": {}, "web": {}, "emails": {},
             "contacts": {}, "config": {}, "status": {}, "status_seen": {},
@@ -71,17 +75,46 @@ class Store:
         except (OSError, ValueError):
             pass
 
+    # Çok kullanıcıda her değişiklikte tüm dosyayı yazmak diski ve kilidi yorar.
+    # save() yalnızca "değişti" işareti koyar; arka plandaki yazıcı en geç FLUSH_SECONDS içinde
+    # tek seferde diske yazar. Kapanırken flush() bekleyen her şeyi yazar.
+    FLUSH_SECONDS = 2.0
+
     def save(self):
         with self.lock:
+            self._dirty = True
+            if getattr(self, "_writer", None) is None:
+                self._writer = threading.Thread(target=self._flush_loop, name="giris-yazici", daemon=True)
+                self._writer.start()
+        self._wake.set()
+
+    def _flush_loop(self):
+        while True:
+            self._wake.wait()
+            time.sleep(self.FLUSH_SECONDS)
+            self._wake.clear()
+            self.flush()
+
+    def flush(self):
+        with self._io_lock:
+            with self.lock:
+                if not getattr(self, "_dirty", False):
+                    return
+                self._dirty = False
+                # Kilit altında yalnızca metne çevir; diske yazma kilit dışında (istekler beklemesin).
+                text = json.dumps(self.data)
             try:
                 os.makedirs(os.path.dirname(self.path), exist_ok=True)
                 tmp = self.path + ".yeni"
                 fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
                 with os.fdopen(fd, "w") as f:
-                    json.dump(self.data, f)
+                    f.write(text)
+                    f.flush()
+                    os.fsync(f.fileno())
                 os.replace(tmp, self.path)
             except OSError:
-                pass
+                with self.lock:
+                    self._dirty = True
 
     def prune(self):
         now = time.time()

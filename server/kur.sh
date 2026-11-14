@@ -99,8 +99,15 @@ suppress_key_server_warning: true
 report_stats: false
 url_preview_enabled: false
 max_upload_size: 100M
+# Çevrimiçi bilgisini Tayfa kendi servisiyle tutar; Synapse'in ağır presence sistemi kapalı
+# (kalabalık sunucularda en çok yük getiren kısımlardan biri).
 presence:
-  enabled: true
+  enabled: false
+# Önbellek: kullanıcı sayısı arttıkça veritabanına daha az gidilsin.
+caches:
+  global_factor: 2.0
+  expire_caches: true
+  cache_entry_ttl: 30m
 # Sesli/görüntülü arama için TURN aktarma sunucusu (coturn, aynı makinede)
 turn_uris:
   - "turn:$DOMAIN:3478?transport=udp"
@@ -586,11 +593,35 @@ if [ $# -lt 1 ]; then
 fi
 SRC="$ROOT/gunluk/$1"
 [ -d "$SRC" ] || { echo "Bu tarihte yedek yok: $1"; exit 1; }
-[ -f "$SRC/synapse.db.gz" ] || { echo "Bu yedekte SQLite veritabanı yok; elle geri yüklenmeli."; exit 1; }
+PG=0
+grep -rqE 'name:[[:space:]]*psycopg2' "$ETC" 2>/dev/null && PG=1
+if [ "$PG" = 1 ]; then
+    [ -f "$SRC/synapse.pgdump" ] || { echo "Bu yedek PostgreSQL'e geçişten önce alınmış; elle geri yüklenmeli."; exit 1; }
+else
+    [ -f "$SRC/synapse.db.gz" ] || { echo "Bu yedekte SQLite veritabanı yok; elle geri yüklenmeli."; exit 1; }
+fi
 echo "DİKKAT: Sunucu $1 tarihli yedeğe döndürülecek."
 echo "O tarihten sonra gönderilen mesajlar ve açılan hesaplar kaybolur. Şu anki veritabanı ayrıca saklanır."
 read -r -p "Devam etmek için büyük harflerle EVET yaz: " ans
 [ "$ans" = "EVET" ] || { echo "Vazgeçildi."; exit 1; }
+if [ "$PG" = 1 ]; then
+    systemctl stop bayx-kayit matrix-synapse
+    KEEP="synapse_once_$(date +%Y%m%d%H%M%S)"
+    OWNER="$(runuser -u postgres -- psql -qAtc "select pg_get_userbyid(datdba) from pg_database where datname='synapse'")"
+    runuser -u postgres -- psql -v ON_ERROR_STOP=1 -qc "alter database synapse rename to $KEEP"
+    runuser -u postgres -- createdb --encoding=UTF8 --locale=C --template=template0 --owner="$OWNER" synapse
+    if ! runuser -u postgres -- pg_restore --no-owner --role="$OWNER" -d synapse < "$SRC/synapse.pgdump"; then
+        echo "Geri yükleme başarısız; eski veritabanına dönülüyor."
+        runuser -u postgres -- dropdb synapse
+        runuser -u postgres -- psql -qc "alter database $KEEP rename to synapse"
+        systemctl start matrix-synapse bayx-kayit
+        exit 1
+    fi
+    [ -f "$SRC/tayfa-durum.tar.gz" ] && tar xzf "$SRC/tayfa-durum.tar.gz" -C /
+    systemctl start matrix-synapse bayx-kayit
+    echo "Geri yükleme tamam. Önceki veritabanı PostgreSQL'de '$KEEP' adıyla duruyor."
+    exit 0
+fi
 DB="$(grep -rhoE "/[^ \"']*homeserver\.db" "$ETC" 2>/dev/null | head -1)"
 DB="${DB:-/var/lib/matrix-synapse/homeserver.db}"
 systemctl stop bayx-kayit matrix-synapse
@@ -604,6 +635,14 @@ systemctl start matrix-synapse bayx-kayit
 echo "Geri yükleme tamam. Önceki veritabanı şurada duruyor: $KEEP"
 GERICMD
 chmod 755 /usr/local/bin/tayfa-yedek-geri
+
+# Büyüme için: SQLite'tan PostgreSQL'e tek komutla geçiş (sudo tayfa-postgres)
+if curl -fsSL -o /usr/local/bin/tayfa-postgres.yeni "$RAW_BASE/tayfa-postgres.sh" && bash -n /usr/local/bin/tayfa-postgres.yeni; then
+    mv /usr/local/bin/tayfa-postgres.yeni /usr/local/bin/tayfa-postgres
+    chmod 755 /usr/local/bin/tayfa-postgres
+else
+    rm -f /usr/local/bin/tayfa-postgres.yeni
+fi
 
 cat > /etc/cron.d/tayfa-yedek <<'CRONEOF'
 # Tayfa: her gece 04:17'de yedek al
@@ -621,6 +660,11 @@ fi
 # ------------------------------------------------------------ 5. Kontrol
 say "Kontrol"
 LOCAL_OK="hayır"; PUBLIC_OK="hayır"; KAYIT_OK="hayır"; TURN_OK="hayır"
+if grep -rqE 'name:[[:space:]]*psycopg2' /etc/matrix-synapse 2>/dev/null; then
+    DB_KIND="PostgreSQL (binlerce kullanıcıya hazır)"
+else
+    DB_KIND="SQLite (100+ kullanıcıya çıkmadan önce bir kez: sudo tayfa-postgres)"
+fi
 ss -uln 2>/dev/null | grep -E "[:.]3478 " >/dev/null && TURN_OK="evet"
 curl -fsS -o /dev/null "$SYNAPSE_URL/_matrix/client/versions" && LOCAL_OK="evet"
 curl -fsS -o /dev/null --max-time 15 "https://$DOMAIN/_matrix/client/versions" 2>/dev/null && PUBLIC_OK="evet"
@@ -636,6 +680,7 @@ Arama aktarma sunucusu (coturn)        : $TURN_OK
 Bildirim servisi (Firebase)            : $PUSH_OK
 Tayfa Web                              : $WEB_OK
 Otomatik yedek                         : $BACKUP_OK
+Veritabanı                             : $DB_KIND
 E-posta (doğrulama, şifre sıfırlama)   : $MAIL_OK
 $FIREWALL_NOTE
 $ADMIN_NOTE
