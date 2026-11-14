@@ -346,6 +346,7 @@ def status_add(headers, body):
     text = str(body.get("text", ""))[:700]
     bg = str(body.get("bg", ""))[:16]
     media = str(body.get("media", ""))[:400]
+    key = str(body.get("key", ""))[:120]
     if kind == "text" and not text.strip():
         raise ApiError(400, "BOS", "Durum metni boş olamaz.")
     if kind == "image" and not media.startswith("mxc://"):
@@ -357,11 +358,20 @@ def status_add(headers, body):
         "text": text,
         "bg": bg,
         "media": media,
+        "key": key,
         "time": now,
     }
     with GIRIS.lock:
         store = _status_store()
         items = [it for it in store.get(uid, []) if now - it.get("time", 0) < STATUS_TTL]
+        # Hız sınırı: 10 dakikada en çok 10 paylaşım.
+        if sum(1 for it in items if now - it.get("time", 0) < 600) >= 10:
+            raise ApiError(429, "COK_FAZLA_DENEME", "Çok sık durum paylaşıyorsun. Biraz bekle.")
+        # Süresi dolmuş durumların görüldü kayıtlarını temizle.
+        alive = {it.get("id") for lst in store.values() for it in lst if now - it.get("time", 0) < STATUS_TTL}
+        seen_map = _status_seen()
+        for old in [k for k in seen_map if k not in alive]:
+            del seen_map[old]
         items.append(item)
         store[uid] = items[-STATUS_MAX:]
         GIRIS.save()
@@ -383,7 +393,10 @@ def status_seen(headers, body):
     uid = member_from_token(headers)
     item_id = str(body.get("id", ""))
     owner = str(body.get("owner", ""))
-    if item_id and owner:
+    # Yalnızca arkadaşının, gerçekten var olan ve süresi dolmamış durumu görüldü sayılır.
+    if item_id and owner and owner != uid and are_friends(uid, owner) and any(
+        it.get("id") == item_id for it in _active_items(owner, time.time())
+    ):
         with GIRIS.lock:
             seen = _status_seen().setdefault(item_id, [])
             if uid not in seen:
@@ -410,6 +423,7 @@ def status_list(headers):
                 "text": it.get("text", ""),
                 "bg": it.get("bg", ""),
                 "media": it.get("media", ""),
+                "key": it.get("key", ""),
                 "time": int(it.get("time", 0) * 1000),
                 "seen": me in seen_map.get(it["id"], []),
             }

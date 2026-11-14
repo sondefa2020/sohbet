@@ -1121,15 +1121,41 @@ object Bayx {
     suspend fun addImageStatus(jpeg: ByteArray, caption: String): Boolean = withContext(Dispatchers.IO) {
         val token = accessToken ?: return@withContext false
         val c = client ?: return@withContext false
-        val mxc = runCatching { c.uploadMedia("image/jpeg", jpeg, null) }.getOrNull() ?: return@withContext false
-        val ok = runCatching { Api.statusAddImage(token, mxc, caption) }.isSuccess
+        // Görsel yüklenmeden önce rastgele bir anahtarla şifrelenir (AES-GCM); sunucudaki dosya
+        // tek başına okunamaz, anahtar yalnızca arkadaşlara durum listesiyle verilir.
+        val keyBytes = ByteArray(32).also { java.security.SecureRandom().nextBytes(it) }
+        val iv = ByteArray(12).also { java.security.SecureRandom().nextBytes(it) }
+        val sealed = runCatching {
+            val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(
+                javax.crypto.Cipher.ENCRYPT_MODE,
+                javax.crypto.spec.SecretKeySpec(keyBytes, "AES"),
+                javax.crypto.spec.GCMParameterSpec(128, iv),
+            )
+            iv + cipher.doFinal(jpeg)
+        }.getOrNull() ?: return@withContext false
+        val mxc = runCatching { c.uploadMedia("application/octet-stream", sealed, null) }.getOrNull() ?: return@withContext false
+        val key = android.util.Base64.encodeToString(keyBytes, android.util.Base64.NO_WRAP)
+        val ok = runCatching { Api.statusAddImage(token, mxc, caption, key) }.isSuccess
         if (ok) refreshStatuses()
         ok
     }
 
     /** Durum görselini indirir (bellek önbelleği loadMedia içinde). */
-    suspend fun loadStatusImage(mxc: String): ByteArray? =
-        runCatching { MediaSource.fromUrl(mxc).use { loadMedia(it) } }.getOrNull()
+    suspend fun loadStatusImage(mxc: String, key: String): ByteArray? = withContext(Dispatchers.IO) {
+        val raw = runCatching { MediaSource.fromUrl(mxc).use { loadMedia(it) } }.getOrNull() ?: return@withContext null
+        if (key.isBlank()) return@withContext raw
+        runCatching {
+            val keyBytes = android.util.Base64.decode(key, android.util.Base64.NO_WRAP)
+            val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(
+                javax.crypto.Cipher.DECRYPT_MODE,
+                javax.crypto.spec.SecretKeySpec(keyBytes, "AES"),
+                javax.crypto.spec.GCMParameterSpec(128, raw, 0, 12),
+            )
+            cipher.doFinal(raw, 12, raw.size - 12)
+        }.getOrNull()
+    }
 
     suspend fun deleteStatus(id: String) {
         val token = accessToken ?: return

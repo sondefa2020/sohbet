@@ -59,6 +59,8 @@ fun WebLinkScreen(onBack: () -> Unit) {
     var busy by remember { mutableStateOf(false) }
     var done by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    // Onay bekleyen bağlama isteği: (pairingId, kod)
+    var pending by remember { mutableStateOf<Pair<String?, String?>?>(null) }
 
     fun approve(pairingId: String?, enteredCode: String?) {
         if (busy || done) return
@@ -90,12 +92,29 @@ fun WebLinkScreen(onBack: () -> Unit) {
     if (scanning) {
         QrScanner(
             onResult = { text ->
-                if (text.startsWith("tayfaweb:")) approve(text, null)
-                else { scanning = false; error = t("Bu bir Tayfa Web kodu değil.") }
+                scanning = false
+                if (text.startsWith("tayfaweb:")) pending = text to null
+                else error = t("Bu bir Tayfa Web kodu değil.")
             },
             onCancel = { scanning = false },
         )
         return
+    }
+
+    pending?.let { req ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { pending = null },
+            title = { Text(t("Bu bilgisayarı bağla?")) },
+            text = {
+                Text(t("Onaylarsan o bilgisayardaki tarayıcı hesabına girer ve mesajlarını görebilir. Yalnızca kendi açtığın ekrandaki kodu onayla; başkasının gönderdiği QR ya da kodu asla onaylama."))
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = { pending = null; approve(req.first, req.second) }) { Text(t("Bağla")) }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { pending = null }) { Text(t("Vazgeç")) }
+            },
+        )
     }
 
     Column(
@@ -154,7 +173,7 @@ fun WebLinkScreen(onBack: () -> Unit) {
         )
         Spacer(Modifier.height(12.dp))
         SandButton("Onayla", busy = busy) {
-            if (code.length == 6) approve(null, code) else toast("6 haneli kodu gir.")
+            if (code.length == 6) pending = null to code else toast(t("6 haneli kodu gir."))
         }
 
         if (error != null) {

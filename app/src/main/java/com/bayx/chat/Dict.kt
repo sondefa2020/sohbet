@@ -380,6 +380,11 @@ object Dict {
         "Kişilerim (%s)" to ("My contacts (%s)" to "جهات اتصالي (%s)"),
         "%s güncelleme · dokunup gör" to ("%s updates · tap to view" to "%s تحديث · اضغط للعرض"),
 
+        // --- web bağlama onayı
+        "Bu bilgisayarı bağla?" to ("Link this computer?" to "ربط هذا الحاسوب؟"),
+        "Bağla" to ("Link" to "ربط"),
+        "Onaylarsan o bilgisayardaki tarayıcı hesabına girer ve mesajlarını görebilir. Yalnızca kendi açtığın ekrandaki kodu onayla; başkasının gönderdiği QR ya da kodu asla onaylama." to ("If you confirm, the browser on that computer signs in to your account and can see your messages. Only confirm a code on a screen you opened yourself; never confirm a QR or code someone else sent you." to "إذا أكّدت، سيدخل المتصفح على ذلك الحاسوب إلى حسابك ويمكنه رؤية رسائلك. أكّد فقط الرمز الظاهر على شاشة فتحتها بنفسك؛ لا تؤكّد أبدًا رمز QR أو رمزًا أرسله إليك شخص آخر."),
+
         // --- kişiler boş durum
         "Henüz kişin yok. Yukarıdan kullanıcı adıyla birini bul ve istek gönder." to ("You have no contacts yet. Find someone by username above and send a request." to "ليس لديك جهات اتصال بعد. ابحث عن شخص باسم المستخدم أعلاه وأرسل طلبًا."),
     )

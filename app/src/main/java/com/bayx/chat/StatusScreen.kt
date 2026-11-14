@@ -274,7 +274,7 @@ private fun StatusViewer(
 
     val photo by produceState<android.graphics.Bitmap?>(initialValue = null, item.id) {
         value = if (item.type == "image" && item.media.isNotBlank()) {
-            Bayx.loadStatusImage(item.media)?.let { MediaTools.decodeSampled(it, 1600) }
+            Bayx.loadStatusImage(item.media, item.key)?.let { MediaTools.decodeSampled(it, 1600) }
         } else null
     }
 

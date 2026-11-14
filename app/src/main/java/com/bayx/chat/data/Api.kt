@@ -131,6 +131,7 @@ object Api {
         val media: String,
         val time: Long,
         val seen: Boolean,
+        val key: String = "",
     )
     data class StatusUser(
         val userId: String,
@@ -153,6 +154,7 @@ object Api {
                 media = o.optString("media"),
                 time = o.optLong("time"),
                 seen = o.optBoolean("seen"),
+                key = o.optString("key"),
             )
         }
     }
@@ -183,8 +185,8 @@ object Api {
         request("POST", "/bayx/v3/status/add", body, token).optString("id")
     }
 
-    suspend fun statusAddImage(token: String, media: String, caption: String): String = io {
-        val body = JSONObject().put("type", "image").put("media", media).put("text", caption).put("bg", "#14110F")
+    suspend fun statusAddImage(token: String, media: String, caption: String, key: String): String = io {
+        val body = JSONObject().put("type", "image").put("media", media).put("text", caption).put("bg", "#14110F").put("key", key)
         request("POST", "/bayx/v3/status/add", body, token).optString("id")
     }
 
