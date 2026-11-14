@@ -57,7 +57,10 @@ class Store:
     def __init__(self, path):
         self.path = path
         self.lock = threading.RLock()
-        self.data = {"invites": {}, "recovery": {}, "links": {}, "tickets": {}, "web": {}, "emails": {}}
+        self.data = {
+            "invites": {}, "recovery": {}, "links": {}, "tickets": {}, "web": {}, "emails": {},
+            "contacts": {}, "config": {}, "status": {}, "status_seen": {},
+        }
         try:
             with open(path) as f:
                 loaded = json.load(f)

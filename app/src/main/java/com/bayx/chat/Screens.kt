@@ -73,6 +73,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.PushPin
+import androidx.compose.material.icons.outlined.RadioButtonChecked
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -324,6 +325,7 @@ fun ChatListScreen(
     onMedia: () -> Unit = {},
     onRequests: () -> Unit = {},
     onCalls: () -> Unit = {},
+    onStatus: () -> Unit = {},
 ) {
     var tab by remember { mutableIntStateOf(0) }
     val allRooms by Bayx.rooms.collectAsState()
@@ -613,6 +615,7 @@ fun ChatListScreen(
                 Row {
                     NavItem("Sohbetler", Icons.Filled.Sms, selected = true) { tab = 0 }
                     NavItem("Aramalar", Icons.Outlined.Call, selected = false, onClick = onCalls)
+                    NavItem("Durum", Icons.Outlined.RadioButtonChecked, selected = false, onClick = onStatus)
                     NavItem("Medya", Icons.Outlined.PermMedia, selected = false, onClick = onMedia)
                     NavItem("Ayarlar", Icons.Outlined.Settings, selected = false, onClick = onProfile)
                 }

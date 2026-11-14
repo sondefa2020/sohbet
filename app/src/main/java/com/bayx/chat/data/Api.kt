@@ -122,6 +122,75 @@ object Api {
         }
     }
 
+    // ---- durum / hikâye
+    data class StatusItem(
+        val id: String,
+        val type: String,
+        val text: String,
+        val bg: String,
+        val media: String,
+        val time: Long,
+        val seen: Boolean,
+    )
+    data class StatusUser(
+        val userId: String,
+        val name: String,
+        val items: List<StatusItem>,
+        val lastTime: Long,
+        val allSeen: Boolean,
+    )
+    data class StatusList(val mine: StatusUser?, val friends: List<StatusUser>)
+
+    private fun parseStatusItems(arr: org.json.JSONArray?): List<StatusItem> {
+        if (arr == null) return emptyList()
+        return (0 until arr.length()).map { i ->
+            val o = arr.getJSONObject(i)
+            StatusItem(
+                id = o.optString("id"),
+                type = o.optString("type", "text"),
+                text = o.optString("text"),
+                bg = o.optString("bg"),
+                media = o.optString("media"),
+                time = o.optLong("time"),
+                seen = o.optBoolean("seen"),
+            )
+        }
+    }
+
+    private fun parseStatusUser(o: JSONObject?): StatusUser? {
+        if (o == null) return null
+        val items = parseStatusItems(o.optJSONArray("items"))
+        if (items.isEmpty()) return null
+        return StatusUser(
+            userId = o.optString("user_id"),
+            name = o.optString("name"),
+            items = items,
+            lastTime = o.optLong("last_time"),
+            allSeen = o.optBoolean("all_seen"),
+        )
+    }
+
+    suspend fun statusList(token: String): StatusList = io {
+        val json = request("POST", "/bayx/v3/status/list", JSONObject(), token)
+        val friendsArr = json.optJSONArray("friends")
+        val friends = if (friendsArr == null) emptyList() else
+            (0 until friendsArr.length()).mapNotNull { parseStatusUser(friendsArr.getJSONObject(it)) }
+        StatusList(parseStatusUser(json.optJSONObject("mine")), friends)
+    }
+
+    suspend fun statusAdd(token: String, text: String, bg: String): String = io {
+        val body = JSONObject().put("type", "text").put("text", text).put("bg", bg)
+        request("POST", "/bayx/v3/status/add", body, token).optString("id")
+    }
+
+    suspend fun statusDelete(token: String, id: String) = io {
+        request("POST", "/bayx/v3/status/delete", JSONObject().put("id", id), token); Unit
+    }
+
+    suspend fun statusSeen(token: String, owner: String, id: String) = io {
+        request("POST", "/bayx/v3/status/seen", JSONObject().put("owner", owner).put("id", id), token); Unit
+    }
+
     suspend fun contacts(token: String): Contacts = io {
         val json = request("POST", "/bayx/v3/contacts", JSONObject(), token)
         Contacts(briefList(json, "friends"), briefList(json, "incoming"), briefList(json, "outgoing"), briefList(json, "blocked"))

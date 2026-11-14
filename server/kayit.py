@@ -319,6 +319,121 @@ def profile_brief(uid):
     return {"user_id": uid, "username": username_of(uid), "display_name": info.get("displayname") or username_of(uid)}
 
 
+# -------------------------------------------------------------- durum / hikâye
+# Arkadaşlara görünen, 24 saat sonra kaybolan durumlar. Sunucuda saklanır.
+STATUS_TTL = 24 * 60 * 60
+STATUS_MAX = 30  # kişi başına en çok aktif durum
+
+
+def _status_store():
+    return GIRIS.data.setdefault("status", {})
+
+
+def _status_seen():
+    return GIRIS.data.setdefault("status_seen", {})
+
+
+def _active_items(uid, now):
+    items = _status_store().get(uid, [])
+    return [it for it in items if now - it.get("time", 0) < STATUS_TTL]
+
+
+def status_add(headers, body):
+    uid = member_from_token(headers)
+    kind = str(body.get("type", "text"))
+    if kind not in ("text", "image"):
+        raise ApiError(400, "GECERSIZ", "Durum türü geçersiz.")
+    text = str(body.get("text", ""))[:700]
+    bg = str(body.get("bg", ""))[:16]
+    media = str(body.get("media", ""))[:400]
+    if kind == "text" and not text.strip():
+        raise ApiError(400, "BOS", "Durum metni boş olamaz.")
+    if kind == "image" and not media:
+        raise ApiError(400, "BOS", "Görsel bulunamadı.")
+    now = time.time()
+    item = {
+        "id": secrets.token_hex(8),
+        "type": kind,
+        "text": text,
+        "bg": bg,
+        "media": media,
+        "time": now,
+    }
+    with GIRIS.lock:
+        store = _status_store()
+        items = [it for it in store.get(uid, []) if now - it.get("time", 0) < STATUS_TTL]
+        items.append(item)
+        store[uid] = items[-STATUS_MAX:]
+        GIRIS.save()
+    return {"ok": True, "id": item["id"]}
+
+
+def status_delete(headers, body):
+    uid = member_from_token(headers)
+    item_id = str(body.get("id", ""))
+    with GIRIS.lock:
+        store = _status_store()
+        items = store.get(uid, [])
+        store[uid] = [it for it in items if it.get("id") != item_id]
+        GIRIS.save()
+    return {"ok": True}
+
+
+def status_seen(headers, body):
+    uid = member_from_token(headers)
+    item_id = str(body.get("id", ""))
+    owner = str(body.get("owner", ""))
+    if item_id and owner:
+        with GIRIS.lock:
+            seen = _status_seen().setdefault(item_id, [])
+            if uid not in seen:
+                seen.append(uid)
+                GIRIS.save()
+    return {"ok": True}
+
+
+def status_list(headers):
+    me = member_from_token(headers)
+    now = time.time()
+    seen_map = _status_seen()
+
+    def pack(uid):
+        items = _active_items(uid, now)
+        if not items:
+            return None
+        brief = profile_brief(uid)
+        name = brief["display_name"] if brief else username_of(uid)
+        out_items = [
+            {
+                "id": it["id"],
+                "type": it.get("type", "text"),
+                "text": it.get("text", ""),
+                "bg": it.get("bg", ""),
+                "media": it.get("media", ""),
+                "time": int(it.get("time", 0) * 1000),
+                "seen": me in seen_map.get(it["id"], []),
+            }
+            for it in sorted(items, key=lambda x: x.get("time", 0))
+        ]
+        all_seen = all(i["seen"] for i in out_items)
+        return {
+            "user_id": uid,
+            "name": name,
+            "items": out_items,
+            "last_time": out_items[-1]["time"],
+            "all_seen": all_seen,
+        }
+
+    mine = pack(me)
+    friends = []
+    for fid in friends_of(me):
+        packed = pack(fid)
+        if packed:
+            friends.append(packed)
+    friends.sort(key=lambda x: (x["all_seen"], -x["last_time"]))
+    return {"mine": mine, "friends": friends}
+
+
 def contact_find(headers, body):
     me = member_from_token(headers)
     raw = str(body.get("username", "")).strip().lower().lstrip("@").split(":")[0]
@@ -1182,6 +1297,14 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, set_config(self._body()))
             elif method == "POST" and path == "/bayx/v3/contacts":
                 self._send(200, contact_overview(self.headers, time.time()))
+            elif method == "POST" and path == "/bayx/v3/status/list":
+                self._send(200, status_list(self.headers))
+            elif method == "POST" and path == "/bayx/v3/status/add":
+                self._send(200, status_add(self.headers, self._body()))
+            elif method == "POST" and path == "/bayx/v3/status/delete":
+                self._send(200, status_delete(self.headers, self._body()))
+            elif method == "POST" and path == "/bayx/v3/status/seen":
+                self._send(200, status_seen(self.headers, self._body()))
             elif method == "POST" and path == "/bayx/v3/contacts/find":
                 self._send(200, contact_find(self.headers, self._body()))
             elif method == "POST" and path == "/bayx/v3/contacts/request":

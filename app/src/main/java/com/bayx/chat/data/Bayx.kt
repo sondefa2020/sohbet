@@ -1101,6 +1101,33 @@ object Bayx {
         return runCatching { Api.contactFind(token, username) }.getOrNull()
     }
 
+    // ---------------------------------------------------------- durum / hikâye
+    val statuses = MutableStateFlow<Api.StatusList?>(null)
+
+    suspend fun refreshStatuses() {
+        val token = accessToken ?: return
+        runCatching { Api.statusList(token) }.onSuccess { statuses.value = it }
+    }
+
+    /** Metin durumu paylaş. Başarılıysa true. */
+    suspend fun addTextStatus(text: String, bg: String): Boolean {
+        val token = accessToken ?: return false
+        val ok = runCatching { Api.statusAdd(token, text, bg) }.isSuccess
+        if (ok) refreshStatuses()
+        return ok
+    }
+
+    suspend fun deleteStatus(id: String) {
+        val token = accessToken ?: return
+        runCatching { Api.statusDelete(token, id) }
+        refreshStatuses()
+    }
+
+    fun markStatusSeen(owner: String, id: String) {
+        val token = accessToken ?: return
+        scope.launch { runCatching { Api.statusSeen(token, owner, id) } }
+    }
+
     /** Web oturumunu onaylar (QR pairing_id ya da 6 haneli kod). Hata varsa mesaj döner. */
     suspend fun approveWeb(pairingId: String?, code: String?): String? {
         val token = accessToken ?: return "Oturum yok."

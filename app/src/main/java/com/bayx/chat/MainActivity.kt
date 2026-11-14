@@ -252,6 +252,7 @@ private fun MainNav(me: AuthState.LoggedIn) {
                 onMedia = { nav.navigate("media") },
                 onRequests = { nav.navigate("requests") },
                 onCalls = { nav.navigate("calls") },
+                onStatus = { nav.navigate("status") },
             )
         }
         composable("requests") {
@@ -275,6 +276,9 @@ private fun MainNav(me: AuthState.LoggedIn) {
                 onBack = { nav.popBackStack() },
                 onOpenChat = { roomId -> nav.navigate("chat/" + Uri.encode(roomId)) },
             )
+        }
+        composable("status") {
+            StatusScreen(onBack = { nav.popBackStack() })
         }
         composable("chat/{id}") { entry ->
             ChatScreen(
