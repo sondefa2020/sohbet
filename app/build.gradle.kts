@@ -14,8 +14,8 @@ android {
         applicationId = "com.tayfa.chat"
         minSdk = 26
         targetSdk = 35
-        versionCode = 33
-        versionName = "0.33.0"
+        versionCode = 34
+        versionName = "0.34.0"
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }
@@ -27,6 +27,15 @@ android {
     val keystorePass = System.getenv("BAYX_KEYSTORE_PASS")
     val hasKeystore = !keystoreFile.isNullOrEmpty() && !keystorePass.isNullOrEmpty()
     signingConfigs {
+        // Sabit test anahtarı: her derleme aynı imzayı taşır, böylece güncelleme eski
+        // sürümün üstüne kurulur ve telefondaki veriler (oturum, şifreleme anahtarları) silinmez.
+        // Bu anahtar yalnızca test sürümü içindir; mağaza sürümü gizli "bayx" anahtarıyla imzalanır.
+        create("sabit") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
         if (hasKeystore) {
             create("bayx") {
                 storeFile = file(keystoreFile!!)
@@ -39,7 +48,7 @@ android {
 
     buildTypes {
         debug {
-            if (hasKeystore) signingConfig = signingConfigs.getByName("bayx")
+            signingConfig = signingConfigs.getByName(if (hasKeystore) "bayx" else "sabit")
         }
         release {
             isMinifyEnabled = false

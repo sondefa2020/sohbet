@@ -69,7 +69,7 @@ fun StatusScreen(onBack: () -> Unit) {
                 val image = withContext(Dispatchers.IO) { MediaTools.prepareImage(context, uri) }
                 val ok = image != null && Bayx.addImageStatus(image.bytes, "")
                 uploading = false
-                if (!ok) toast(t("Fotoğraf yüklenemedi."))
+                if (!ok) toast(Bayx.statusError.value?.let { t(it) } ?: t("Fotoğraf yüklenemedi."))
             }
         }
     }
@@ -85,6 +85,15 @@ fun StatusScreen(onBack: () -> Unit) {
             Text(t("Durum"), color = Ink, fontSize = 22.sp, fontWeight = FontWeight.Bold)
         }
 
+        val statusError by Bayx.statusError.collectAsState()
+        statusError?.let { err ->
+            Text(
+                t(err),
+                color = Color(0xFFB4232A), fontSize = 14.sp,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)
+                    .background(Color(0x1AB4232A), RoundedCornerShape(12.dp)).padding(12.dp),
+            )
+        }
         LazyColumn(Modifier.fillMaxSize()) {
             item {
                 val mine = data?.mine
@@ -167,7 +176,7 @@ fun StatusScreen(onBack: () -> Unit) {
             onDismiss = { composing = false },
             onShare = { text, bg ->
                 composing = false
-                scope.launch { Bayx.addTextStatus(text, bg) }
+                scope.launch { Bayx.addTextStatus(text, bg)?.let { toast(t(it)) } }
             },
         )
     }

@@ -63,6 +63,10 @@ import org.matrix.rustcomponents.sdk.SlidingSyncVersionBuilder
 import org.matrix.rustcomponents.sdk.SqliteStoreBuilder
 import org.matrix.rustcomponents.sdk.SyncService
 import org.matrix.rustcomponents.sdk.TaskHandle
+import org.matrix.rustcomponents.sdk.RecoveryState
+import org.matrix.rustcomponents.sdk.RecoveryStateListener
+import org.matrix.rustcomponents.sdk.EnableRecoveryProgress
+import org.matrix.rustcomponents.sdk.EnableRecoveryProgressListener
 import org.matrix.rustcomponents.sdk.ThumbnailInfo
 import org.matrix.rustcomponents.sdk.Timeline
 import org.matrix.rustcomponents.sdk.TimelineDiff
@@ -112,6 +116,8 @@ class MediaRef(
     val width: Int,
     val height: Int,
     val geoUri: String?,
+    /** Müzik dosyasıysa şarkı adı; sesli mesajda null. */
+    val title: String? = null,
 )
 
 data class ChatMessage(
@@ -416,6 +422,10 @@ object Bayx {
         synchronized(nudgeSeen) { nudgeSeen.clear() }
         runCatching { roomListResult?.entriesStream()?.cancel() }
         runCatching { delegateHandle?.cancel() }
+        runCatching { recoveryHandle?.cancel() }
+        recoveryHandle = null
+        recoveryState.value = RecoveryState.UNKNOWN
+        newRecoveryKey.value = null
         runCatching { syncService?.close() }
         runCatching { client?.close() }
         roomListResult = null
@@ -460,9 +470,68 @@ object Bayx {
         result.controller().setFilter(RoomListEntriesDynamicFilterKind.NonLeft)
         roomListResult = result
         sync.start()
+        watchRecovery(c)
         startPresence()
         scope.launch { registerPush() }
         scope.launch { refreshMyAvatar() }
+    }
+
+    // ------------------------------------------- mesaj yedeği (anahtar kurtarma)
+    // Şifreli mesajların anahtarları sunucuda, kullanıcının yedek anahtarıyla şifreli saklanır.
+    // Uygulama silinip yeniden kurulursa ya da telefon değişirse bu anahtarla eski mesajlar geri gelir.
+    // Yedek anahtarı hiçbir yere kaydedilmez; yalnızca kullanıcıya bir kez gösterilir.
+
+    val recoveryState = MutableStateFlow(RecoveryState.UNKNOWN)
+    /** Yeni oluşturulan, kullanıcıya bir kez gösterilecek yedek anahtarı. */
+    val newRecoveryKey = MutableStateFlow<String?>(null)
+    /** Ayarlardan "anahtarı gir" penceresini açmak için. */
+    val recoveryPrompt = MutableStateFlow(false)
+    private var recoveryHandle: TaskHandle? = null
+
+    private val noProgress = object : EnableRecoveryProgressListener {
+        override fun onUpdate(status: EnableRecoveryProgress) = Unit
+    }
+
+    private fun watchRecovery(c: Client) {
+        runCatching {
+            val enc = c.encryption()
+            recoveryState.value = enc.recoveryState()
+            recoveryHandle = enc.recoveryStateListener(object : RecoveryStateListener {
+                override fun onUpdate(status: RecoveryState) {
+                    recoveryState.value = status
+                }
+            })
+        }
+        // İlk kez: sunucuda yedek yoksa otomatik aç ve anahtarı kullanıcıya göster.
+        scope.launch {
+            repeat(30) {
+                if (recoveryState.value != RecoveryState.UNKNOWN) return@repeat
+                delay(1000)
+            }
+            if (recoveryState.value != RecoveryState.DISABLED) return@launch
+            val hasBackup = runCatching { c.encryption().backupExistsOnServer() }.getOrDefault(true)
+            if (hasBackup) return@launch
+            runCatching { c.encryption().enableRecovery(false, null, noProgress) }
+                .onSuccess { newRecoveryKey.value = it }
+        }
+    }
+
+    /** Yedek anahtarıyla eski mesajların anahtarlarını geri yükler. Hata varsa mesaj döner. */
+    suspend fun recoverWithKey(key: String): String? = withContext(Dispatchers.IO) {
+        val c = client ?: return@withContext "Oturum yok."
+        runCatching { c.encryption().recover(key.trim()) }
+            .fold({ null }, { "Anahtar doğru değil. Boşlukları dahil, kaydettiğin gibi yaz." })
+    }
+
+    /** Yedeği açar ya da yeni anahtar üretir (eski anahtar geçersiz olur). */
+    suspend fun createRecoveryKey(): String? = withContext(Dispatchers.IO) {
+        val c = client ?: return@withContext "Oturum yok."
+        runCatching {
+            if (recoveryState.value == RecoveryState.ENABLED || recoveryState.value == RecoveryState.INCOMPLETE) {
+                c.encryption().disableRecovery()
+            }
+            c.encryption().enableRecovery(false, null, noProgress)
+        }.fold({ newRecoveryKey.value = it; null }, { "Yedek anahtarı oluşturulamadı. İnternet bağlantını kontrol et." })
     }
 
     // ------------------------------------------------------ çevrimiçi durumu
@@ -623,7 +692,7 @@ object Bayx {
                 is MessageType.Emote -> type.content.body
                 is MessageType.Image -> "Fotoğraf"
                 is MessageType.Video -> "Video"
-                is MessageType.Audio -> "Sesli mesaj"
+                is MessageType.Audio -> if (type.content.voice == null) "🎵 " + type.content.filename.substringBeforeLast('.') else "Sesli mesaj"
                 is MessageType.Location -> "Konum"
                 is MessageType.File -> "Dosya"
                 else -> kind.content.body
@@ -795,9 +864,11 @@ object Bayx {
             }
             is MessageType.Audio -> {
                 val info = type.content.info
+                val music = type.content.voice == null
                 MsgKind.VOICE to MediaRef(
                     type.content.source, null, info?.mimetype ?: "audio/ogg",
                     info?.duration?.toMillis() ?: type.content.audio?.duration?.toMillis() ?: 0L, 0, 0, null,
+                    if (music) type.content.filename.substringBeforeLast('.').ifBlank { "Müzik" } else null,
                 )
             }
             is MessageType.Location -> MsgKind.LOCATION to MediaRef(null, null, "", 0L, 0, 0, type.content.geoUri)
@@ -899,6 +970,18 @@ object Bayx {
             ).join()
         }.isSuccess
     }
+
+    /** Telefondaki bir müzik/ses dosyasını paylaşır (sesli mesaj değil, adıyla görünür). */
+    suspend fun sendAudioFile(session: ChatSession, bytes: ByteArray, mime: String, name: String, durationMs: Long): Boolean =
+        withContext(Dispatchers.IO) {
+            val timeline = session.timeline ?: return@withContext false
+            runCatching {
+                timeline.sendAudio(
+                    upload(bytes, name),
+                    AudioInfo(Duration.ofMillis(durationMs), bytes.size.toULong(), mime),
+                ).join()
+            }.isSuccess
+        }
 
     suspend fun sendLocation(session: ChatSession, latitude: Double, longitude: Double): Boolean =
         withContext(Dispatchers.IO) {
@@ -1103,18 +1186,28 @@ object Bayx {
 
     // ---------------------------------------------------------- durum / hikâye
     val statuses = MutableStateFlow<Api.StatusList?>(null)
+    /** Durum listesi alınamadıysa kullanıcıya gösterilecek açıklama. */
+    val statusError = MutableStateFlow<String?>(null)
+
+    private fun statusMessage(e: Throwable): String = when {
+        e is ApiException && e.code == "BULUNAMADI" ->
+            "Sunucu Durum özelliğini henüz tanımıyor. Sunucuda kurulum komutunu (kur.sh) yeniden çalıştır."
+        e is ApiException -> e.message ?: "İşlem tamamlanamadı."
+        else -> "Sunucuya ulaşılamadı. İnternet bağlantını kontrol et."
+    }
 
     suspend fun refreshStatuses() {
         val token = accessToken ?: return
-        runCatching { Api.statusList(token) }.onSuccess { statuses.value = it }
+        runCatching { Api.statusList(token) }
+            .onSuccess { statuses.value = it; statusError.value = null }
+            .onFailure { statusError.value = statusMessage(it) }
     }
 
-    /** Metin durumu paylaş. Başarılıysa true. */
-    suspend fun addTextStatus(text: String, bg: String): Boolean {
-        val token = accessToken ?: return false
-        val ok = runCatching { Api.statusAdd(token, text, bg) }.isSuccess
-        if (ok) refreshStatuses()
-        return ok
+    /** Metin durumu paylaş. Hata varsa açıklama döner. */
+    suspend fun addTextStatus(text: String, bg: String): String? {
+        val token = accessToken ?: return "Oturum yok."
+        return runCatching { Api.statusAdd(token, text, bg) }
+            .fold({ refreshStatuses(); null }, { statusMessage(it) })
     }
 
     /** Fotoğraf durumu: görseli sunucuya yükler, adresini durum olarak paylaşır. */
@@ -1136,9 +1229,10 @@ object Bayx {
         }.getOrNull() ?: return@withContext false
         val mxc = runCatching { c.uploadMedia("application/octet-stream", sealed, null) }.getOrNull() ?: return@withContext false
         val key = android.util.Base64.encodeToString(keyBytes, android.util.Base64.NO_WRAP)
-        val ok = runCatching { Api.statusAddImage(token, mxc, caption, key) }.isSuccess
-        if (ok) refreshStatuses()
-        ok
+        val result = runCatching { Api.statusAddImage(token, mxc, caption, key) }
+        result.exceptionOrNull()?.let { statusError.value = statusMessage(it) }
+        if (result.isSuccess) refreshStatuses()
+        result.isSuccess
     }
 
     /** Durum görselini indirir (bellek önbelleği loadMedia içinde). */

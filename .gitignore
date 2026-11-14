@@ -6,3 +6,6 @@ local.properties
 .kotlin/
 *.jks
 *.keystore
+
+# Sabit test imza anahtari bilerek depoda (yalnizca test surumu icin).
+!app/debug.keystore

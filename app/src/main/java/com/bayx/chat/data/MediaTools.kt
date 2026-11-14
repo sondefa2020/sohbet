@@ -28,6 +28,8 @@ import kotlin.math.max
 
 class PreparedImage(val bytes: ByteArray, val width: Int, val height: Int)
 
+class PreparedAudio(val bytes: ByteArray, val mime: String, val name: String, val durationMs: Long)
+
 class PreparedVideo(
     val bytes: ByteArray,
     val mime: String,
@@ -120,6 +122,27 @@ object MediaTools {
         }
         return out.toByteArray()
     }
+
+    /** Müzik/ses dosyasını belleğe okur (en fazla [MAX_VIDEO_BYTES]); adını ve süresini bulur. */
+    fun prepareAudio(context: Context, uri: Uri): PreparedAudio? = runCatching {
+        val resolver = context.contentResolver
+        val bytes = resolver.openInputStream(uri)?.use { readLimited(it, MAX_VIDEO_BYTES) } ?: return null
+        val mime = resolver.getType(uri)?.takeIf { it.startsWith("audio/") } ?: "audio/mpeg"
+        var name = "muzik"
+        resolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+            if (c.moveToFirst()) c.getString(0)?.let { name = it }
+        }
+        var duration = 0L
+        val retriever = MediaMetadataRetriever()
+        try {
+            retriever.setDataSource(context, uri)
+            duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+        } catch (_: Exception) {
+        } finally {
+            runCatching { retriever.release() }
+        }
+        PreparedAudio(bytes, mime, name, duration)
+    }.getOrNull()
 
     /** Videoyu belleğe okur (en fazla [MAX_VIDEO_BYTES]) ve bir kapak karesi çıkarır. */
     fun prepareVideo(context: Context, uri: Uri): PreparedVideo? = runCatching {

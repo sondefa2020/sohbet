@@ -393,6 +393,41 @@ object Dict {
         "Kaybolan mesajlar" to ("Disappearing messages" to "رسائل تختفي"),
         "Foto ve video" to ("Photos & videos" to "صور وفيديو"),
 
+        // --- medya / müzik
+        "Galeri" to ("Gallery" to "المعرض"),
+        "Kamera" to ("Camera" to "الكاميرا"),
+        "Video" to ("Video" to "فيديو"),
+        "Müzik" to ("Music" to "موسيقى"),
+        "Sesli mesaj" to ("Voice message" to "رسالة صوتية"),
+        "%s öğe gönderilemedi. Videolar en fazla 50 MB olabilir." to ("%s items couldn't be sent. Videos can be up to 50 MB." to "تعذّر إرسال %s عنصر. يمكن أن يصل حجم الفيديو إلى 50 ميغابايت."),
+        "Müzik gönderilemedi. En fazla 50 MB'lık dosyalar gönderilebilir." to ("Couldn't send music. Files up to 50 MB can be sent." to "تعذّر إرسال الموسيقى. يمكن إرسال ملفات حتى 50 ميغابايت."),
+
+        // --- mesaj yedeği
+        "Mesaj yedeği" to ("Message backup" to "النسخ الاحتياطي للرسائل"),
+        "Mesaj yedek anahtarın" to ("Your message backup key" to "مفتاح النسخ الاحتياطي لرسائلك"),
+        "Telefonunu değiştirirsen ya da uygulamayı silip yeniden kurarsan eski mesajlarını bu anahtarla geri getirirsin. Bir kağıda yaz ya da güvendiğin bir yere kaydet. Bir daha gösterilmez." to ("If you change phones or reinstall the app, this key brings back your old messages. Write it down or save it somewhere you trust. It won't be shown again." to "إذا غيّرت هاتفك أو أعدت تثبيت التطبيق، يعيد هذا المفتاح رسائلك القديمة. اكتبه أو احفظه في مكان تثق به. لن يُعرض مجددًا."),
+        "Kopyalandı" to ("Copied" to "تم النسخ"),
+        "Kaydettim" to ("I saved it" to "حفظته"),
+        "Eski mesajlarını geri getir" to ("Restore your old messages" to "استعد رسائلك القديمة"),
+        "İlk kurulumda sana gösterilen mesaj yedek anahtarını yaz. Anahtarın yoksa eski şifreli mesajlar bu cihazda açılamaz; yeni mesajlar normal çalışır." to ("Enter the message backup key you were shown at first setup. Without it, old encrypted messages can't be opened on this device; new messages work normally." to "أدخل مفتاح النسخ الاحتياطي الذي عُرض عليك عند الإعداد الأول. بدونه لا يمكن فتح الرسائل المشفّرة القديمة على هذا الجهاز؛ الرسائل الجديدة تعمل بشكل طبيعي."),
+        "Geri getir" to ("Restore" to "استعادة"),
+        "Bekle…" to ("Wait…" to "انتظر…"),
+        "Şimdi değil" to ("Not now" to "ليس الآن"),
+        "Anahtar doğru değil. Boşlukları dahil, kaydettiğin gibi yaz." to ("The key isn't correct. Type it exactly as saved, including spaces." to "المفتاح غير صحيح. اكتبه كما حفظته تمامًا مع المسافات."),
+        "Yedek anahtarı oluşturulamadı. İnternet bağlantını kontrol et." to ("Couldn't create a backup key. Check your internet connection." to "تعذّر إنشاء مفتاح النسخ الاحتياطي. تحقق من اتصالك بالإنترنت."),
+        "Açık" to ("On" to "مفعّل"),
+        "Kapalı" to ("Off" to "معطّل"),
+        "Anahtar bekleniyor" to ("Key needed" to "بانتظار المفتاح"),
+        "Bağlantı kuruluyor, birazdan tekrar dene." to ("Connecting, try again in a moment." to "جارٍ الاتصال، حاول بعد قليل."),
+        "Yedeğin açık. Anahtarını kaybettiysen yeni bir anahtar oluşturabilirsin; eski anahtar geçersiz olur." to ("Your backup is on. If you lost your key you can create a new one; the old key will stop working." to "النسخ الاحتياطي مفعّل. إذا فقدت مفتاحك يمكنك إنشاء مفتاح جديد؛ سيتوقف المفتاح القديم عن العمل."),
+        "Yedeği açınca şifreli mesajlarının anahtarları sunucuda, yalnızca senin anahtarınla açılabilecek şekilde saklanır." to ("When on, your encrypted message keys are stored on the server, openable only with your key." to "عند التفعيل، تُخزَّن مفاتيح رسائلك المشفّرة على الخادم ولا تُفتح إلا بمفتاحك."),
+        "Yeni anahtar oluştur" to ("Create new key" to "إنشاء مفتاح جديد"),
+        "Yedeği aç" to ("Turn on backup" to "تفعيل النسخ الاحتياطي"),
+
+        // --- durum hataları
+        "Sunucu Durum özelliğini henüz tanımıyor. Sunucuda kurulum komutunu (kur.sh) yeniden çalıştır." to ("The server doesn't support Status yet. Re-run the setup command (kur.sh) on the server." to "الخادم لا يدعم ميزة الحالة بعد. أعد تشغيل أمر الإعداد (kur.sh) على الخادم."),
+        "Sunucuya ulaşılamadı. İnternet bağlantını kontrol et." to ("Couldn't reach the server. Check your internet connection." to "تعذّر الوصول إلى الخادم. تحقق من اتصالك بالإنترنت."),
+
         // --- web bağlama onayı
         "Bu bilgisayarı bağla?" to ("Link this computer?" to "ربط هذا الحاسوب؟"),
         "Bağla" to ("Link" to "ربط"),

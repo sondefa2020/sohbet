@@ -204,7 +204,10 @@ fun BayxApp() {
                 AuthState.Loading -> SplashScreen()
                 AuthState.LoggedOut -> AuthFlow()
                 AuthState.Offline -> OfflineScreen()
-                is AuthState.LoggedIn -> MainNav(state)
+                is AuthState.LoggedIn -> {
+                    MainNav(state)
+                    RecoveryDialogs()
+                }
             }
         }
     }

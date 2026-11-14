@@ -1,5 +1,6 @@
 package com.bayx.chat
 
+import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material3.RadioButton
@@ -240,6 +241,41 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
             sendMedia(t("Fotoğraf gönderilemedi.")) {
                 val image = withContext(Dispatchers.IO) { MediaTools.prepareImage(context, uri) }
                 if (image == null) false else Bayx.sendImage(session, image.bytes, image.width, image.height)
+            }
+        }
+    }
+    // Galeriden birden fazla fotoğraf/video seçip sırayla gönder.
+    val pickMany = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(10)) { uris ->
+        if (uris.isNotEmpty()) {
+            sending = true
+            scope.launch {
+                var failed = 0
+                for (uri in uris) {
+                    val mime = context.contentResolver.getType(uri).orEmpty()
+                    val ok = runCatching {
+                        if (mime.startsWith("video")) {
+                            val video = withContext(Dispatchers.IO) { MediaTools.prepareVideo(context, uri) }
+                            video != null && Bayx.sendVideo(
+                                session, video.bytes, video.mime, video.width, video.height, video.durationMs,
+                                video.thumbnail, video.thumbWidth, video.thumbHeight,
+                            )
+                        } else {
+                            val image = withContext(Dispatchers.IO) { MediaTools.prepareImage(context, uri) }
+                            image != null && Bayx.sendImage(session, image.bytes, image.width, image.height)
+                        }
+                    }.getOrDefault(false)
+                    if (!ok) failed++
+                }
+                sending = false
+                if (failed > 0) toast(tf("%s öğe gönderilemedi. Videolar en fazla 50 MB olabilir.", failed))
+            }
+        }
+    }
+    val pickMusic = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            sendMedia(t("Müzik gönderilemedi. En fazla 50 MB'lık dosyalar gönderilebilir.")) {
+                val audio = withContext(Dispatchers.IO) { MediaTools.prepareAudio(context, uri) }
+                audio != null && Bayx.sendAudioFile(session, audio.bytes, audio.mime, audio.name, audio.durationMs)
             }
         }
     }
@@ -569,7 +605,7 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
             onDismiss = { showAttach = false },
             onPhoto = {
                 showAttach = false
-                pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                pickMany.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
             },
             onCamera = {
                 showAttach = false
@@ -582,7 +618,11 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
             },
             onVideo = {
                 showAttach = false
-                pickVideo.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
+                pickMany.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
+            },
+            onMusic = {
+                showAttach = false
+                pickMusic.launch("audio/*")
             },
             onLocation = {
                 showAttach = false
@@ -817,6 +857,7 @@ private fun MessageRow(
 fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Unit, onWebLink: () -> Unit) {
     var confirmLogout by remember { mutableStateOf(false) }
     var langPick by remember { mutableStateOf(false) }
+    var confirmNewKey by remember { mutableStateOf(false) }
     var loggingOut by remember { mutableStateOf(false) }
     var info by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
@@ -1003,6 +1044,16 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
                 }) {
                     ThemeState.toggle()
                 }
+                val recState by Bayx.recoveryState.collectAsState()
+                SettingRow(Icons.Outlined.Backup, t("Mesaj yedeği"), trailing = {
+                    Text(recoveryLabel(recState), color = Muted, fontSize = 14.sp)
+                }) {
+                    when (recState) {
+                        org.matrix.rustcomponents.sdk.RecoveryState.INCOMPLETE -> Bayx.recoveryPrompt.value = true
+                        org.matrix.rustcomponents.sdk.RecoveryState.UNKNOWN -> info = t("Bağlantı kuruluyor, birazdan tekrar dene.")
+                        else -> confirmNewKey = true
+                    }
+                }
                 SettingRow(Icons.Outlined.Language, t("Dil"), trailing = {
                     Text(L.lang.native, color = Muted, fontSize = 14.sp)
                 }) {
@@ -1130,6 +1181,26 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
     }
     info?.let { message -> InfoDialog(message) { info = null } }
 
+    if (confirmNewKey) {
+        val enabled = Bayx.recoveryState.collectAsState().value == org.matrix.rustcomponents.sdk.RecoveryState.ENABLED
+        AlertDialog(
+            onDismissRequest = { confirmNewKey = false },
+            title = { Text(t("Mesaj yedeği")) },
+            text = {
+                Text(
+                    if (enabled) t("Yedeğin açık. Anahtarını kaybettiysen yeni bir anahtar oluşturabilirsin; eski anahtar geçersiz olur.")
+                    else t("Yedeği açınca şifreli mesajlarının anahtarları sunucuda, yalnızca senin anahtarınla açılabilecek şekilde saklanır.")
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmNewKey = false
+                    scope.launch { Bayx.createRecoveryKey()?.let { info = t(it) } }
+                }) { Text(if (enabled) t("Yeni anahtar oluştur") else t("Yedeği aç")) }
+            },
+            dismissButton = { TextButton(onClick = { confirmNewKey = false }) { Text(t("Vazgeç")) } },
+        )
+    }
     if (langPick) {
         AlertDialog(
             onDismissRequest = { langPick = false },

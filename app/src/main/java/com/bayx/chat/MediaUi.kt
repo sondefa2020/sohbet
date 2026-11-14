@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material3.*
@@ -193,7 +194,7 @@ internal fun MediaContent(msg: ChatMessage, tint: Color, onOpen: (ChatMessage) -
                                 scope.launch {
                                     val bytes = Bayx.loadMedia(source)
                                     loading = false
-                                    if (bytes == null || !VoicePlayer.play(msg.key, bytes)) toast("Sesli mesaj oynatılamadı.")
+                                    if (bytes == null || !VoicePlayer.play(msg.key, bytes)) toast(t("Sesli mesaj oynatılamadı."))
                                 }
                             }
                         },
@@ -212,10 +213,22 @@ internal fun MediaContent(msg: ChatMessage, tint: Color, onOpen: (ChatMessage) -
                 }
                 Spacer(Modifier.width(12.dp))
                 Column {
-                    Waveform(seed = msg.key.hashCode(), playing = playing, modifier = Modifier.width(150.dp).height(30.dp))
+                    val title = media.title
+                    if (title != null) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.width(170.dp)) {
+                            Icon(Icons.Outlined.MusicNote, null, tint = tint.copy(alpha = 0.8f), modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                title, color = tint, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                                maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            )
+                        }
+                    } else {
+                        Waveform(seed = msg.key.hashCode(), playing = playing, modifier = Modifier.width(150.dp).height(30.dp))
+                    }
                     Spacer(Modifier.height(2.dp))
                     Text(
-                        if (media.durationMs > 0) formatDuration(media.durationMs) else "Sesli mesaj",
+                        if (media.durationMs > 0) formatDuration(media.durationMs) else if (title != null) t("Müzik") else t("Sesli mesaj"),
                         color = tint.copy(alpha = 0.7f),
                         fontSize = 12.sp,
                     )
@@ -359,16 +372,18 @@ internal fun AttachSheet(
     onCamera: () -> Unit,
     onVideo: () -> Unit,
     onLocation: () -> Unit,
+    onMusic: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color(0xFFFBF8F4)) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = CardBg) {
         Column(Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, bottom = 30.dp, top = 4.dp)) {
-            Text("Paylaş", color = Muted, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            Text(t("Paylaş"), color = Muted, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(16.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                AttachCircle(Icons.Outlined.Image, "Galeri", listOf(Color(0xFF7C4DFF), Color(0xFF5E35B1)), onPhoto)
-                AttachCircle(Icons.Outlined.PhotoCamera, "Kamera", listOf(Color(0xFFEC407A), Color(0xFFC2185B)), onCamera)
-                AttachCircle(Icons.Outlined.Videocam, "Video", listOf(Color(0xFFEF6C00), Color(0xFFE65100)), onVideo)
-                AttachCircle(Icons.Outlined.LocationOn, "Konum", listOf(Color(0xFF26A69A), Color(0xFF00897B)), onLocation)
+                AttachCircle(Icons.Outlined.Image, t("Galeri"), listOf(Color(0xFF7C4DFF), Color(0xFF5E35B1)), onPhoto)
+                AttachCircle(Icons.Outlined.PhotoCamera, t("Kamera"), listOf(Color(0xFFEC407A), Color(0xFFC2185B)), onCamera)
+                AttachCircle(Icons.Outlined.Videocam, t("Video"), listOf(Color(0xFFEF6C00), Color(0xFFE65100)), onVideo)
+                AttachCircle(Icons.Outlined.MusicNote, t("Müzik"), listOf(Color(0xFF42A5F5), Color(0xFF1565C0)), onMusic)
+                AttachCircle(Icons.Outlined.LocationOn, t("Konum"), listOf(Color(0xFF26A69A), Color(0xFF00897B)), onLocation)
             }
         }
     }
@@ -379,9 +394,9 @@ internal fun AttachSheet(
 private fun AttachCircle(icon: ImageVector, label: String, colors: List<Color>, onClick: () -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable(onClick = onClick)) {
         Box(
-            Modifier.size(62.dp).clip(CircleShape).background(Brush.verticalGradient(colors)),
+            Modifier.size(54.dp).clip(CircleShape).background(Brush.verticalGradient(colors)),
             contentAlignment = Alignment.Center,
-        ) { Icon(icon, contentDescription = label, tint = Color.White, modifier = Modifier.size(28.dp)) }
+        ) { Icon(icon, contentDescription = label, tint = Color.White, modifier = Modifier.size(26.dp)) }
         Spacer(Modifier.height(8.dp))
         Text(label, color = Ink, fontSize = 13.sp)
     }
