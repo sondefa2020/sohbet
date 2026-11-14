@@ -18,7 +18,9 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.outlined.Poll
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.Videocam
