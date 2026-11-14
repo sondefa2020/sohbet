@@ -2,6 +2,10 @@ package com.bayx.chat
 
 import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.runtime.mutableStateListOf
+import com.bayx.chat.data.PollInfo
+import androidx.compose.material.icons.outlined.Poll
+import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material3.RadioButton
 import androidx.compose.material.icons.outlined.Block
@@ -271,6 +275,14 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
             }
         }
     }
+    val pickDocument = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            sendMedia(t("Belge gönderilemedi. En fazla 50 MB'lık dosyalar gönderilebilir.")) {
+                val doc = withContext(Dispatchers.IO) { MediaTools.prepareDocument(context, uri) }
+                doc != null && Bayx.sendDocument(session, doc.bytes, doc.mime, doc.name)
+            }
+        }
+    }
     val pickMusic = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
             sendMedia(t("Müzik gönderilemedi. En fazla 50 MB'lık dosyalar gönderilebilir.")) {
@@ -326,6 +338,9 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
 
     val wallpaper by Wallpaper.selected.collectAsState()
     var showWallpaper by remember { mutableStateOf(false) }
+    var showPoll by remember { mutableStateOf(false) }
+    var showDisappear by remember { mutableStateOf(false) }
+    val disappearing by session.disappearing.collectAsState()
     Box(Modifier.fillMaxSize()) {
       ChatBackground(wallpaper)
       Column(Modifier.fillMaxSize().systemBarsPadding().imePadding()) {
@@ -391,23 +406,30 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
                 IconButton(onClick = { menuOpen = true }) { Icon(Icons.Filled.MoreVert, t("Diğer"), tint = Ink) }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     DropdownMenuItem(
-                        text = { Text("Mesajlarda ara") },
+                        text = { Text(t("Mesajlarda ara")) },
                         leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
                         onClick = { menuOpen = false; searchOpen = true },
                     )
                     DropdownMenuItem(
-                        text = { Text("Fotoğraf ve videolar") },
+                        text = { Text(t("Fotoğraf ve videolar")) },
                         leadingIcon = { Icon(Icons.Outlined.PermMedia, contentDescription = null) },
                         onClick = { menuOpen = false; showGallery = true },
                     )
                     DropdownMenuItem(
-                        text = { Text("Arka plan") },
+                        text = { Text(t("Arka plan")) },
                         leadingIcon = { Icon(Icons.Outlined.Wallpaper, contentDescription = null) },
                         onClick = { menuOpen = false; showWallpaper = true },
                     )
+                    if (!session.secret) {
+                        DropdownMenuItem(
+                            text = { Text(t("Kaybolan mesajlar")) },
+                            leadingIcon = { Icon(Icons.Outlined.Timer, contentDescription = null) },
+                            onClick = { menuOpen = false; showDisappear = true },
+                        )
+                    }
                     partner?.let { peer ->
                         DropdownMenuItem(
-                            text = { Text("Engelle", color = Color(0xFFB4232A)) },
+                            text = { Text(t("Engelle"), color = Color(0xFFB4232A)) },
                             leadingIcon = { Icon(Icons.Outlined.Block, contentDescription = null, tint = Color(0xFFB4232A)) },
                             onClick = { menuOpen = false; blockPeer = peer },
                         )
@@ -416,6 +438,13 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
             }
         }
         HorizontalDivider(color = Line)
+        if (!session.secret && disappearing > 0) {
+            Text(
+                tf("Kaybolan mesajlar açık: mesajlar %s sonra silinir.", lifetimeLabel(disappearing)),
+                color = Muted, fontSize = 12.5.sp, textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().clickable { showDisappear = true }.padding(vertical = 6.dp),
+            )
+        }
         if (searchOpen) {
             val hits = if (searchQuery.isBlank()) 0 else messages.count { it.kind == MsgKind.TEXT && it.text.contains(searchQuery, true) }
             OutlinedTextField(
@@ -468,6 +497,10 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
                     showSender = !session.isDirect && !session.secret,
                     onOpen = { viewer = it },
                     onLongPress = { actionMsg = it },
+                    onReact = { m, key -> scope.launch { Bayx.toggleReaction(session, m, key) } },
+                    onVote = { poll, answer ->
+                        scope.launch { if (!Bayx.votePoll(session, poll, answer)) toast(t("Oy verilemedi.")) }
+                    },
                 )
             }
         }
@@ -624,6 +657,14 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
                 showAttach = false
                 pickMusic.launch("audio/*")
             },
+            onDocument = {
+                showAttach = false
+                pickDocument.launch("*/*")
+            },
+            onPoll = {
+                showAttach = false
+                showPoll = true
+            },
             onLocation = {
                 showAttach = false
                 locationPermission.launch(
@@ -647,10 +688,50 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
             onEdit = { editTarget = msg; replyTarget = null; draft = msg.text; actionMsg = null },
             onDelete = { deleteTarget = msg; actionMsg = null },
             onDismiss = { actionMsg = null },
+            onReact = { key -> actionMsg = null; scope.launch { Bayx.toggleReaction(session, msg, key) } },
         )
     }
     forwardMsg?.let { msg ->
         ForwardDialog(msg) { forwardMsg = null }
+    }
+    if (showPoll) {
+        PollComposer(
+            onDismiss = { showPoll = false },
+            onCreate = { question, answers ->
+                showPoll = false
+                sendMedia(t("Anket gönderilemedi.")) { Bayx.createPoll(session, question, answers) }
+            },
+        )
+    }
+    if (showDisappear) {
+        val options = listOf(0L, 86_400_000L, 7 * 86_400_000L, 90 * 86_400_000L)
+        AlertDialog(
+            onDismissRequest = { showDisappear = false },
+            title = { Text(t("Kaybolan mesajlar")) },
+            text = {
+                Column {
+                    Text(
+                        t("Açıksa yeni ve eski mesajlar seçtiğin süre sonra iki tarafta da silinir. Bu sohbetteki herkes için geçerlidir."),
+                        color = Muted, fontSize = 14.sp,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    options.forEach { ms ->
+                        Row(
+                            Modifier.fillMaxWidth().clickable {
+                                showDisappear = false
+                                scope.launch { if (!Bayx.setDisappearing(session, ms)) toast(t("Ayar değiştirilemedi. Grupta bunu yalnızca yöneticiler yapabilir.")) }
+                            }.padding(vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(selected = disappearing == ms, onClick = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(if (ms == 0L) t("Kapalı") else lifetimeLabel(ms), color = Ink, fontSize = 16.sp)
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showDisappear = false }) { Text(t("Kapat")) } },
+        )
     }
     blockPeer?.let { peer ->
         val uname = peer.substringBefore(":").removePrefix("@")
@@ -727,6 +808,8 @@ private fun MessageRow(
     showSender: Boolean,
     onOpen: (ChatMessage) -> Unit,
     onLongPress: (ChatMessage) -> Unit = {},
+    onReact: (ChatMessage, String) -> Unit = { _, _ -> },
+    onVote: (PollInfo, String) -> Unit = { _, _ -> },
 ) {
     if (msg.kind == MsgKind.EFFECT) {
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -813,7 +896,10 @@ private fun MessageRow(
                     )
                     Spacer(Modifier.height(2.dp))
                 }
-                if (msg.kind == MsgKind.TEXT || msg.media == null) {
+                val poll = msg.poll
+                if (msg.kind == MsgKind.POLL && poll != null) {
+                    PollContent(poll, fg, sub) { answer -> onVote(poll, answer) }
+                } else if (msg.kind == MsgKind.TEXT || msg.media == null) {
                     val big = singleEmoticon(msg.text)
                     if (big != null) {
                         Emoticon(big, size = 64.dp)
@@ -849,6 +935,104 @@ private fun MessageRow(
             }
         }
     }
+    if (msg.reactions.isNotEmpty()) {
+        Row(
+            Modifier.fillMaxWidth().padding(top = 3.dp),
+            horizontalArrangement = if (msg.mine) Arrangement.End else Arrangement.Start,
+        ) {
+            msg.reactions.forEach { r ->
+                Text(
+                    if (r.count > 1) "${r.key} ${r.count}" else r.key,
+                    color = Ink,
+                    fontSize = 14.sp,
+                    modifier = Modifier
+                        .padding(end = 4.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (r.mine) Blue.copy(alpha = 0.22f) else ChipBg)
+                        .clickable { onReact(msg, r.key) }
+                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                )
+            }
+        }
+    }
+}
+
+/** Sohbet içindeki anket: seçeneğe dokununca oy verilir, çubuklar oy oranını gösterir. */
+@Composable
+private fun PollContent(poll: PollInfo, fg: Color, sub: Color, onVote: (String) -> Unit) {
+    Column(Modifier.widthIn(min = 220.dp, max = 270.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.Poll, null, tint = fg, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(poll.question, color = fg, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.height(8.dp))
+        poll.answers.forEach { (id, text) ->
+            val count = poll.counts[id] ?: 0
+            val share = if (poll.total > 0) count.toFloat() / poll.total else 0f
+            val chosen = id in poll.mine
+            Column(
+                Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable(enabled = !poll.ended) { onVote(id) }
+                    .padding(vertical = 4.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = chosen, onClick = null, modifier = Modifier.size(22.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(text, color = fg, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                    Text("$count", color = sub, fontSize = 13.sp)
+                }
+                Spacer(Modifier.height(4.dp))
+                Box(Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(3.dp)).background(ChipBg)) {
+                    Box(Modifier.fillMaxWidth(share).fillMaxHeight().background(if (chosen) Blue else SoftBlue))
+                }
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            if (poll.ended) t("Anket bitti") else tf("%s oy · oy vermek için seçeneğe dokun", poll.total),
+            color = sub, fontSize = 12.sp,
+        )
+    }
+}
+
+/** Anket oluşturma: soru + 2-6 seçenek. */
+@Composable
+private fun PollComposer(onDismiss: () -> Unit, onCreate: (String, List<String>) -> Unit) {
+    var question by remember { mutableStateOf("") }
+    val answers = remember { mutableStateListOf("", "") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(t("Anket oluştur")) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                OutlinedTextField(
+                    value = question, onValueChange = { question = it.take(200) },
+                    label = { Text(t("Soru")) }, modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                answers.forEachIndexed { i, a ->
+                    OutlinedTextField(
+                        value = a, onValueChange = { answers[i] = it.take(100) },
+                        label = { Text(tf("Seçenek %s", i + 1)) }, singleLine = true,
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                    )
+                }
+                if (answers.size < 6) {
+                    TextButton(onClick = { answers.add("") }) { Text(t("+ Seçenek ekle"), color = Blue) }
+                }
+            }
+        },
+        confirmButton = {
+            val clean = answers.map { it.trim() }.filter { it.isNotEmpty() }
+            TextButton(
+                enabled = question.isNotBlank() && clean.size >= 2,
+                onClick = { onCreate(question.trim(), clean) },
+            ) { Text(t("Gönder")) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(t("Vazgeç")) } },
+    )
 }
 
 // ---------- Profil ----------
@@ -1621,9 +1805,28 @@ private fun MessageActionSheet(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onDismiss: () -> Unit,
+    onReact: (String) -> Unit = {},
 ) {
     androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss, containerColor = CardBg) {
         Column(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
+            if (msg.eventId != null) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                ) {
+                    listOf("👍", "❤️", "😂", "😮", "😢", "🙏").forEach { e ->
+                        val mine = msg.reactions.any { it.key == e && it.mine }
+                        Text(
+                            e, fontSize = 28.sp,
+                            modifier = Modifier.clip(CircleShape)
+                                .background(if (mine) Blue.copy(alpha = 0.22f) else Color.Transparent)
+                                .clickable { onReact(e) }
+                                .padding(8.dp),
+                        )
+                    }
+                }
+                HorizontalDivider(color = Line)
+            }
             ActionRow(Icons.AutoMirrored.Outlined.Reply, t("Yanıtla"), onReply)
             if (msg.kind == MsgKind.TEXT) ActionRow(Icons.AutoMirrored.Outlined.Send, t("İlet"), onForward)
             if (canEdit) ActionRow(Icons.Outlined.Edit, t("Düzenle"), onEdit)

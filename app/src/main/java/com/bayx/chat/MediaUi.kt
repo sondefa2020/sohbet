@@ -253,14 +253,56 @@ internal fun MediaContent(msg: ChatMessage, tint: Color, onOpen: (ChatMessage) -
                 ) { Icon(Icons.Outlined.LocationOn, contentDescription = null, tint = Color.White) }
                 Spacer(Modifier.width(12.dp))
                 Column {
-                    Text("Konum", color = tint, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                    Text("Haritada aç", color = tint, fontSize = 13.sp)
+                    Text(t("Konum"), color = tint, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text(t("Haritada aç"), color = tint, fontSize = 13.sp)
                 }
                 Spacer(Modifier.width(16.dp))
             }
         }
+        MsgKind.FILE -> {
+            val scope = rememberCoroutineScope()
+            var opening by remember { mutableStateOf(false) }
+            Row(
+                Modifier.widthIn(max = 260.dp).clickable(enabled = !opening) {
+                    opening = true
+                    scope.launch {
+                        val ok = Bayx.openDocument(context, media)
+                        opening = false
+                        if (!ok) toast(t("Belge açılamadı. Telefonunda bu türü açan bir uygulama olmayabilir."))
+                    }
+                },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(Brush.linearGradient(listOf(Color(0xFF5C6BC0), Color(0xFF3949AB)))),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (opening) {
+                        CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+                    } else {
+                        Icon(Icons.Outlined.Description, contentDescription = null, tint = Color.White)
+                    }
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f, fill = false)) {
+                    Text(
+                        media.title ?: t("Belge"), color = tint, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                        maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
+                    Text(fileSizeLabel(media.size) + " · " + t("Açmak için dokun"), color = tint.copy(alpha = 0.7f), fontSize = 12.sp)
+                }
+                Spacer(Modifier.width(8.dp))
+            }
+        }
         else -> Unit
     }
+}
+
+internal fun fileSizeLabel(bytes: Long): String = when {
+    bytes <= 0 -> ""
+    bytes < 1024 -> "$bytes B"
+    bytes < 1024 * 1024 -> "${bytes / 1024} KB"
+    else -> String.format(java.util.Locale.US, "%.1f MB", bytes / 1048576.0)
 }
 
 /** Fotoğrafı ya da videoyu tam ekranda gösterir. Çözülmüş veri yalnızca bellekte tutulur. */
@@ -373,17 +415,25 @@ internal fun AttachSheet(
     onVideo: () -> Unit,
     onLocation: () -> Unit,
     onMusic: () -> Unit,
+    onDocument: () -> Unit,
+    onPoll: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = CardBg) {
         Column(Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, bottom = 30.dp, top = 4.dp)) {
             Text(t("Paylaş"), color = Muted, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(16.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Row(Modifier.fillMaxWidth()) {
                 AttachCircle(Icons.Outlined.Image, t("Galeri"), listOf(Color(0xFF7C4DFF), Color(0xFF5E35B1)), onPhoto)
                 AttachCircle(Icons.Outlined.PhotoCamera, t("Kamera"), listOf(Color(0xFFEC407A), Color(0xFFC2185B)), onCamera)
                 AttachCircle(Icons.Outlined.Videocam, t("Video"), listOf(Color(0xFFEF6C00), Color(0xFFE65100)), onVideo)
                 AttachCircle(Icons.Outlined.MusicNote, t("Müzik"), listOf(Color(0xFF42A5F5), Color(0xFF1565C0)), onMusic)
+            }
+            Spacer(Modifier.height(18.dp))
+            Row(Modifier.fillMaxWidth()) {
+                AttachCircle(Icons.Outlined.Description, t("Belge"), listOf(Color(0xFF5C6BC0), Color(0xFF3949AB)), onDocument)
+                AttachCircle(Icons.Outlined.Poll, t("Anket"), listOf(Color(0xFFFFB300), Color(0xFFF57C00)), onPoll)
                 AttachCircle(Icons.Outlined.LocationOn, t("Konum"), listOf(Color(0xFF26A69A), Color(0xFF00897B)), onLocation)
+                Spacer(Modifier.weight(1f))
             }
         }
     }
@@ -391,8 +441,8 @@ internal fun AttachSheet(
 
 /** WhatsApp tarzı: renkli yuvarlak ikon ve altında etiket. */
 @Composable
-private fun AttachCircle(icon: ImageVector, label: String, colors: List<Color>, onClick: () -> Unit) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable(onClick = onClick)) {
+private fun RowScope.AttachCircle(icon: ImageVector, label: String, colors: List<Color>, onClick: () -> Unit) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f).clickable(onClick = onClick)) {
         Box(
             Modifier.size(54.dp).clip(CircleShape).background(Brush.verticalGradient(colors)),
             contentAlignment = Alignment.Center,

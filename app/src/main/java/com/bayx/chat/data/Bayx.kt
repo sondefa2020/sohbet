@@ -63,6 +63,9 @@ import org.matrix.rustcomponents.sdk.SlidingSyncVersionBuilder
 import org.matrix.rustcomponents.sdk.SqliteStoreBuilder
 import org.matrix.rustcomponents.sdk.SyncService
 import org.matrix.rustcomponents.sdk.TaskHandle
+import org.matrix.rustcomponents.sdk.FileInfo
+import org.matrix.rustcomponents.sdk.PollKind
+import uniffi.ruma_events.StateEventType
 import org.matrix.rustcomponents.sdk.RecoveryState
 import org.matrix.rustcomponents.sdk.RecoveryStateListener
 import org.matrix.rustcomponents.sdk.EnableRecoveryProgress
@@ -104,7 +107,7 @@ data class ChatSummary(
     val avatarUrl: String? = null,
 )
 
-enum class MsgKind { TEXT, DATE, IMAGE, VIDEO, VOICE, LOCATION, NUDGE, EFFECT }
+enum class MsgKind { TEXT, DATE, IMAGE, VIDEO, VOICE, LOCATION, NUDGE, EFFECT, FILE, POLL }
 enum class MsgState { NONE, SENDING, SENT, READ, FAILED }
 
 /** Bir mesaja bağlı medya: şifreli kaynak adresi ve gösterim için gereken bilgiler. */
@@ -116,9 +119,26 @@ class MediaRef(
     val width: Int,
     val height: Int,
     val geoUri: String?,
-    /** Müzik dosyasıysa şarkı adı; sesli mesajda null. */
+    /** Müzik dosyasıysa şarkı adı, belgede dosya adı; sesli mesajda null. */
     val title: String? = null,
+    /** Belgenin bayt cinsinden boyutu. */
+    val size: Long = 0L,
 )
+
+/** Bir mesaja verilen tepki: emoji, kaç kişi, ben de verdim mi. */
+data class MsgReaction(val key: String, val count: Int, val mine: Boolean)
+
+/** Anket: seçenekler (kimlik, metin), oy sayıları, benim oylarım. */
+data class PollInfo(
+    val eventId: String?,
+    val question: String,
+    val answers: List<Pair<String, String>>,
+    val counts: Map<String, Int>,
+    val mine: Set<String>,
+    val ended: Boolean,
+) {
+    val total get() = counts.values.sum()
+}
 
 data class ChatMessage(
     val key: String,
@@ -130,6 +150,8 @@ data class ChatMessage(
     val state: MsgState,
     val media: MediaRef? = null,
     val eventId: EventOrTransactionId? = null,
+    val reactions: List<MsgReaction> = emptyList(),
+    val poll: PollInfo? = null,
 )
 
 /** Açık bir sohbetin canlı durumu. */
@@ -143,6 +165,8 @@ class ChatSession internal constructor(val roomId: String) {
     /** Gizli sohbet mi; öyleyse mesajların kaybolma süresi (ms). */
     @Volatile var secret: Boolean = false
     @Volatile var lifetimeMs: Long = 0L
+    /** Normal sohbette kaybolan mesaj süresi (ms, 0 = kapalı); ekranda göstermek için. */
+    val disappearing = MutableStateFlow(0L)
     internal var room: Room? = null
     internal var typingHandle: TaskHandle? = null
     internal var expiryJob: Job? = null
@@ -694,9 +718,10 @@ object Bayx {
                 is MessageType.Video -> "Video"
                 is MessageType.Audio -> if (type.content.voice == null) "🎵 " + type.content.filename.substringBeforeLast('.') else "Sesli mesaj"
                 is MessageType.Location -> "Konum"
-                is MessageType.File -> "Dosya"
+                is MessageType.File -> "📄 " + type.content.filename
                 else -> kind.content.body
             }
+            is MsgLikeKind.Poll -> "📊 " + kind.question
             is MsgLikeKind.UnableToDecrypt -> "Şifreli mesaj (bu cihazda açılamıyor)"
             is MsgLikeKind.Redacted -> "Mesaj silindi"
             else -> null
@@ -725,6 +750,15 @@ object Bayx {
                 session.dmUserId.value = dmPartner(room)
             }
         }
+        if (!session.secret) {
+            // Normal sohbette kaybolan mesaj süresi odanın saklama ayarından gelir.
+            val lifetime = runCatching {
+                room.stateEvents(StateEventType.RoomRetention).firstOrNull()?.contentJson
+                    ?.let { JSONObject(it).optLong("max_lifetime", 0L) } ?: 0L
+            }.getOrDefault(0L)
+            session.lifetimeMs = lifetime
+            session.disappearing.value = lifetime
+        }
         runCatching { syncService?.roomListService()?.setRoomSubscriptions(listOf(roomId)) }
         val timeline = runCatching {
             room.timelineWithConfiguration(
@@ -748,15 +782,8 @@ object Bayx {
                 }
             })
         }.getOrNull()
-        if (session.lifetimeMs > 0) {
-            // Süresi dolan mesajlar ekrandan da kalksın.
-            session.expiryJob = scope.launch {
-                while (isActive) {
-                    delay(30_000)
-                    applyTimelineDiffs(session, emptyList())
-                }
-            }
-        }
+        // Süresi dolan mesajlar ekrandan da kalksın.
+        startExpiry(session)
         session.timeline = timeline
         session.handle = timeline.addListener(object : TimelineListener {
             override fun onUpdate(diff: List<TimelineDiff>) {
@@ -837,10 +864,33 @@ object Bayx {
         }
         val nudge = media == null && text == NUDGE_LABEL
         if (nudge && !event.isOwn) noticeNudge(event.sender, sender, event.timestamp.toLong())
-        val kind = if (nudge) MsgKind.NUDGE else media?.first ?: MsgKind.TEXT
+        val me = (auth.value as? AuthState.LoggedIn)?.userId
+        val poll = pollOf(event.content, event.eventOrTransactionId, me)
+        val kind = when {
+            nudge -> MsgKind.NUDGE
+            poll != null -> MsgKind.POLL
+            else -> media?.first ?: MsgKind.TEXT
+        }
+        val reactions = runCatching {
+            event.reactions.map { r -> MsgReaction(r.key, r.senders.size, r.senders.any { it.senderId == me }) }
+                .filter { it.count > 0 }
+        }.getOrDefault(emptyList())
         return ChatMessage(
             key, kind, text, event.isOwn, sender, event.timestamp.toLong(), state, media?.second,
-            eventId = event.eventOrTransactionId,
+            eventId = event.eventOrTransactionId, reactions = reactions, poll = poll,
+        )
+    }
+
+    private fun pollOf(content: TimelineItemContent, id: EventOrTransactionId, me: String?): PollInfo? {
+        if (content !is TimelineItemContent.MsgLike) return null
+        val p = content.content.kind as? MsgLikeKind.Poll ?: return null
+        return PollInfo(
+            eventId = (id as? EventOrTransactionId.EventId)?.eventId,
+            question = p.question,
+            answers = p.answers.map { it.id to it.text },
+            counts = p.votes.mapValues { it.value.size },
+            mine = p.votes.filterValues { me != null && me in it }.keys,
+            ended = p.endTime != null,
         )
     }
 
@@ -872,6 +922,13 @@ object Bayx {
                 )
             }
             is MessageType.Location -> MsgKind.LOCATION to MediaRef(null, null, "", 0L, 0, 0, type.content.geoUri)
+            is MessageType.File -> {
+                val info = type.content.info
+                MsgKind.FILE to MediaRef(
+                    type.content.source, null, info?.mimetype ?: "application/octet-stream", 0L, 0, 0, null,
+                    type.content.filename, info?.size?.toLong() ?: 0L,
+                )
+            }
             else -> null
         }
     }
@@ -968,6 +1025,83 @@ object Bayx {
                 AudioInfo(Duration.ofMillis(durationMs), bytes.size.toULong(), mime),
                 waveform,
             ).join()
+        }.isSuccess
+    }
+
+    /** Mesaja tepki ekler ya da (aynısı varsa) kaldırır. */
+    suspend fun toggleReaction(session: ChatSession, msg: ChatMessage, key: String): Boolean = withContext(Dispatchers.IO) {
+        val timeline = session.timeline ?: return@withContext false
+        val id = msg.eventId ?: return@withContext false
+        runCatching { timeline.toggleReaction(id, key) }.isSuccess
+    }
+
+    /** Belge (PDF, Word vb.) gönderir. */
+    suspend fun sendDocument(session: ChatSession, bytes: ByteArray, mime: String, name: String): Boolean =
+        withContext(Dispatchers.IO) {
+            val timeline = session.timeline ?: return@withContext false
+            runCatching {
+                timeline.sendFile(upload(bytes, name), FileInfo(mime, bytes.size.toULong(), null, null)).join()
+            }.isSuccess
+        }
+
+    /** Tek seçimli, sonuçları herkese açık bir anket gönderir. */
+    suspend fun createPoll(session: ChatSession, question: String, answers: List<String>): Boolean =
+        withContext(Dispatchers.IO) {
+            val timeline = session.timeline ?: return@withContext false
+            runCatching { timeline.createPoll(question, answers, 1u.toUByte(), PollKind.DISCLOSED) }.isSuccess
+        }
+
+    suspend fun votePoll(session: ChatSession, poll: PollInfo, answerId: String): Boolean = withContext(Dispatchers.IO) {
+        val timeline = session.timeline ?: return@withContext false
+        val id = poll.eventId ?: return@withContext false
+        runCatching { timeline.sendPollResponse(id, listOf(answerId)) }.isSuccess
+    }
+
+    /**
+     * Normal sohbetlerde kaybolan mesajlar: 0 kapatır. Süre odanın saklama ayarına yazılır;
+     * sunucu süresi dolanları siler, iki taraftaki uygulama da ekrandan kaldırır.
+     */
+    suspend fun setDisappearing(session: ChatSession, lifetimeMs: Long): Boolean = withContext(Dispatchers.IO) {
+        val room = session.room ?: return@withContext false
+        val content = if (lifetimeMs > 0) JSONObject().put("max_lifetime", lifetimeMs) else JSONObject()
+        val ok = runCatching { room.sendStateEventRaw("m.room.retention", "", content.toString()) }.isSuccess
+        if (ok) {
+            session.lifetimeMs = lifetimeMs
+            session.disappearing.value = lifetimeMs
+            startExpiry(session)
+            applyTimelineDiffs(session, emptyList())
+        }
+        ok
+    }
+
+    private fun startExpiry(session: ChatSession) {
+        session.expiryJob?.cancel()
+        if (session.lifetimeMs <= 0) return
+        session.expiryJob = scope.launch {
+            while (isActive) {
+                delay(30_000)
+                applyTimelineDiffs(session, emptyList())
+            }
+        }
+    }
+
+    /** Belgeyi indirip telefondaki uygun uygulamayla açar. */
+    suspend fun openDocument(context: android.content.Context, media: MediaRef): Boolean = withContext(Dispatchers.IO) {
+        val source = media.source ?: return@withContext false
+        val bytes = loadMedia(source) ?: return@withContext false
+        runCatching {
+            // Açılan belgeler geçici klasörde tutulur; her açılışta öncekiler silinir.
+            val dir = java.io.File(context.cacheDir, "belge").apply { mkdirs() }
+            dir.listFiles()?.forEach { it.delete() }
+            val safe = (media.title ?: "belge").replace(Regex("[^\\p{L}\\p{N}._ -]"), "_").take(80)
+            val file = java.io.File(dir, safe.ifBlank { "belge" })
+            file.writeBytes(bytes)
+            val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".dosya", file)
+            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, media.mime)
+                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(android.content.Intent.createChooser(intent, null).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
         }.isSuccess
     }
 

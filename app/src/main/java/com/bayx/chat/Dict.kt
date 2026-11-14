@@ -429,6 +429,25 @@ object Dict {
         "Yeni yedek başlat" to ("Start new backup" to "بدء نسخة جديدة"),
         "Anahtarım yok, yeni yedek başlat" to ("I don't have a key, start a new backup" to "ليس لدي مفتاح، ابدأ نسخة جديدة"),
 
+        // --- belge / anket / tepki / kaybolan
+        "Belge" to ("Document" to "مستند"),
+        "Anket" to ("Poll" to "استطلاع"),
+        "Belge gönderilemedi. En fazla 50 MB'lık dosyalar gönderilebilir." to ("Couldn't send document. Files up to 50 MB can be sent." to "تعذّر إرسال المستند. يمكن إرسال ملفات حتى 50 ميغابايت."),
+        "Belge açılamadı. Telefonunda bu türü açan bir uygulama olmayabilir." to ("Couldn't open the document. Your phone may not have an app for this type." to "تعذّر فتح المستند. قد لا يوجد تطبيق يفتح هذا النوع على هاتفك."),
+        "Açmak için dokun" to ("Tap to open" to "اضغط للفتح"),
+        "Oy verilemedi." to ("Couldn't vote." to "تعذّر التصويت."),
+        "Anket gönderilemedi." to ("Couldn't send poll." to "تعذّر إرسال الاستطلاع."),
+        "Anket bitti" to ("Poll ended" to "انتهى الاستطلاع"),
+        "%s oy · oy vermek için seçeneğe dokun" to ("%s votes · tap an option to vote" to "%s صوت · اضغط على خيار للتصويت"),
+        "Anket oluştur" to ("Create poll" to "إنشاء استطلاع"),
+        "Soru" to ("Question" to "السؤال"),
+        "Seçenek %s" to ("Option %s" to "الخيار %s"),
+        "+ Seçenek ekle" to ("+ Add option" to "+ إضافة خيار"),
+        "Kaybolan mesajlar açık: mesajlar %s sonra silinir." to ("Disappearing messages on: messages are deleted after %s." to "الرسائل المختفية مفعّلة: تُحذف الرسائل بعد %s."),
+        "Açıksa yeni ve eski mesajlar seçtiğin süre sonra iki tarafta da silinir. Bu sohbetteki herkes için geçerlidir." to ("When on, new and old messages are deleted for everyone after the time you choose. It applies to everyone in this chat." to "عند التفعيل، تُحذف الرسائل الجديدة والقديمة لدى الجميع بعد المدة التي تختارها. ينطبق على كل من في هذه المحادثة."),
+        "Ayar değiştirilemedi. Grupta bunu yalnızca yöneticiler yapabilir." to ("Couldn't change the setting. In groups only admins can do this." to "تعذّر تغيير الإعداد. في المجموعات يمكن للمشرفين فقط فعل ذلك."),
+        "kaybolmaz" to ("never" to "لا تختفي"),
+
         // --- durum hataları
         "Sunucu Durum özelliğini henüz tanımıyor. Sunucuda kurulum komutunu (kur.sh) yeniden çalıştır." to ("The server doesn't support Status yet. Re-run the setup command (kur.sh) on the server." to "الخادم لا يدعم ميزة الحالة بعد. أعد تشغيل أمر الإعداد (kur.sh) على الخادم."),
         "Sunucuya ulaşılamadı. İnternet bağlantını kontrol et." to ("Couldn't reach the server. Check your internet connection." to "تعذّر الوصول إلى الخادم. تحقق من اتصالك بالإنترنت."),

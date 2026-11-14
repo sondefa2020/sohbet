@@ -2,4 +2,5 @@
 <paths>
     <!-- Kamera çekimleri yalnızca uygulamanın özel önbelleğine yazılır; galeriye kaydedilmez. -->
     <cache-path name="cekim" path="cekim/" />
+    <cache-path name="belge" path="belge/" />
 </paths>

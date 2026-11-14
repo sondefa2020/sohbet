@@ -123,6 +123,18 @@ object MediaTools {
         return out.toByteArray()
     }
 
+    /** Herhangi bir belgeyi belleğe okur (en fazla [MAX_VIDEO_BYTES]); adını ve türünü bulur. */
+    fun prepareDocument(context: Context, uri: Uri): PreparedAudio? = runCatching {
+        val resolver = context.contentResolver
+        val bytes = resolver.openInputStream(uri)?.use { readLimited(it, MAX_VIDEO_BYTES) } ?: return null
+        val mime = resolver.getType(uri) ?: "application/octet-stream"
+        var name = "belge"
+        resolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+            if (c.moveToFirst()) c.getString(0)?.let { name = it }
+        }
+        PreparedAudio(bytes, mime, name, 0L)
+    }.getOrNull()
+
     /** Müzik/ses dosyasını belleğe okur (en fazla [MAX_VIDEO_BYTES]); adını ve süresini bulur. */
     fun prepareAudio(context: Context, uri: Uri): PreparedAudio? = runCatching {
         val resolver = context.contentResolver
