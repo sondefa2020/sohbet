@@ -63,8 +63,16 @@ import com.bayx.chat.data.Api
 import com.bayx.chat.data.ApiException
 import com.bayx.chat.data.AuthState
 import com.bayx.chat.data.Bayx
+import com.bayx.chat.data.ChatFlags
+import com.bayx.chat.data.ChatPrefs
 import com.bayx.chat.data.ChatSummary
 import com.bayx.chat.data.Member
+import com.bayx.chat.data.UserPresence
+import androidx.compose.foundation.combinedClickable
+import androidx.activity.compose.BackHandler
+import androidx.compose.material.icons.outlined.Archive
+import androidx.compose.material.icons.outlined.NotificationsOff
+import androidx.compose.material.icons.outlined.PushPin
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -328,6 +336,10 @@ fun ChatListScreen(
     }
     val contacts by Bayx.contacts.collectAsState()
     val members = contacts.friends.filter { it.userId != me.userId }
+    val chatFlagMap by ChatPrefs.state.collectAsState()
+    fun chatFlags(roomId: String) = chatFlagMap[roomId] ?: ChatFlags()
+    var actionRoom by remember { mutableStateOf<ChatSummary?>(null) }
+    var showArchived by remember { mutableStateOf(false) }
     var loadedContacts by remember { mutableStateOf(false) }
     var showNewGroup by remember { mutableStateOf(false) }
     var opening by remember { mutableStateOf(false) }
@@ -473,7 +485,24 @@ fun ChatListScreen(
                                 }
                             }
                         }
-                        if (rooms.isEmpty()) {
+                        val active = rooms.filter { !chatFlags(it.id).archived }
+                            .sortedByDescending { chatFlags(it.id).pinned }
+                        val archivedCount = allRooms.count { !it.secret && chatFlags(it.id).archived }
+                        if (archivedCount > 0 && query.isBlank()) {
+                            item {
+                                Row(
+                                    Modifier.fillMaxWidth().clickable { showArchived = true }
+                                        .padding(horizontal = 20.dp, vertical = 14.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Icon(Icons.Outlined.Archive, null, tint = SoftBlue, modifier = Modifier.size(22.dp))
+                                    Spacer(Modifier.width(18.dp))
+                                    Text("Arşivlenenler", color = Ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                                    Text("$archivedCount", color = SoftBlue, fontSize = 14.sp)
+                                }
+                            }
+                        }
+                        if (active.isEmpty()) {
                             item {
                                 Text(
                                     if (query.isNotBlank()) "Aramaya uyan sohbet yok." else "Henüz sohbet yok.\nKişiler sekmesinden birini seçerek başla.",
@@ -484,8 +513,14 @@ fun ChatListScreen(
                                 )
                             }
                         } else {
-                            items(rooms, key = { it.id }) { chat ->
-                                ChatRow(chat, mode = chat.dmUserId?.let { presences[it]?.mode }) { onOpenChat(chat.id) }
+                            items(active, key = { it.id }) { chat ->
+                                ChatRow(
+                                    chat,
+                                    mode = chat.dmUserId?.let { presences[it]?.mode },
+                                    flags = chatFlags(chat.id),
+                                    onClick = { onOpenChat(chat.id) },
+                                    onLongClick = { actionRoom = chat },
+                                )
                             }
                         }
                     }
@@ -611,6 +646,114 @@ fun ChatListScreen(
                 }
             },
         )
+    }
+
+    actionRoom?.let { chat ->
+        val f = chatFlags(chat.id)
+        ChatActionSheet(
+            name = chat.name,
+            flags = f,
+            onDismiss = { actionRoom = null },
+            onPin = { ChatPrefs.togglePin(chat.id); actionRoom = null },
+            onMute = { ChatPrefs.toggleMute(chat.id); actionRoom = null },
+            onArchive = { ChatPrefs.toggleArchive(chat.id); actionRoom = null },
+        )
+    }
+
+    if (showArchived) {
+        val archived = allRooms.filter { !it.secret && chatFlags(it.id).archived }
+        ArchivedScreen(
+            rooms = archived,
+            flagsOf = { chatFlags(it) },
+            presences = presences,
+            onOpen = { id -> showArchived = false; onOpenChat(id) },
+            onUnarchive = { ChatPrefs.toggleArchive(it) },
+            onBack = { showArchived = false },
+        )
+    }
+}
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun ChatActionSheet(
+    name: String,
+    flags: ChatFlags,
+    onDismiss: () -> Unit,
+    onPin: () -> Unit,
+    onMute: () -> Unit,
+    onArchive: () -> Unit,
+) {
+    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color.White) {
+        Column(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
+            Text(
+                name,
+                color = Ink, fontSize = 17.sp, fontWeight = FontWeight.Bold,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp),
+            )
+            SheetAction(
+                if (flags.pinned) Icons.Outlined.PushPin else Icons.Outlined.PushPin,
+                if (flags.pinned) "Sabitlemeyi kaldır" else "Sabitle", onPin,
+            )
+            SheetAction(
+                Icons.Outlined.NotificationsOff,
+                if (flags.muted) "Sesi aç" else "Sessize al", onMute,
+            )
+            SheetAction(
+                Icons.Outlined.Archive,
+                if (flags.archived) "Arşivden çıkar" else "Arşivle", onArchive,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SheetAction(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 24.dp, vertical = 15.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, null, tint = Blue, modifier = Modifier.size(24.dp))
+        Spacer(Modifier.width(20.dp))
+        Text(label, color = Ink, fontSize = 16.sp)
+    }
+}
+
+@Composable
+private fun ArchivedScreen(
+    rooms: List<ChatSummary>,
+    flagsOf: (String) -> ChatFlags,
+    presences: Map<String, UserPresence>,
+    onOpen: (String) -> Unit,
+    onUnarchive: (String) -> Unit,
+    onBack: () -> Unit,
+) {
+    androidx.activity.compose.BackHandler(onBack = onBack)
+    Column(Modifier.fillMaxSize().background(PageBrush).systemBarsPadding()) {
+        Row(
+            Modifier.fillMaxWidth().padding(start = 4.dp, end = 12.dp, top = 8.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Geri", tint = Ink) }
+            Text("Arşivlenenler", color = Ink, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        }
+        if (rooms.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("Arşivlenen sohbet yok.", color = Muted, fontSize = 15.sp)
+            }
+        } else {
+            LazyColumn {
+                items(rooms, key = { it.id }) { chat ->
+                    ChatRow(
+                        chat,
+                        mode = chat.dmUserId?.let { presences[it]?.mode },
+                        flags = flagsOf(chat.id),
+                        onClick = { onOpen(chat.id) },
+                        onLongClick = { onUnarchive(chat.id) },
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -826,9 +969,18 @@ private fun PersonRow(name: String, handle: String, mode: String? = null, url: S
 }
 
 @Composable
-private fun ChatRow(chat: ChatSummary, mode: String? = null, onClick: () -> Unit) {
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+private fun ChatRow(
+    chat: ChatSummary,
+    mode: String? = null,
+    flags: ChatFlags = ChatFlags(),
+    onClick: () -> Unit,
+    onLongClick: () -> Unit = {},
+) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth()
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(horizontal = 20.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Avatar(chat.name, 60.dp, url = chat.avatarUrl, mode = mode)
@@ -837,13 +989,21 @@ private fun ChatRow(chat: ChatSummary, mode: String? = null, onClick: () -> Unit
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     chat.name,
-                    modifier = Modifier.weight(1f),
                     color = Ink,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
                 )
+                if (flags.muted) {
+                    Spacer(Modifier.width(5.dp))
+                    Icon(Icons.Outlined.NotificationsOff, "Sessiz", tint = SoftBlue, modifier = Modifier.size(16.dp))
+                }
+                if (flags.pinned) {
+                    Spacer(Modifier.width(4.dp))
+                    Icon(Icons.Outlined.PushPin, "Sabit", tint = SoftBlue, modifier = Modifier.size(16.dp))
+                }
                 Spacer(Modifier.width(8.dp))
                 Text(formatTime(chat.time), color = if (chat.unread > 0) Blue else SoftBlue, fontSize = 13.sp)
             }

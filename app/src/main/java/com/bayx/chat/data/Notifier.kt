@@ -171,6 +171,7 @@ object Notifier {
 
     fun showMessage(context: Context, roomId: String, roomName: String?, unread: Int) {
         if (!canNotify(context)) return
+        if (ChatPrefs.isMuted(roomId)) return
         val id = roomId.hashCode()
         val text = if (unread > 1) "$unread yeni mesaj" else "Yeni mesajın var"
         val notification = NotificationCompat.Builder(context, CH_MESSAGES)
