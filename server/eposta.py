@@ -199,15 +199,29 @@ class Emails:
 
     # ----------------------------------------------------------- şifre sıfırlama
 
-    def start_reset(self, uid):
+    def mark_verified(self, uid):
+        """Sıfırlama kodu postadan okunup doğru girildiyse adres doğrulanmış sayılır."""
+        with self.store.lock:
+            rec = self.table.get(uid)
+            if rec and not rec.get("verified"):
+                rec["verified"] = True
+                rec["token"] = None
+                self.store.save()
+
+    def address_of(self, uid):
         rec = self.table.get(uid)
-        if not rec or not rec.get("verified"):
-            return False
+        return rec.get("email", "") if rec else ""
+
+    def start_reset(self, uid):
+        """Sonuç: 'no_email' | 'sent' | 'fail'. Adres doğrulanmamış olsa da hesabın kendi adresine gönderilir."""
+        rec = self.table.get(uid)
+        if not rec or not rec.get("email"):
+            return "no_email"
         now = time.time()
         with self.lock:
             prev = self.resets.get(uid)
             if prev and now - prev.get("sent", 0) < 60:
-                return True
+                return "sent"
             code = "".join(secrets.choice("0123456789") for _ in range(6))
             self.resets[uid] = {"hash": _h(uid + code), "expires": now + RESET_SECONDS, "tries": 0, "sent": now}
         name = uid[1:].split(":")[0]
@@ -222,7 +236,10 @@ class Emails:
             "<p>Kod 15 dakika geçerli.</p>" % (name, code),
         )
         ok, _ = self.mailer.send(rec["email"], "Tayfa şifre sıfırlama kodu", text, html)
-        return ok
+        if not ok:
+            with self.lock:
+                self.resets.pop(uid, None)
+        return "sent" if ok else "fail"
 
     def check_reset(self, uid, code):
         now = time.time()

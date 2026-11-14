@@ -380,6 +380,12 @@ object Dict {
         "Kişilerim (%s)" to ("My contacts (%s)" to "جهات اتصالي (%s)"),
         "%s güncelleme · dokunup gör" to ("%s updates · tap to view" to "%s تحديث · اضغط للعرض"),
 
+        // --- şifre sıfırlama (sade akış)
+        "Kullanıcı adını yaz; hesabındaki e-postaya 6 haneli kod gönderelim." to ("Enter your username and we'll send a 6-digit code to the email on your account." to "أدخل اسم المستخدم وسنرسل رمزًا من 6 خانات إلى البريد المرتبط بحسابك."),
+        "Kodu ve yeni şifreni yaz." to ("Enter the code and your new password." to "أدخل الرمز وكلمة المرور الجديدة."),
+        "6 haneli kod" to ("6-digit code" to "رمز من 6 خانات"),
+        "Kod gelmedi mi? Yeniden gönder" to ("Didn't get the code? Resend" to "لم يصلك الرمز؟ أعد الإرسال"),
+
         // --- web bağlama onayı
         "Bu bilgisayarı bağla?" to ("Link this computer?" to "ربط هذا الحاسوب؟"),
         "Bağla" to ("Link" to "ربط"),

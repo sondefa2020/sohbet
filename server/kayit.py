@@ -185,37 +185,52 @@ def register_simple(body, ip):
     return {"status": "ok", "username": username, "email_pending": bool(email)}
 
 
-def reset_request(body, ip):
-    """Şifre sıfırlama kodu ister. Hesap var mı yok mu belli etmemek için her zaman aynı yanıt."""
-    login = str(body.get("login", "")).strip().lower()
-    if _recover_attempts.blocked("reset:" + ip):
-        raise ApiError(429, "COK_FAZLA_DENEME", "Çok fazla deneme. Bir saat sonra tekrar dene.")
-    _recover_attempts.fail("reset:" + ip)  # istek sayısını da sınırla
-    uid = None
+def _mask_address(address):
+    name, _, domain = address.partition("@")
+    return (name[:2] + "***@" + domain) if domain else "***"
+
+
+def _reset_target(login):
+    """Kullanıcı adı ya da posta adresinden hesabı bulur."""
     if "@" in login and not login.startswith("@"):
-        uid = EMAILS.owner_of(login, verified_only=True)
-    elif USERNAME_RE.match(login.lstrip("@").split(":")[0]):
-        uid = user_id(login.lstrip("@").split(":")[0])
-    if uid and active_user(uid):
-        threading.Thread(target=EMAILS.start_reset, args=(uid,), daemon=True).start()
+        return EMAILS.owner_of(login, verified_only=False)
+    name = login.lstrip("@").split(":")[0]
+    if USERNAME_RE.match(name):
+        return user_id(name)
+    return None
+
+
+def reset_request(body, ip):
+    """Şifre sıfırlama kodu gönderir ve ne olduğunu açıkça söyler."""
+    login = str(body.get("login", "")).strip().lower()
+    if _reset_attempts.blocked("reset:" + ip):
+        raise ApiError(429, "COK_FAZLA_DENEME", "Çok fazla deneme. Bir saat sonra tekrar dene.")
+    _reset_attempts.fail("reset:" + ip)  # istek sayısını da sınırla
+    uid = _reset_target(login)
+    if not uid or not active_user(uid):
+        raise ApiError(404, "HESAP_YOK", "Bu kullanıcı adıyla bir hesap bulunamadı. Yazımı kontrol et.")
+    result = EMAILS.start_reset(uid)
+    if result == "no_email":
+        raise ApiError(400, "EPOSTA_YOK", "Bu hesaba e-posta eklenmemiş. Şifreni yöneticinin sıfırlamasını iste.")
+    if result != "sent":
+        raise ApiError(502, "EPOSTA_GITMEDI", "Kod e-postası gönderilemedi. Biraz sonra tekrar dene ya da yöneticiye haber ver.")
     return {
         "ok": True,
-        "message": "Bu hesaba doğrulanmış bir e-posta bağlıysa 6 haneli kod gönderildi. Gelen kutunu ve istenmeyen klasörünü kontrol et.",
+        "message": "6 haneli kod %s adresine gönderildi. Gelmediyse istenmeyen (spam) klasörüne bak."
+        % _mask_address(EMAILS.address_of(uid)),
     }
 
 
 def reset_confirm(body, ip):
     login = str(body.get("login", "")).strip().lower()
-    uid = None
-    if "@" in login and not login.startswith("@"):
-        uid = EMAILS.owner_of(login, verified_only=True)
-    elif USERNAME_RE.match(login.lstrip("@").split(":")[0]):
-        uid = user_id(login.lstrip("@").split(":")[0])
+    uid = _reset_target(login)
     password = body.get("password")
     validate_password(password)
-    if _recover_attempts.blocked("rc:" + ip) or not uid or not EMAILS.check_reset(uid, body.get("code")):
-        _recover_attempts.fail("rc:" + ip)
-        raise ApiError(403, "KOD_HATALI", "Kod hatalı ya da süresi dolmuş.")
+    if _reset_attempts.blocked("rc:" + ip):
+        raise ApiError(429, "COK_FAZLA_DENEME", "Çok fazla deneme. Bir saat sonra tekrar dene.")
+    if not uid or not EMAILS.check_reset(uid, body.get("code")):
+        _reset_attempts.fail("rc:" + ip)
+        raise ApiError(403, "KOD_HATALI", "Kod hatalı ya da süresi dolmuş. Yeni kod isteyebilirsin.")
     status, _ = synapse(
         "POST",
         "/_synapse/admin/v1/reset_password/" + quote(uid),
@@ -223,6 +238,7 @@ def reset_confirm(body, ip):
     )
     if status != 200:
         raise ApiError(502, "SUNUCU_HATASI", "Şifre değiştirilemedi.")
+    EMAILS.mark_verified(uid)
     return {"ok": True, "username": username_of(uid)}
 
 
@@ -721,6 +737,7 @@ def ticket_check(body):
 _recover_attempts = giris.Attempts(limit=8)
 _code_attempts = giris.Attempts(limit=20)
 _pair_attempts = giris.Attempts(limit=30)
+_reset_attempts = giris.Attempts(limit=15)
 
 
 def recover(body, ip):

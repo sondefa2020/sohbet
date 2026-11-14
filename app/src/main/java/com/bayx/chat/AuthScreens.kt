@@ -179,7 +179,7 @@ private fun ForgotScreen(onBack: () -> Unit) {
     var login by remember { mutableStateOf("") }
     var code by remember { mutableStateOf("") }
     var pass by remember { mutableStateOf("") }
-    var pass2 by remember { mutableStateOf("") }
+    var sentNote by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var info by remember { mutableStateOf<String?>(null) }
     var done by remember { mutableStateOf(false) }
@@ -191,46 +191,47 @@ private fun ForgotScreen(onBack: () -> Unit) {
         }
         LogoMark(80.dp)
         Spacer(Modifier.height(10.dp))
-        Text("Şifremi unuttum", color = Ink, fontSize = 27.sp, fontWeight = FontWeight.ExtraBold)
+        Text(t("Şifremi unuttum"), color = Ink, fontSize = 27.sp, fontWeight = FontWeight.ExtraBold)
         Spacer(Modifier.height(6.dp))
         Text(
-            t("Hesabına doğrulanmış e-posta bağlıysa 6 haneli kod gönderilir. E-postası olmayan hesapların şifresini yönetici sıfırlar."),
+            if (step == 1) t("Kullanıcı adını yaz; hesabındaki e-postaya 6 haneli kod gönderelim.")
+            else sentNote.ifBlank { t("Kodu ve yeni şifreni yaz.") },
             color = Muted,
             fontSize = 14.5.sp,
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(24.dp))
-        if (step == 1) {
-            PillField(login, { login = it.trim() }, t("Kullanıcı adı ya da e-posta"), Icons.Outlined.Person)
-            Spacer(Modifier.height(24.dp))
-            SandButton(t("Kod gönder"), busy = busy) {
-                if (login.isBlank()) {
-                    info = t("Kullanıcı adını ya da e-postanı yaz.")
-                } else {
-                    busy = true
-                    scope.launch {
-                        try {
-                            info = Api.resetRequest(login)
-                            step = 2
-                        } catch (e: ApiException) {
-                            info = e.message
-                        }
-                        busy = false
-                    }
-                }
+        fun requestCode() {
+            if (login.isBlank()) {
+                info = t("Kullanıcı adını ya da e-postanı yaz.")
+                return
             }
+            busy = true
+            scope.launch {
+                try {
+                    sentNote = Api.resetRequest(login)
+                    step = 2
+                } catch (e: ApiException) {
+                    info = e.message
+                }
+                busy = false
+            }
+        }
+        if (step == 1) {
+            PillField(login, { login = it.trim() }, t("Kullanıcı adı"), Icons.Outlined.Person)
+            Spacer(Modifier.height(24.dp))
+            SandButton(t("Kod gönder"), busy = busy) { requestCode() }
         } else {
-            PillField(code, { code = it.filter { c -> c.isDigit() }.take(6) }, "6 haneli kod", Icons.Outlined.Password, keyboardType = KeyboardType.Number)
+            PillField(code, { code = it.filter { c -> c.isDigit() }.take(6) }, t("6 haneli kod"), Icons.Outlined.Password, keyboardType = KeyboardType.Number)
             Spacer(Modifier.height(14.dp))
             PillField(pass, { pass = it }, t("Yeni şifre (en az 8 karakter)"), Icons.Outlined.Lock, isPassword = true)
-            Spacer(Modifier.height(14.dp))
-            PillField(pass2, { pass2 = it }, t("Yeni şifre (tekrar)"), Icons.Outlined.Lock, isPassword = true)
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(10.dp))
+            TextButton(onClick = { if (!busy) requestCode() }) { Text(t("Kod gelmedi mi? Yeniden gönder"), color = Blue) }
+            Spacer(Modifier.height(10.dp))
             SandButton(t("Şifreyi değiştir"), busy = busy) {
                 when {
-                    code.length != 6 -> info = "6 haneli kodu yaz."
+                    code.length != 6 -> info = t("6 haneli kodu gir.")
                     pass.length < 8 -> info = t("Şifre en az 8 karakter olmalı.")
-                    pass != pass2 -> info = t("Şifreler aynı değil.")
                     else -> {
                         busy = true
                         scope.launch {
