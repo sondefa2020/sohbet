@@ -83,8 +83,13 @@ internal val GlassBar: Color get() = if (ThemeState.dark) Color(0xFF1C1915).copy
 internal val GlassPill: Color get() = if (ThemeState.dark) Color(0xFF221E19).copy(alpha = 0.92f) else Color.White.copy(alpha = 0.86f)
 
 /** Kendi mesaj balonum: açık şeftali. */
-internal val PeachBrush = Brush.linearGradient(listOf(Color(0xFFFBEEDF), Color(0xFFF3DDC6)))
-internal val ChipBg = Color(0xFFF1ECE6)
+internal val PeachBrush: Brush
+    get() = if (ThemeState.dark) {
+        Brush.linearGradient(listOf(Color(0xFF4A3828), Color(0xFF3B2C20)))
+    } else {
+        Brush.linearGradient(listOf(Color(0xFFFBEEDF), Color(0xFFF3DDC6)))
+    }
+internal val ChipBg: Color get() = if (ThemeState.dark) Color(0xFF2A2521) else Color(0xFFF1ECE6)
 
 /** Saten kartlar: yumuşak, ipeksi degradeler. */
 internal object Satin {
@@ -161,7 +166,11 @@ internal fun SoftCard(modifier: Modifier = Modifier, content: @Composable () -> 
 /** Logo: koyu küre ve neon balon, etrafında açık bir halka. */
 @Composable
 internal fun LogoMark(size: Dp) {
-    Image(painterResource(R.drawable.ic_logo), contentDescription = "Tayfa", modifier = Modifier.size(size))
+    Image(
+        painterResource(R.drawable.ic_logo),
+        contentDescription = "Tayfa",
+        modifier = Modifier.size(size).clip(RoundedCornerShape(size * 0.28f)),
+    )
 }
 
 /** Kod alanı: büyük harf, karışan karakterler düzeltilir, 4'lü gruplara tire eklenir. */
@@ -284,7 +293,7 @@ internal fun RecoveryCodeDialog(code: String, onDone: () -> Unit) {
                 )
                 Spacer(Modifier.height(14.dp))
                 Box(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0xFFF6EFE7)).padding(vertical = 16.dp),
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(ChipBg).padding(vertical = 16.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(code, fontFamily = FontFamily.Monospace, fontSize = 21.sp, fontWeight = FontWeight.Bold, color = Ink)

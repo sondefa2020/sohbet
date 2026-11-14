@@ -47,14 +47,14 @@ fun MediaHubScreen(onBack: () -> Unit) {
     var loading by remember { mutableStateOf(false) }
     DisposableEffect(Unit) { onDispose { session?.let { Bayx.closeChat(it) } } }
 
-    Column(Modifier.fillMaxSize().background(Color(0xFFF4F8FC)).statusBarsPadding()) {
+    Column(Modifier.fillMaxSize().background(PageBrush).statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Geri") }
-            Text("Medya", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, t("Geri"), tint = Ink) }
+            Text(t("Medya"), color = Ink, fontSize = 22.sp, fontWeight = FontWeight.Bold)
         }
         Text(
             t("Fotoğraf ve videolarını görmek istediğin sohbeti seç."),
-            color = Color(0xFF5B6B7C),
+            color = Muted,
             fontSize = 14.sp,
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
         )
@@ -77,7 +77,7 @@ fun MediaHubScreen(onBack: () -> Unit) {
                 ) {
                     Avatar(chat.name, 48.dp, url = chat.avatarUrl)
                     Spacer(Modifier.width(14.dp))
-                    Text(chat.name, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                    Text(chat.name, color = Ink, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
         }

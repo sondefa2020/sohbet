@@ -733,7 +733,7 @@ private fun MessageRow(
                 fontSize = 13.sp,
                 modifier = Modifier
                     .clip(RoundedCornerShape(16.dp))
-                    .background(Color(0xFFEAF0F8))
+                    .background(if (ThemeState.dark) Color(0xFF2A2521) else Color(0xFFEAF0F8))
                     .padding(horizontal = 14.dp, vertical = 5.dp),
             )
         }
@@ -746,12 +746,12 @@ private fun MessageRow(
         bottomStart = if (msg.mine) 22.dp else 6.dp,
     )
     val fg = Ink
-    val sub = if (msg.mine) Color(0xFF8A7460) else Muted
+    val sub = if (msg.mine) (if (ThemeState.dark) Color(0xFFC2A68C) else Color(0xFF8A7460)) else Muted
     val visual = msg.kind == MsgKind.IMAGE || msg.kind == MsgKind.VIDEO
     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (msg.mine) Arrangement.End else Arrangement.Start) {
         Surface(
             shape = shape,
-            color = if (msg.mine) Color.Transparent else Color.White,
+            color = if (msg.mine) Color.Transparent else CardBg,
             shadowElevation = if (msg.mine) 0.dp else 3.dp,
             modifier = Modifier
                 .widthIn(max = 310.dp)
@@ -1551,7 +1551,7 @@ private fun MessageActionSheet(
     onDelete: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color.White) {
+    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss, containerColor = CardBg) {
         Column(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
             ActionRow(Icons.AutoMirrored.Outlined.Reply, t("Yanıtla"), onReply)
             if (msg.kind == MsgKind.TEXT) ActionRow(Icons.AutoMirrored.Outlined.Send, t("İlet"), onForward)

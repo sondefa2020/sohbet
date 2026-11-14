@@ -233,8 +233,8 @@ internal fun PillField(
             keyboardType = if (isPassword) KeyboardType.Password else keyboardType,
         ),
         colors = OutlinedTextFieldDefaults.colors(
-            focusedContainerColor = Color.White,
-            unfocusedContainerColor = Color.White,
+            focusedContainerColor = CardBg,
+            unfocusedContainerColor = CardBg,
             unfocusedBorderColor = Line,
             focusedBorderColor = Blue,
         ),
@@ -397,7 +397,7 @@ fun ChatListScreen(
         scope.launch {
             val roomId = Bayx.startDirectChat(userId)
             opening = false
-            if (roomId != null) onOpenChat(roomId) else toast("Sohbet açılamadı. Tekrar dene.")
+            if (roomId != null) onOpenChat(roomId) else toast(t("Sohbet açılamadı. Tekrar dene."))
         }
     }
 
@@ -425,7 +425,7 @@ fun ChatListScreen(
                     }
                 }
                 Spacer(Modifier.width(10.dp))
-                ChipIcon(Icons.Outlined.Search, "Ara", size = 44.dp) { searching = !searching; if (!searching) query = "" }
+                ChipIcon(Icons.Outlined.Search, t("Ara"), size = 44.dp) { searching = !searching; if (!searching) query = "" }
                 Spacer(Modifier.width(10.dp))
                 ChipIcon(Icons.Outlined.Settings, "Profil ve ayarlar", size = 44.dp, onClick = onProfile)
             }
@@ -464,12 +464,14 @@ fun ChatListScreen(
                     value = query,
                     onValueChange = { query = it },
                     singleLine = true,
-                    placeholder = { Text("Sohbet, mesaj ya da kişi ara", color = Muted) },
+                    placeholder = { Text(t("Sohbet, mesaj ya da kişi ara"), color = Muted) },
                     leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null, tint = Muted) },
                     shape = RoundedCornerShape(24.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = Color.White,
-                        unfocusedContainerColor = Color.White,
+                        focusedContainerColor = CardBg,
+                        unfocusedContainerColor = CardBg,
+                        focusedTextColor = Ink,
+                        unfocusedTextColor = Ink,
                         unfocusedBorderColor = Line,
                         focusedBorderColor = Blue,
                     ),
@@ -547,8 +549,8 @@ fun ChatListScreen(
                                         },
                                         shape = RoundedCornerShape(22.dp),
                                         colors = OutlinedTextFieldDefaults.colors(
-                                            focusedContainerColor = Color.White,
-                                            unfocusedContainerColor = Color.White,
+                                            focusedContainerColor = CardBg,
+                                            unfocusedContainerColor = CardBg,
                                             unfocusedBorderColor = Line,
                                             focusedBorderColor = Blue,
                                         ),

@@ -386,6 +386,9 @@ object Dict {
         "6 haneli kod" to ("6-digit code" to "رمز من 6 خانات"),
         "Kod gelmedi mi? Yeniden gönder" to ("Didn't get the code? Resend" to "لم يصلك الرمز؟ أعد الإرسال"),
 
+        "Ara" to ("Search" to "بحث"),
+        "Geri" to ("Back" to "رجوع"),
+
         // --- web bağlama onayı
         "Bu bilgisayarı bağla?" to ("Link this computer?" to "ربط هذا الحاسوب؟"),
         "Bağla" to ("Link" to "ربط"),
