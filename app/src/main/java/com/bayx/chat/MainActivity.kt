@@ -48,6 +48,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.navigation.compose.NavHost
 import com.bayx.chat.data.AuthState
 import com.bayx.chat.data.Bayx
@@ -290,16 +294,18 @@ private fun MainNav(me: AuthState.LoggedIn) {
             )
         }
         composable("media") {
-            MediaHubScreen(onBack = { nav.popBackStack() })
+            TabPage(AppTab.MEDIA, nav) { MediaHubScreen(onBack = { nav.popBackStack() }) }
         }
         composable("calls") {
-            CallsScreen(
-                onBack = { nav.popBackStack() },
-                onOpenChat = { roomId -> nav.navigate("chat/" + Uri.encode(roomId)) },
-            )
+            TabPage(AppTab.CALLS, nav) {
+                CallsScreen(
+                    onBack = { nav.popBackStack() },
+                    onOpenChat = { roomId -> nav.navigate("chat/" + Uri.encode(roomId)) },
+                )
+            }
         }
         composable("status") {
-            StatusScreen(onBack = { nav.popBackStack() })
+            TabPage(AppTab.STATUS, nav) { StatusScreen(onBack = { nav.popBackStack() }) }
         }
         composable("chat/{id}") { entry ->
             ChatScreen(
@@ -316,12 +322,14 @@ private fun MainNav(me: AuthState.LoggedIn) {
             )
         }
         composable("profile") {
-            ProfileScreen(
-                me = me,
-                onBack = { nav.popBackStack() },
-                onAdmin = { nav.navigate("admin") },
-                onWebLink = { nav.navigate("weblink") },
-            )
+            TabPage(AppTab.SETTINGS, nav) {
+                ProfileScreen(
+                    me = me,
+                    onBack = { nav.popBackStack() },
+                    onAdmin = { nav.navigate("admin") },
+                    onWebLink = { nav.navigate("weblink") },
+                )
+            }
         }
         composable("weblink") {
             WebLinkScreen(onBack = { nav.popBackStack() })
@@ -378,5 +386,40 @@ private fun requestBatteryExemptionOnce(context: android.content.Context) {
             addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         context.startActivity(intent)
+    }
+}
+
+
+/** Ana sekme sayfası: içerik + her sayfada aynı alt menü. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun TabPage(current: AppTab, nav: androidx.navigation.NavHostController, content: @Composable () -> Unit) {
+    androidx.compose.foundation.layout.Column(Modifier.fillMaxSize().background(PageBrush)) {
+        Box(
+            Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .consumeWindowInsets(androidx.compose.foundation.layout.WindowInsets.navigationBars),
+        ) { content() }
+        Box(Modifier.navigationBarsPadding()) {
+            BottomNav(current) { tab ->
+                if (tab == current) return@BottomNav
+                val route = when (tab) {
+                    AppTab.CHATS -> null
+                    AppTab.CALLS -> "calls"
+                    AppTab.STATUS -> "status"
+                    AppTab.MEDIA -> "media"
+                    AppTab.SETTINGS -> "profile"
+                }
+                if (route == null) {
+                    nav.popBackStack("chats", inclusive = false)
+                } else {
+                    nav.navigate(route) {
+                        popUpTo("chats")
+                        launchSingleTop = true
+                    }
+                }
+            }
+        }
     }
 }

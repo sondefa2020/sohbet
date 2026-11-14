@@ -389,6 +389,10 @@ object Dict {
         "Ara" to ("Search" to "بحث"),
         "Geri" to ("Back" to "رجوع"),
 
+        "Ekip sohbetleri" to ("Team chats" to "محادثات الفريق"),
+        "Kaybolan mesajlar" to ("Disappearing messages" to "رسائل تختفي"),
+        "Foto ve video" to ("Photos & videos" to "صور وفيديو"),
+
         // --- web bağlama onayı
         "Bu bilgisayarı bağla?" to ("Link this computer?" to "ربط هذا الحاسوب؟"),
         "Bağla" to ("Link" to "ربط"),

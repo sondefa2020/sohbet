@@ -68,6 +68,7 @@ import com.bayx.chat.data.ChatPrefs
 import com.bayx.chat.data.ChatSummary
 import com.bayx.chat.data.Member
 import com.bayx.chat.data.UserPresence
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.outlined.Archive
@@ -488,9 +489,9 @@ fun ChatListScreen(
                                     Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 10.dp),
                                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                                 ) {
-                                    SatinTile("Gruplar", Icons.Outlined.Groups, Satin.Steel, Modifier.weight(1f)) { tab = 2 }
-                                    SatinTile("Gizli Oda", Icons.Outlined.Lock, Satin.Lavender, Modifier.weight(1f), onClick = onSecret)
-                                    SatinTile("Medya", Icons.Outlined.PermMedia, Satin.Sand, Modifier.weight(1f), onClick = onMedia)
+                                    QuickCard(t("Gruplar"), t("Ekip sohbetleri"), Icons.Outlined.Groups, Satin.Steel, Modifier.weight(1f)) { tab = 2 }
+                                    QuickCard(t("Gizli Oda"), t("Kaybolan mesajlar"), Icons.Outlined.Lock, Satin.Lavender, Modifier.weight(1f), onClick = onSecret)
+                                    QuickCard(t("Medya"), t("Foto ve video"), Icons.Outlined.PermMedia, Satin.Sand, Modifier.weight(1f), onClick = onMedia)
                                 }
                             }
                         }
@@ -613,18 +614,13 @@ fun ChatListScreen(
                     }
                 }
             }
-            Surface(
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp).fillMaxWidth().height(74.dp),
-                shape = RoundedCornerShape(28.dp),
-                color = GlassPill,
-                shadowElevation = 6.dp,
-            ) {
-                Row {
-                    NavItem("Sohbetler", Icons.Filled.Sms, selected = true) { tab = 0 }
-                    NavItem("Aramalar", Icons.Outlined.Call, selected = false, onClick = onCalls)
-                    NavItem("Durum", Icons.Outlined.RadioButtonChecked, selected = false, onClick = onStatus)
-                    NavItem("Medya", Icons.Outlined.PermMedia, selected = false, onClick = onMedia)
-                    NavItem("Ayarlar", Icons.Outlined.Settings, selected = false, onClick = onProfile)
+            BottomNav(AppTab.CHATS) { selected ->
+                when (selected) {
+                    AppTab.CHATS -> tab = 0
+                    AppTab.CALLS -> onCalls()
+                    AppTab.STATUS -> onStatus()
+                    AppTab.MEDIA -> onMedia()
+                    AppTab.SETTINGS -> onProfile()
                 }
             }
         }
@@ -824,6 +820,62 @@ private fun EmptyHint(text: String) {
     }
 }
 
+/** Ana sekmeler: alt menü her ana sayfada aynı. */
+enum class AppTab { CHATS, CALLS, STATUS, MEDIA, SETTINGS }
+
+@Composable
+internal fun BottomNav(current: AppTab, onSelect: (AppTab) -> Unit) {
+    Surface(
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp).fillMaxWidth().height(74.dp),
+        shape = RoundedCornerShape(28.dp),
+        color = GlassPill,
+        shadowElevation = 6.dp,
+    ) {
+        Row {
+            NavItem(t("Sohbetler"), Icons.Filled.Sms, current == AppTab.CHATS) { onSelect(AppTab.CHATS) }
+            NavItem(t("Aramalar"), Icons.Outlined.Call, current == AppTab.CALLS) { onSelect(AppTab.CALLS) }
+            NavItem(t("Durum"), Icons.Outlined.RadioButtonChecked, current == AppTab.STATUS) { onSelect(AppTab.STATUS) }
+            NavItem(t("Medya"), Icons.Outlined.PermMedia, current == AppTab.MEDIA) { onSelect(AppTab.MEDIA) }
+            NavItem(t("Ayarlar"), Icons.Outlined.Settings, current == AppTab.SETTINGS) { onSelect(AppTab.SETTINGS) }
+        }
+    }
+}
+
+/** Ana ekrandaki kısayol kartı: renkli simge rozeti, başlık ve kısa açıklama. */
+@Composable
+private fun QuickCard(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    colors: List<Color>,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val shape = RoundedCornerShape(20.dp)
+    Column(
+        modifier
+            .shadow(3.dp, shape, ambientColor = SoftShadow, spotColor = SoftShadow)
+            .clip(shape)
+            .background(CardBg)
+            .border(1.dp, Line, shape)
+            .clickable(onClick = onClick)
+            .padding(start = 12.dp, end = 10.dp, top = 12.dp, bottom = 12.dp),
+    ) {
+        Box(
+            Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(13.dp))
+                .background(Brush.linearGradient(colors)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
+        }
+        Spacer(Modifier.height(10.dp))
+        Text(title, color = Ink, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(subtitle, color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
 @Composable
 private fun RowScope.NavItem(label: String, icon: ImageVector, selected: Boolean, onClick: () -> Unit) {
     val tint = if (selected) Blue else Muted
@@ -832,7 +884,7 @@ private fun RowScope.NavItem(label: String, icon: ImageVector, selected: Boolean
             .weight(1f)
             .fillMaxHeight()
             .clip(RoundedCornerShape(22.dp))
-            .then(if (selected) Modifier.background(Color(0xFFF5EADD)) else Modifier)
+            .then(if (selected) Modifier.background(if (ThemeState.dark) Color(0xFF3A2E24) else Color(0xFFF5EADD)) else Modifier)
             .clickable(onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
@@ -853,7 +905,7 @@ private fun SectionLabel(text: String) {
 private fun FindResultCard(r: Api.ContactFind, onRequest: () -> Unit, onOpen: (String) -> Unit) {
     Surface(
         shape = RoundedCornerShape(20.dp),
-        color = Color.White,
+        color = CardBg,
         shadowElevation = 3.dp,
         modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
     ) {
