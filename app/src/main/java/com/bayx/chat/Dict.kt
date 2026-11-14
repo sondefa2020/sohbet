@@ -250,5 +250,116 @@ object Dict {
 
         // --- dil
         "Dil" to ("Language" to "اللغة"),
+
+        // --- ikinci parti (genel)
+        "Tamam" to ("OK" to "حسنًا"),
+        "Kapat" to ("Close" to "إغلاق"),
+        "Kaydet" to ("Save" to "حفظ"),
+        "Kaydedildi." to ("Saved." to "تم الحفظ."),
+        "Kopyala" to ("Copy" to "نسخ"),
+        "Temizle" to ("Clear" to "مسح"),
+        "Uygula" to ("Apply" to "تطبيق"),
+        "Güncelle" to ("Update" to "تحديث"),
+        "Ekle" to ("Add" to "إضافة"),
+        "Bul" to ("Find" to "بحث"),
+        "Sonra" to ("Later" to "لاحقًا"),
+        "Yok" to ("None" to "لا شيء"),
+        "Diğer" to ("Other" to "أخرى"),
+        "Kabul et" to ("Accept" to "قبول"),
+        "Engelle" to ("Block" to "حظر"),
+        "Engellenemedi." to ("Couldn't block." to "تعذّر الحظر."),
+        "Herkesten sil" to ("Delete for everyone" to "حذف لدى الجميع"),
+        "Mesaj silinemedi." to ("Couldn't delete message." to "تعذّر حذف الرسالة."),
+        "Mesaj yaz..." to ("Write a message..." to "اكتب رسالة..."),
+        "Bu sohbette ara" to ("Search in this chat" to "ابحث في هذه المحادثة"),
+        "Mesajlarda ara" to ("Search messages" to "البحث في الرسائل"),
+        "Üye ara" to ("Search members" to "البحث عن أعضاء"),
+        "Başka üye yok." to ("No other members." to "لا يوجد أعضاء آخرون."),
+        "Konum" to ("Location" to "الموقع"),
+        "Konum izni verilmedi." to ("Location permission denied." to "تم رفض إذن الموقع."),
+        "Mikrofon izni verilmedi." to ("Microphone permission denied." to "تم رفض إذن الميكروفون."),
+        "Arka plan" to ("Background" to "الخلفية"),
+        "Sohbet arka planı" to ("Chat wallpaper" to "خلفية المحادثة"),
+        "Duyuru" to ("Announcement" to "إعلان"),
+        "E-posta" to ("Email" to "البريد الإلكتروني"),
+        "E-posta adresi" to ("Email address" to "عنوان البريد الإلكتروني"),
+
+        // --- onboarding / yasal
+        "Tayfa'ya hoş geldin" to ("Welcome to Tayfa" to "مرحبًا بك في Tayfa"),
+        "Özel, davetli bir sohbet uygulaması. Devam etmeden önce birkaç kısa noktaya göz at." to ("A private, invite-only chat app. Take a look at a few quick points before continuing." to "تطبيق محادثة خاص بالدعوة فقط. اطّلع على بضع نقاط سريعة قبل المتابعة."),
+        "Özel ve uçtan uca şifreli sohbet" to ("Private, end-to-end encrypted chat" to "محادثة خاصة ومشفّرة طرفًا إلى طرف"),
+        "Mesajların yalnızca sen ve karşındaki arasında okunur; gelen medya telefonun galerisine kaydedilmez." to ("Your messages are read only between you and the other person; incoming media isn't saved to your phone's gallery." to "تُقرأ رسائلك بينك وبين الطرف الآخر فقط؛ لا تُحفظ الوسائط الواردة في معرض هاتفك."),
+        "Senin sorumluluğunda" to ("Your responsibility" to "على مسؤوليتك"),
+        "Hesabını ve paylaştıklarını sen yönetirsin. Yöneticinin kuralları ihlal eden hesapları kısıtlama yetkisi vardır." to ("You manage your account and what you share. The admin can restrict accounts that break the rules." to "أنت تدير حسابك وما تشاركه. يمكن للمشرف تقييد الحسابات التي تخالف القواعد."),
+        "Biri seninle ancak sen kabul edersen sohbet edebilir. Kabul etmediğin kimse profilini göremez." to ("Someone can only chat with you if you accept. Anyone you don't accept can't see your profile." to "لا يمكن لأحد محادثتك إلا إذا قبلت. من لا تقبله لا يمكنه رؤية ملفك الشخصي."),
+        "Kullanıcı Sözleşmesi" to ("Terms of Service" to "اتفاقية المستخدم"),
+        "Gizlilik Politikası" to ("Privacy Policy" to "سياسة الخصوصية"),
+        "Sözleşmeyi oku" to ("Read the Terms" to "اقرأ الاتفاقية"),
+        "Gizliliği oku" to ("Read the Privacy Policy" to "اقرأ سياسة الخصوصية"),
+
+        // --- gizli oda / kilit
+        "Yeni gizli sohbet" to ("New secret chat" to "محادثة سرية جديدة"),
+        "Gizli sohbetler" to ("Secret chats" to "المحادثات السرية"),
+        "Tayfa kilitli" to ("Tayfa is locked" to "Tayfa مقفل"),
+        "Kilidi aç" to ("Unlock" to "فتح القفل"),
+        "Kilitle" to ("Lock" to "قفل"),
+        "Devam etmek için parmak izini ya da ekran kilidini kullan" to ("Use your fingerprint or screen lock to continue" to "استخدم بصمتك أو قفل الشاشة للمتابعة"),
+        "Uygulama kilidi için önce telefonuna ekran kilidi ya da parmak izi tanımla." to ("To use app lock, first set a screen lock or fingerprint on your phone." to "لاستخدام قفل التطبيق، عيّن أولًا قفل شاشة أو بصمة على هاتفك."),
+
+        // --- kurtarma kodu
+        "Kurtarma kodun" to ("Your recovery code" to "رمز الاسترداد الخاص بك"),
+        "Kodu güvenli bir yere kaydettim" to ("I saved the code somewhere safe" to "لقد حفظت الرمز في مكان آمن"),
+        "Bir kağıda yaz ya da güvendiğin bir yere kaydet. Bir daha gösterilmez." to ("Write it down or save it somewhere you trust. It won't be shown again." to "اكتبه على ورقة أو احفظه في مكان تثق به. لن يُعرض مجددًا."),
+
+        // --- grup / üyeler
+        "Yeni grup" to ("New group" to "مجموعة جديدة"),
+        "Kiminle?" to ("With whom?" to "مع من؟"),
+        "Üye sayısı" to ("Member count" to "عدد الأعضاء"),
+        "Bu sensin" to ("This is you" to "هذا أنت"),
+
+        // --- yönetici
+        "Yönetici olarak her üyenin şifresini sıfırlayabilir ya da hesabını kapatabilirsin." to ("As admin you can reset any member's password or deactivate their account." to "بصفتك مشرفًا يمكنك إعادة تعيين كلمة مرور أي عضو أو تعطيل حسابه."),
+        "Hesabına doğrulanmış e-posta bağlıysa 6 haneli kod gönderilir. E-postası olmayan hesapların şifresini yönetici sıfırlar." to ("If the account has a verified email, a 6-digit code is sent. The admin resets passwords for accounts without email." to "إذا كان للحساب بريد موثّق، يُرسل رمز من 6 خانات. يعيد المشرف تعيين كلمات مرور الحسابات بدون بريد."),
+        "Sunucuda e-posta gönderimi henüz ayarlı değil. Yönetici ayarladığında kullanabilirsin." to ("Email sending isn't set up on the server yet. You can use it once the admin configures it." to "لم يُضبط إرسال البريد على الخادم بعد. يمكنك استخدامه بمجرد أن يضبطه المشرف."),
+
+        // --- durum ekranı başlığı
+        "Durumun" to ("Your status" to "حالتك"),
+
+        // --- ifadeler / efektler
+        "İfadeler" to ("Emotes" to "التعبيرات"),
+        "İfadeler ve efektler" to ("Emotes and effects" to "التعبيرات والمؤثرات"),
+        "Efektler (karşı tarafta da oynar)" to ("Effects (play on the other side too)" to "مؤثرات (تظهر لدى الطرف الآخر أيضًا)"),
+        "Efekt gönderilemedi." to ("Couldn't send effect." to "تعذّر إرسال المؤثر."),
+        "Gülümseme" to ("Smile" to "ابتسامة"),
+        "Göz kırpma" to ("Wink" to "غمزة"),
+        "Öpücük" to ("Kiss" to "قبلة"),
+        "Kalp yağmuru" to ("Heart rain" to "مطر القلوب"),
+        "Kırık kalp" to ("Broken heart" to "قلب مكسور"),
+        "Beğendim" to ("Like" to "إعجاب"),
+        "Üzgün" to ("Sad" to "حزين"),
+        "Ağlama" to ("Crying" to "بكاء"),
+        "Kızgın" to ("Angry" to "غاضب"),
+        "Şaşkın" to ("Surprised" to "مندهش"),
+        "Dil çıkarma" to ("Tongue out" to "إخراج اللسان"),
+        "Havalı" to ("Cool" to "رائع"),
+        "Havai fişek" to ("Fireworks" to "ألعاب نارية"),
+        "Gün batımı" to ("Sunset" to "غروب"),
+
+        // --- çağrı durumları
+        "yazıyor…" to ("typing…" to "يكتب…"),
+        "Çevrimdışı · aranıyor…" to ("Offline · calling…" to "غير متصل · جارٍ الاتصال…"),
+        "Görüntülü arama · çalıyor…" to ("Video call · ringing…" to "مكالمة فيديو · يرن…"),
+
+        // --- güncelleme bildirimi
+        "Yeni sürüm var" to ("New version available" to "يتوفر إصدار جديد"),
+        "Tayfa'nın yeni bir sürümü yayınlandı. Güncellemek için indir ve kur." to ("A new version of Tayfa is out. Download and install it to update." to "صدر إصدار جديد من Tayfa. نزّله وثبّته للتحديث."),
+
+        // --- web geçici şifre
+        "Tayfa Web bir güvenlik adımında şifre sorarsa bunu yaz (tireler dahil). 5 dakika sonra geçersiz olur." to ("If Tayfa Web asks for a password at a security step, enter this (including dashes). It expires after 5 minutes." to "إذا طلب Tayfa Web كلمة مرور في خطوة أمان، أدخل هذه (مع الشرطات). تنتهي صلاحيتها بعد 5 دقائق."),
+        "ya da 6 haneli kodu gir" to ("or enter the 6-digit code" to "أو أدخل الرمز المكوّن من 6 خانات"),
+        "6 haneli kodu gir." to ("Enter the 6-digit code." to "أدخل الرمز المكوّن من 6 خانات."),
+
+        // --- kişiler boş durum
+        "Henüz kişin yok. Yukarıdan kullanıcı adıyla birini bul ve istek gönder." to ("You have no contacts yet. Find someone by username above and send a request." to "ليس لديك جهات اتصال بعد. ابحث عن شخص باسم المستخدم أعلاه وأرسل طلبًا."),
     )
 }
