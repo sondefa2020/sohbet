@@ -570,9 +570,9 @@ def validate_signal(caller, data):
 
 def deliver(caller, data):
     to, event = validate_signal(caller, data)
-    if event["type"] == "invite" and not (kayit.are_friends(caller, to) or kayit.knows_number(caller, to)):
-        # WhatsApp kuralı: yalnızca numarası rehberinde kayıtlı (ya da kişi listendeki) birini arayabilirsin.
-        raise ApiError(403, "KISI_DEGIL", "Bu kişiyi arayabilmek için numarası rehberinde kayıtlı olmalı.")
+    if event["type"] == "invite" and kayit.has_blocked(to, caller):
+        # Herkes herkesi arayabilir; yalnızca seni engelleyen kişiye arama gitmez.
+        raise ApiError(403, "ENGELLI", "Bu kişiye şu an ulaşılamıyor.")
     HUB.publish(to, event)
     if event["type"] == "invite":
         kayit.stat_inc("calls")

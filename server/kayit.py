@@ -1842,6 +1842,12 @@ def contacts_match(headers, body):
     return {"matches": out}
 
 
+def has_blocked(owner, other):
+    """owner, other'ı engellemiş mi?"""
+    with GIRIS.lock:
+        return other in _crec(owner)["blocked"]
+
+
 def knows_number(caller, callee):
     with GIRIS.lock:
         return callee in _knows().get(caller, [])

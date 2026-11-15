@@ -408,17 +408,7 @@ object Calls {
     /** Giden arama. Mikrofon (ve görüntülüyse kamera) izni önceden alınmış olmalı. */
     fun startCall(peerId: String, peerName: String, video: Boolean) {
         if (state.value?.let { it.phase != CallPhase.ENDED } == true) return
-        // WhatsApp kuralı: yalnızca numarası rehberinde kayıtlı (ya da kişi listendeki) birini arayabilirsin.
-        val allowed = PhonebookRepo.isContact(peerId) || ContactsRepo.contacts.value.friends.any { it.userId == peerId }
         val callId = newCallId()
-        if (!allowed) {
-            state.value = CallState(callId, peerId, peerName, video, CallPhase.ENDED, endReason = "Bu kişiyi arayabilmek için numarası rehberinde kayıtlı olmalı.", fromMe = true)
-            scope.launch {
-                delay(3_000)
-                if (state.value?.callId == callId) state.value = null
-            }
-            return
-        }
         val online = PresenceRepo.online.value.contains(peerId)
         val speaker = video && !headsetConnected()
         state.value = CallState(callId, peerId, peerName, video, CallPhase.OUTGOING, speaker = speaker, cameraOn = video, peerOnline = online, fromMe = true)
