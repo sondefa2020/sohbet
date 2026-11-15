@@ -48,22 +48,21 @@ object PhonebookRepo {
     /** Bu kişinin numarası rehberimde kayıtlı mı (arama/mesaj izni). */
     fun isContact(userId: String?): Boolean = userId != null && synchronized(byUser) { byUser.containsKey(userId) }
 
-    /** Numarayı ülke koduyla, yalnızca rakam olarak döndürür (sunucudaki kuralla aynı). */
-    fun normalize(raw: String, country: String = "90"): String? {
-        val trimmed = raw.trim()
-        var digits = trimmed.filter { it.isDigit() }
-        if (digits.isEmpty()) return null
-        when {
-            trimmed.startsWith("+") -> Unit
-            digits.startsWith("00") -> digits = digits.substring(2)
-            country == "90" && digits.length == 11 && digits.startsWith("0") -> digits = "90" + digits.substring(1)
-            country == "90" && digits.length == 10 && digits.startsWith("5") -> digits = "90$digits"
-            digits.startsWith("0") -> digits = country + digits.substring(1)
-            !digits.startsWith(country) -> digits = country + digits
-        }
-        if (digits.startsWith("90") && !Regex("^905\\d{9}$").matches(digits)) return null
-        if (digits.length !in 8..15) return null
-        return digits
+    /** Seçilen ülke (giriş ekranında): rehberdeki ülke kodsuz numaralar bu ülkeye göre okunur. */
+    fun region(context: Context): String =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("ulke", null) ?: com.bayx.chat.Phones.deviceRegion(context)
+
+    fun setRegion(context: Context, region: String) =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("ulke", region).apply()
+
+    @Volatile private var defaultRegion = "TR"
+
+    /** Numarayı uluslararası biçimde, yalnızca rakam olarak döndürür (ör. 905321234567); sunucuyla aynı kural. */
+    fun normalize(raw: String, region: String = defaultRegion): String? {
+        val util = com.bayx.chat.Phones.util
+        val number = runCatching { util.parse(raw.trim().replace(Regex("^00"), "+"), region) }.getOrNull() ?: return null
+        if (!util.isPossibleNumber(number)) return null
+        return util.format(number, com.google.i18n.phonenumbers.PhoneNumberUtil.PhoneNumberFormat.E164).removePrefix("+")
     }
 
     fun hash(phone: String): String =
@@ -106,6 +105,7 @@ object PhonebookRepo {
     }
 
     private fun readPhonebook(context: Context): Map<String, String> {
+        defaultRegion = region(context)
         val out = LinkedHashMap<String, String>()
         val projection = arrayOf(
             ContactsContract.CommonDataKinds.Phone.NUMBER,

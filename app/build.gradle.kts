@@ -15,8 +15,8 @@ android {
         applicationId = "com.tayfa.chat"
         minSdk = 26
         targetSdk = 35
-        versionCode = 46
-        versionName = "0.46.0"
+        versionCode = 47
+        versionName = "0.47.0"
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }
@@ -92,6 +92,8 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     // Ağ: bağlantı havuzu + HTTP/2 (OkHttp) ve tipli JSON modelleri (kotlinx.serialization)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // Telefon numarası doğrulama ve biçimlendirme: bütün ülkelerin numara kuralları
+    implementation("com.googlecode.libphonenumber:libphonenumber:8.13.50")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     // Matrix Rust SDK: denetlenmiş uçtan uca şifreleme (vodozemac) dahil.
     implementation("org.matrix.rustcomponents:sdk-android:26.11.11-nightly")

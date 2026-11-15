@@ -51,6 +51,8 @@ fun PhoneAuthScreen(onUsernameLogin: () -> Unit = {}, linkToken: String? = null,
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var number by remember { mutableStateOf("") }
+    var region by remember { mutableStateOf(PhonebookRepo.region(context)) }
+    val check = remember(region, number) { Phones.check(region, number) }
     var phone by remember { mutableStateOf<String?>(null) }
     var masked by remember { mutableStateOf("") }
     var code by remember { mutableStateOf("") }
@@ -120,13 +122,20 @@ fun PhoneAuthScreen(onUsernameLogin: () -> Unit = {}, linkToken: String? = null,
                 color = Muted, fontSize = 15.sp, textAlign = TextAlign.Center, lineHeight = 21.sp,
             )
             Spacer(Modifier.height(32.dp))
-            PillField(number, { v -> number = v.filter { it.isDigit() || it == '+' || it == ' ' }.take(18) },
-                t("Cep numaran (05xx xxx xx xx)"), Icons.Outlined.Smartphone, keyboardType = KeyboardType.Phone)
-            Spacer(Modifier.height(26.dp))
+            CountryPhoneField(
+                region = region,
+                onRegion = { region = it; PhonebookRepo.setRegion(context, it) },
+                digits = number,
+                onDigits = { number = it },
+                check = check,
+            )
+            Spacer(Modifier.height(22.dp))
             SandButton(t("Kod gönder"), busy = busy) {
-                val target = PhonebookRepo.normalize(number)
-                if (target == null) info = t("Telefon numarası geçersiz. Cep numaranı 05xx xxx xx xx biçiminde yaz.")
-                else sendCode("+$target")
+                when (val c = check) {
+                    is Phones.Check.Valid -> sendCode(c.e164)
+                    Phones.Check.NotMobile -> info = t("Bu bir cep numarası değil. SMS alabilen bir numara yaz.")
+                    else -> info = t("Telefon numarası geçersiz. Ülkeyi ve numarayı kontrol et.")
+                }
             }
             Spacer(Modifier.height(12.dp))
             if (linkToken == null) {
