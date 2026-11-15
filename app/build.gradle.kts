@@ -15,8 +15,8 @@ android {
         applicationId = "com.tayfa.chat"
         minSdk = 26
         targetSdk = 35
-        versionCode = 50
-        versionName = "0.50.0"
+        versionCode = 51
+        versionName = "0.51.0"
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }
@@ -94,6 +94,9 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     // Telefon numarası doğrulama ve biçimlendirme: bütün ülkelerin numara kuralları
     implementation("com.googlecode.libphonenumber:libphonenumber:8.13.50")
+    // Numarayı SIM'den önerme (izin istemez) ve doğrulama SMS'ini tek dokunuşla okuma
+    implementation("com.google.android.gms:play-services-auth:21.2.0")
+    implementation("com.google.android.gms:play-services-auth-api-phone:18.1.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     // Matrix Rust SDK: denetlenmiş uçtan uca şifreleme (vodozemac) dahil.
     implementation("org.matrix.rustcomponents:sdk-android:26.11.11-nightly")

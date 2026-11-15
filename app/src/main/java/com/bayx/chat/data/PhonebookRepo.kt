@@ -35,7 +35,7 @@ object PhonebookRepo {
 
     private const val PREFS = "tayfa_rehber"
     private const val SALT = "tayfa-rehber-v1:"
-    private const val SYNC_EVERY_MS = 6 * 60 * 60 * 1000L
+    private const val SYNC_EVERY_MS = 10 * 60 * 1000L
 
     private val byUser = HashMap<String, Entry>()
 
@@ -73,6 +73,12 @@ object PhonebookRepo {
         load(context)
         val last = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong("son", 0L)
         if (hasPermission(context) && System.currentTimeMillis() - last > SYNC_EVERY_MS) sync(context)
+    }
+
+    /** Son eşleştirmeden bu yana [olderThanMs] geçtiyse yeniler (ör. Kişiler sekmesi açılınca). */
+    suspend fun syncIfStale(context: Context, olderThanMs: Long = 60_000L) {
+        val last = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong("son", 0L)
+        if (hasPermission(context) && System.currentTimeMillis() - last > olderThanMs) sync(context)
     }
 
     /** Rehberi okuyup sunucuyla eşleştirir. */

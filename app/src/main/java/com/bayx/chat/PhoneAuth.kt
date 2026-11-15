@@ -31,6 +31,21 @@ import com.bayx.chat.data.Api
 import com.bayx.chat.data.ApiException
 import com.bayx.chat.data.Bayx
 import com.bayx.chat.data.PhonebookRepo
+import android.content.BroadcastReceiver
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.core.content.ContextCompat
+import com.google.android.gms.auth.api.identity.GetPhoneNumberHintIntentRequest
+import com.google.android.gms.auth.api.identity.Identity
+import com.google.android.gms.auth.api.phone.SmsRetriever
+import com.google.android.gms.common.api.CommonStatusCodes
+import com.google.android.gms.common.api.Status
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -59,6 +74,8 @@ fun PhoneAuthScreen(onUsernameLogin: () -> Unit = {}, linkToken: String? = null,
     var busy by remember { mutableStateOf(false) }
     var info by remember { mutableStateOf<String?>(null) }
     var resendIn by remember { mutableIntStateOf(0) }
+    var smsRound by remember { mutableIntStateOf(0) }
+    var hintAsked by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(resendIn) {
         if (resendIn > 0) {
@@ -76,6 +93,7 @@ fun PhoneAuthScreen(onUsernameLogin: () -> Unit = {}, linkToken: String? = null,
                 masked = r.masked
                 code = ""
                 resendIn = r.resendSeconds
+                smsRound += 1
             } catch (e: ApiException) {
                 info = t(e.message ?: "SMS gönderilemedi.")
             } finally {
@@ -108,6 +126,65 @@ fun PhoneAuthScreen(onUsernameLogin: () -> Unit = {}, linkToken: String? = null,
                 busy = false
             }
         }
+    }
+
+    // 1) Cihazın numarasını otomatik öner (Google'ın numara seçme penceresi; izin gerekmez).
+    val hintLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+        runCatching {
+            val raw = Identity.getSignInClient(context).getPhoneNumberFromIntent(result.data)
+            val parsed = Phones.util.parse(raw, region)
+            Phones.util.getRegionCodeForNumber(parsed)?.let { r ->
+                region = r
+                PhonebookRepo.setRegion(context, r)
+            }
+            number = Phones.util.getNationalSignificantNumber(parsed)
+        }
+    }
+    LaunchedEffect(Unit) {
+        if (hintAsked || number.isNotEmpty()) return@LaunchedEffect
+        hintAsked = true
+        runCatching {
+            Identity.getSignInClient(context)
+                .getPhoneNumberHintIntent(GetPhoneNumberHintIntentRequest.builder().build())
+                .addOnSuccessListener { pending ->
+                    runCatching { hintLauncher.launch(IntentSenderRequest.Builder(pending.intentSender).build()) }
+                }
+        }
+    }
+
+    // 2) Doğrulama SMS'i gelince kodu otomatik doldur (tek dokunuşla onay; SMS okuma izni gerekmez).
+    val consentLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val message = result.data?.getStringExtra(SmsRetriever.EXTRA_SMS_MESSAGE).orEmpty()
+        Regex("(?<!\\d)(\\d{6})(?!\\d)").find(message)?.let {
+            code = it.groupValues[1]
+            verify()
+        }
+    }
+    DisposableEffect(smsRound) {
+        if (smsRound == 0) return@DisposableEffect onDispose {}
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(c: Context, intent: Intent) {
+                if (intent.action != SmsRetriever.SMS_RETRIEVED_ACTION) return
+                val extras = intent.extras ?: return
+                @Suppress("DEPRECATION")
+                val status = extras.get(SmsRetriever.EXTRA_STATUS) as? Status ?: return
+                if (status.statusCode != CommonStatusCodes.SUCCESS) return
+                val consent: Intent? = if (Build.VERSION.SDK_INT >= 33) {
+                    extras.getParcelable(SmsRetriever.EXTRA_CONSENT_INTENT, Intent::class.java)
+                } else {
+                    @Suppress("DEPRECATION") extras.getParcelable(SmsRetriever.EXTRA_CONSENT_INTENT)
+                }
+                runCatching { consent?.let { consentLauncher.launch(it) } }
+            }
+        }
+        runCatching { SmsRetriever.getClient(context).startSmsUserConsent(null) }
+        runCatching {
+            ContextCompat.registerReceiver(
+                context, receiver, IntentFilter(SmsRetriever.SMS_RETRIEVED_ACTION),
+                SmsRetriever.SEND_PERMISSION, null, ContextCompat.RECEIVER_EXPORTED,
+            )
+        }
+        onDispose { runCatching { context.unregisterReceiver(receiver) } }
     }
 
     AuthPageBox {

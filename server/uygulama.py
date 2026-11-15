@@ -133,9 +133,13 @@ async def options(request: Request, path: str):
 # ------------------------------------------------------------------ genel
 
 
+# Sunucunun hangi sürümü çalıştırdığını görmek için (https://.../bayx/health).
+SURUM = "2026.11.16-1"
+
+
 @app.get("/bayx/health")
 async def health(request: Request):
-    return reply(request, {"ok": True, "engine": "fastapi"})
+    return reply(request, {"ok": True, "engine": "fastapi", "surum": SURUM})
 
 
 @app.post("/bayx/config")
@@ -661,6 +665,11 @@ async def call_ws(ws: WebSocket):
                     await ws.send_json({"ok": ref})
                 except ApiError as err:
                     await ws.send_json({"error": err.code, "ref": ref})
+                except WebSocketDisconnect:
+                    raise
+                except Exception as err:  # beklenmeyen hata bağlantıyı düşürmesin
+                    print("arama sinyali hatası: %r" % (err,), flush=True)
+                    await ws.send_json({"error": "SUNUCU_HATASI", "ref": ref})
 
     tasks = [asyncio.create_task(sender()), asyncio.create_task(receiver())]
     try:

@@ -1784,6 +1784,9 @@ def phone_me(headers):
     return {"phone": phone or "", "masked": telefon.mask(phone) if phone else ""}
 
 
+_match_attempts = giris.Attempts(limit=120)  # kişi başına saatte en fazla 120 rehber eşleştirmesi
+
+
 def contacts_match(headers, body):
     """Rehber eşleştirme: uygulama rehberdeki numaraların özetlerini gönderir; Tayfa kullananlar döner.
 
@@ -1794,9 +1797,9 @@ def contacts_match(headers, body):
     hashes = body.get("hashes")
     if not isinstance(hashes, list) or len(hashes) > 5000:
         raise ApiError(400, "GECERSIZ_ISTEK", "Geçersiz istek.")
-    if _reset_attempts.blocked("rehber:" + uid):
+    if _match_attempts.blocked(uid):
         raise ApiError(429, "COK_FAZLA_DENEME", "Rehber çok sık eşleştirildi. Biraz sonra tekrar dene.")
-    _reset_attempts.fail("rehber:" + uid)  # saatte en fazla 15 eşleştirme
+    _match_attempts.fail(uid)
     wanted = {h for h in hashes if isinstance(h, str) and re.match(r"^[0-9a-f]{64}$", h)}
     found = []
     changed = False

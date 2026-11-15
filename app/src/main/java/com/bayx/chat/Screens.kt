@@ -381,6 +381,14 @@ fun ChatListScreen(
         ContactsRepo.refreshContacts()
         loadedContacts = true
     }
+    // Kişiler sekmesi açılınca rehberi yeniden eşleştir: yeni kaydolan kişiler hemen görünsün.
+    val phonebookError by PhonebookRepo.error.collectAsState()
+    LaunchedEffect(tab) {
+        if (tab == 1) {
+            PhonebookRepo.syncIfStale(context)
+            ContactsRepo.refreshContacts()
+        }
+    }
 
     fun doFind() {
         val name = findText.trim().lowercase()
@@ -602,7 +610,10 @@ fun ChatListScreen(
                                         }
                                     }
                                 }
-                                if (book.isEmpty() && !phonebookSyncing) {
+                                phonebookError?.let { err ->
+                                    item { Text(t(err), color = Color(0xFFB4232A), fontSize = 13.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) }
+                                }
+                                if (book.isEmpty() && !phonebookSyncing && members.isEmpty()) {
                                     item {
                                         Text(
                                             t("Rehberinde henüz Tayfa kullanan kimse yok. Arkadaşlarını davet et."),
@@ -635,6 +646,21 @@ fun ChatListScreen(
                                         Spacer(Modifier.width(8.dp))
                                         Text(t("Arkadaşlarını davet et"), fontWeight = FontWeight.SemiBold)
                                     }
+                                }
+                            }
+                            val others = members.filter { m ->
+                                phonebook.none { it.userId == m.userId } && (query.isBlank() || m.displayName.contains(query, true))
+                            }
+                            if (others.isNotEmpty()) {
+                                item { SectionLabel(t("Diğer kişilerin")) }
+                                items(others, key = { "fr-" + it.userId }) { m ->
+                                    val p = presences[m.userId]
+                                    PersonRow(
+                                        m.displayName,
+                                        (p?.status ?: m.status).ifBlank { "@" + m.userId.substringBefore(":").removePrefix("@") },
+                                        mode = p?.mode,
+                                        url = m.avatarUrl,
+                                    ) { openDirectId(m.userId) }
                                 }
                             }
                             if (contacts.incoming.isNotEmpty()) {

@@ -16,6 +16,16 @@ NGINX_CONF="${BAYX_NGINX_CONF:-/opt/panelica/etc/nginx-customer/nginx.conf}"
 INCLUDE_DIR="${BAYX_INCLUDE_DIR:-/home/acioglu/acioglu.tr/.system/conf/subdomains}"
 INCLUDE_FILE="$INCLUDE_DIR/$DOMAIN.conf.bayx"
 RAW_BASE="${BAYX_RAW_BASE:-https://raw.githubusercontent.com/sondefa2020/sohbet/main/server}"
+# Dosyaların hepsi aynı sürümden insin: GitHub "main" adresini birkaç dakika önbellekte tutar ve
+# yeni bir güncellemeden hemen sonra dosyaların bir kısmı eski gelebilir. Bu yüzden en son
+# sürümün kimliği (commit) öğrenilip bütün dosyalar o kimlikle indirilir.
+if [ -z "${BAYX_RAW_BASE:-}" ]; then
+    LATEST_SHA="$(curl -fsSL -m 20 -H 'Accept: application/vnd.github.sha' \
+        https://api.github.com/repos/sondefa2020/sohbet/commits/main 2>/dev/null | tr -cd '0-9a-f' || true)"
+    if [ "${#LATEST_SHA}" -eq 40 ]; then
+        RAW_BASE="https://raw.githubusercontent.com/sondefa2020/sohbet/$LATEST_SHA/server"
+    fi
+fi
 BOT_USER="bayx-yonetim"
 SYNAPSE_URL="http://127.0.0.1:8008"
 SYNAPSE_CONF="/etc/matrix-synapse/conf.d/bayx.yaml"
