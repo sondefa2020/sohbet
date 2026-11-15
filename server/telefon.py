@@ -114,6 +114,11 @@ def send_sms(phone, message):
     # Sağlayıcı gövdeyi ham okuduğu için kodlanmış veriyi tanımıyor. Ham gönderimde & + % karakterleri
     # bozulacağından mesajdan çıkarılır (doğrulama mesajında zaten yok).
     message = re.sub(r"[&+%]", "", clean_message(message))
+    # Öztek dokümanı: numaralar 10 haneli, başında 90 / 0 olmadan (5xxxxxxxxx)
+    digits = re.sub(r"\D", "", phone)
+    if digits.startswith("90") and len(digits) == 12:
+        digits = digits[2:]
+    phone = digits
     xml = (
         "<sms>\n"
         "<kno>%s</kno> \n"
