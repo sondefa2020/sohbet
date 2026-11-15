@@ -71,15 +71,32 @@ object CallTones {
     private var tone: android.media.ToneGenerator? = null
     private var ringtone: android.media.Ringtone? = null
 
-    /** Arayan taraf: karşı taraf çevrimiçiyse "çalıyor" tonu, değilse "aranıyor" tonu. */
-    fun ringback(online: Boolean) {
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var beeper: Runnable? = null
+    private var currentRinging: Boolean? = null
+
+    /**
+     * Arayan taraf: karşı telefon çalıyorsa klasik "çalıyor" tonu; henüz ulaşılamadıysa
+     * (karşı tarafın interneti yok) iki saniyede bir kısa "aranıyor" bipi.
+     */
+    fun ringback(ringing: Boolean) {
+        if (currentRinging == ringing && (tone != null)) return
         stop()
+        currentRinging = ringing
         runCatching {
-            tone = android.media.ToneGenerator(AudioManager.STREAM_VOICE_CALL, 70).also {
-                it.startTone(
-                    if (online) android.media.ToneGenerator.TONE_SUP_RINGTONE
-                    else android.media.ToneGenerator.TONE_SUP_DIAL,
-                )
+            val gen = android.media.ToneGenerator(AudioManager.STREAM_VOICE_CALL, 70)
+            tone = gen
+            if (ringing) {
+                gen.startTone(android.media.ToneGenerator.TONE_SUP_RINGTONE)
+            } else {
+                val r = object : Runnable {
+                    override fun run() {
+                        runCatching { tone?.startTone(android.media.ToneGenerator.TONE_PROP_BEEP, 180) }
+                        handler.postDelayed(this, 2_000)
+                    }
+                }
+                beeper = r
+                handler.post(r)
             }
         }
     }
@@ -100,6 +117,9 @@ object CallTones {
     }
 
     fun stop() {
+        beeper?.let { handler.removeCallbacks(it) }
+        beeper = null
+        currentRinging = null
         runCatching { tone?.stopTone(); tone?.release() }
         tone = null
         runCatching { ringtone?.stop() }

@@ -118,15 +118,21 @@ fun CallOverlay() {
     val showVideo = current.video && current.phase in setOf(CallPhase.CONNECTING, CallPhase.ACTIVE)
     var dialpad by remember { mutableStateOf(false) }
 
-    // Arama sesleri: arayanda geri çalma tonu, arananda zil sesi.
-    LaunchedEffect(current.phase, current.peerOnline) {
-        when (current.phase) {
-            CallPhase.OUTGOING -> CallTones.ringback(current.peerOnline)
-            CallPhase.INCOMING -> CallTones.incomingRing(context)
-            else -> CallTones.stop()
-        }
+    // Arayanın duyduğu ton: karşı tarafın telefonu çalıyorsa "çalıyor" tonu, henüz
+    // ulaşılamadıysa kısa "aranıyor" bipleri. (Arananın zil sesini Calls çalar.)
+    LaunchedEffect(current.phase, current.ringing) {
+        if (current.phase == CallPhase.OUTGOING) CallTones.ringback(current.ringing) else CallTones.stop()
     }
     DisposableEffect(Unit) { onDispose { CallTones.stop() } }
+
+    // Bildirimdeki "Cevapla" ile gelindiyse izinleri alıp hemen cevapla.
+    LaunchedEffect(current.callId, current.phase) {
+        val auto = Calls.autoAcceptCallId
+        if (current.phase == CallPhase.INCOMING && auto != null && (auto == "*" || auto == current.callId)) {
+            Calls.autoAcceptCallId = null
+            askPermissions(current.video) { Calls.accept() }
+        }
+    }
 
     // Arkadaki ekranlara dokunuş geçmesin.
     val blocker = remember { MutableInteractionSource() }
@@ -257,17 +263,23 @@ private fun statusText(call: CallState): String {
         }
     }
     return when (call.phase) {
+        // Karşı telefon daveti aldıysa (interneti var) "Çalıyor", almadıysa "Aranıyor".
         CallPhase.OUTGOING -> when {
-            !call.peerOnline -> t("Çevrimdışı · aranıyor…")
-            call.video -> t("Görüntülü arama · çalıyor…")
-            else -> t("Çalıyor…")
+            call.ringing && call.video -> t("Görüntülü arama · çalıyor…")
+            call.ringing -> t("Çalıyor…")
+            call.video -> t("Görüntülü arama · aranıyor…")
+            else -> t("Aranıyor…")
         }
         CallPhase.INCOMING -> if (call.video) t("Görüntülü arama geliyor") else "Sesli arama geliyor"
         CallPhase.CONNECTING -> t("Bağlanıyor…")
         CallPhase.ACTIVE -> {
             val seconds = ((now - call.startedAt) / 1000).coerceAtLeast(0)
             val time = "%02d:%02d".format(seconds / 60, seconds % 60)
-            if (call.held) "Beklemede · $time" else time
+            when {
+                call.reconnecting -> t("Yeniden bağlanıyor…") + " · $time"
+                call.held -> "Beklemede · $time"
+                else -> time
+            }
         }
         CallPhase.ENDED -> call.endReason ?: "Arama sona erdi"
     }

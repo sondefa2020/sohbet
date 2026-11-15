@@ -348,6 +348,16 @@ object Dict {
         // --- çağrı durumları
         "yazıyor…" to ("typing…" to "يكتب…"),
         "Çevrimdışı · aranıyor…" to ("Offline · calling…" to "غير متصل · جارٍ الاتصال…"),
+        "Aranıyor…" to ("Calling…" to "جارٍ الاتصال…"),
+        "Görüntülü arama · aranıyor…" to ("Video call · calling…" to "مكالمة فيديو · جارٍ الاتصال…"),
+        "Yeniden bağlanıyor…" to ("Reconnecting…" to "جارٍ إعادة الاتصال…"),
+        "Sesli arama geliyor" to ("Incoming voice call" to "مكالمة صوتية واردة"),
+        "Sesli görüşme sürüyor" to ("Voice call in progress" to "مكالمة صوتية جارية"),
+        "Görüntülü görüşme sürüyor" to ("Video call in progress" to "مكالمة فيديو جارية"),
+        "Süren görüşme" to ("Ongoing call" to "مكالمة جارية"),
+        "Görüşme sürerken gösterilir" to ("Shown during a call" to "يظهر أثناء المكالمة"),
+        "Reddet" to ("Decline" to "رفض"),
+        "Cevapla" to ("Answer" to "رد"),
         "Görüntülü arama · çalıyor…" to ("Video call · ringing…" to "مكالمة فيديو · يرن…"),
 
         // --- güncelleme bildirimi

@@ -643,6 +643,14 @@ object Bayx {
                         now - r.time < 30_000
                 }
                 if (incoming) Sounds.incoming()
+            } else if (roomsPrimed) {
+                // Uygulama arka planda ama senkron çalışıyor: Firebase olmasa da sesli bildirim göster.
+                val now = System.currentTimeMillis()
+                for (r in next) {
+                    val old = previous[r.id]
+                    val isNew = !r.lastFromMe && r.time > (old?.time ?: 0L) && now - r.time < 60_000
+                    if (isNew) runCatching { Notifier.showMessage(appContext, r.id, r.name, r.unread.coerceAtLeast(1)) }
+                }
             }
             rooms.value = next
             if (next.isNotEmpty()) roomsPrimed = true

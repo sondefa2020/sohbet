@@ -26,11 +26,12 @@ class PushService : FirebaseMessagingService() {
                 Notifier.showMessage(applicationContext, roomId, Bayx.roomName(roomId), unread)
             }
             "call" -> {
-                if (Bayx.isForeground || Calls.state.value != null) return
-                val name = data["name"].orEmpty().ifBlank { data["from"].orEmpty().substringBefore(":").removePrefix("@") }
-                Notifier.showIncomingCall(applicationContext, name, data["video"] == "1")
-                // Uygulama arka plandaysa davetin kendisini almak için yoklamayı başlat.
+                // Uygulama arka plandaysa davetin kendisini almak için yoklamayı hemen başlat.
                 Calls.ensurePolling()
+                if (Bayx.isForeground || Calls.state.value != null) return
+                val from = data["from"].orEmpty()
+                val name = data["name"].orEmpty().ifBlank { from.substringBefore(":").removePrefix("@") }
+                Notifier.showIncomingCall(applicationContext, name, data["video"] == "1", from, data["call_id"])
             }
             "contact_request" -> {
                 val name = data["name"].orEmpty().ifBlank { "Biri" }

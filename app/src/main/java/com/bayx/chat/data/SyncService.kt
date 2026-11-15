@@ -29,9 +29,14 @@ class SyncService : Service() {
             return START_NOT_STICKY
         }
         // Süreç ayaktayken aramaları da almak için yoklamayı canlı tut.
-        runCatching { Calls.ensurePolling() }
+        runCatching { Calls.keepAlive = true }
         // Sistem süreci öldürürse yeniden başlat.
         return START_STICKY
+    }
+
+    override fun onDestroy() {
+        runCatching { Calls.keepAlive = false }
+        super.onDestroy()
     }
 
     companion object {

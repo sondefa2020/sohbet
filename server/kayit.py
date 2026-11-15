@@ -1162,11 +1162,13 @@ def push_call(callee, caller, call_id, name, video):
 # üzerinden iletilir. Ses ve görüntü cihazlar arasında WebRTC (DTLS-SRTP) ile uçtan uca
 # şifrelidir; aktarma sunucusu (TURN) kullanılsa bile içeriği göremez.
 
-CALL_TYPES = {"invite", "answer", "candidate", "hangup", "reject", "busy"}
+CALL_TYPES = {"invite", "answer", "candidate", "hangup", "reject", "busy", "ringing", "reoffer", "reanswer"}
 CALL_TTL = 60
 POLL_SECONDS = 25
 _call_cond = threading.Condition()
 _call_queues = {}
+# Sunucu yeniden başlasa da numaralar geriye gitmesin (istemci son numarayı hatırlıyor).
+_call_seq = [int(time.time() * 1000)]
 
 
 def call_send(headers, body):
@@ -1184,6 +1186,9 @@ def call_send(headers, body):
     now = time.time()
     event = {"from": caller, "call_id": call_id, "type": kind, "data": data, "ts": now}
     with _call_cond:
+        # Sıra numarası: istemci aldığı son numarayı bildirir; teslim edilmeyen olay kaybolmaz.
+        _call_seq[0] += 1
+        event["id"] = _call_seq[0]
         queue = [e for e in _call_queues.get(to, []) if now - e["ts"] < CALL_TTL]
         if len(queue) > 300:
             queue = queue[-300:]
@@ -1198,16 +1203,29 @@ def call_send(headers, body):
     return {"ok": True}
 
 
-def call_poll(headers):
+def call_poll(headers, body=None):
+    """Bekleyen arama olaylarını döndürür (uzun yoklama).
+
+    İstemci "after" ile aldığı son olay numarasını gönderirse olaylar ancak o zaman silinir;
+    böylece yanıt yolda kaybolsa bile bir sonraki yoklamada yeniden gelir. "after" göndermeyen
+    eski sürümler için olaylar teslim edilince silinir.
+    """
     uid = member_from_token(headers)
+    after = (body or {}).get("after")
+    acked = isinstance(after, int) and not isinstance(after, bool)
     deadline = time.time() + POLL_SECONDS
     with _call_cond:
         while True:
             now = time.time()
             queue = [e for e in _call_queues.get(uid, []) if now - e["ts"] < CALL_TTL]
+            if acked:
+                queue = [e for e in queue if e.get("id", 0) > after]
+                _call_queues[uid] = queue
             if queue:
-                _call_queues[uid] = []
-                return {"events": queue}
+                if not acked:
+                    _call_queues[uid] = []
+                out = [dict(e, age=round(now - e["ts"], 1)) for e in queue]
+                return {"events": out}
             remaining = deadline - now
             if remaining <= 0:
                 _call_queues.pop(uid, None)
@@ -1512,7 +1530,7 @@ class Handler(BaseHTTPRequestHandler):
             elif method == "POST" and path == "/bayx/call/send":
                 self._send(200, call_send(self.headers, self._body(MAX_CALL_BODY)))
             elif method == "POST" and path == "/bayx/call/poll":
-                self._send(200, call_poll(self.headers))
+                self._send(200, call_poll(self.headers, self._body(MAX_CALL_BODY)))
             elif method == "GET" and path == "/bayx/turn":
                 self._send(200, turn_server(self.headers))
             elif method == "GET" and path == "/bayx/admin/members":

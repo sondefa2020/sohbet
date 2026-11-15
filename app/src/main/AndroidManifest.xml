@@ -5,6 +5,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.VIBRATE" />
@@ -65,6 +67,13 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Ozel mesajlasma uygulamasinin anlik mesaj ve arama baglantisini acik tutar" />
         </service>
+        <service
+            android:name=".data.CallService"
+            android:exported="false"
+            android:foregroundServiceType="microphone|camera" />
+        <receiver
+            android:name=".data.CallActionReceiver"
+            android:exported="false" />
         <receiver
             android:name=".data.ReplyReceiver"
             android:exported="false" />

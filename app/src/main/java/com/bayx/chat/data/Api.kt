@@ -325,8 +325,9 @@ object Api {
     }
 
     /** Uzun yoklama: sunucu en fazla 25 saniye bekletir. */
-    suspend fun callPoll(token: String): List<JSONObject> = io {
-        val json = request("POST", "/bayx/call/poll", JSONObject(), token, readTimeoutMs = 40_000)
+    /** [after]: alınan son olay numarası; sunucu teslim edilen olayları ancak bu teyitle siler. */
+    suspend fun callPoll(token: String, after: Long): List<JSONObject> = io {
+        val json = request("POST", "/bayx/call/poll", JSONObject().put("after", after), token, readTimeoutMs = 40_000)
         val array = json.optJSONArray("events")
         if (array == null) emptyList() else (0 until array.length()).map { array.getJSONObject(it) }
     }

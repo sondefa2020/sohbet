@@ -21,18 +21,25 @@ import com.bayx.chat.R
  * (cihazda biliniyorsa) ve yeni mesaj olduğu gösterilir.
  */
 object Notifier {
-    private const val CH_MESSAGES = "mesajlar_v2"
-    private const val CH_CALLS = "aramalar"
+    // Kanal ayarları (ses, önem) oluşturulduktan sonra değiştirilemediği için sürüm eklenir:
+    // eski kanalda ses kapanmış/yanlış kalmışsa yeni kanal sesli başlar.
+    private const val CH_MESSAGES = "mesajlar_v3"
+    private const val CH_CALLS = "aramalar_v2"
+    private const val CH_ONGOING = "gorusme"
     private const val CH_SCREEN = "ekran_paylasimi"
     private const val CH_BACKGROUND = "arka_plan"
     private const val CALL_NOTIFICATION_ID = 1001
     const val EXTRA_ROOM_ID = "tayfa_room_id"
+    const val EXTRA_ACCEPT_CALL = "tayfa_accept_call"
+
+    /** Aynı sohbet için kısa sürede iki kez ses çalmasın (senkron + Firebase aynı mesajı bildirebilir). */
+    private val lastAlert = HashMap<String, Long>()
 
     fun createChannels(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
         // Kanal ayarları oluşturulduktan sonra değişmediği için yeni ses yeni kanal ister.
-        manager.deleteNotificationChannel("mesajlar")
+        for (old in listOf("mesajlar", "mesajlar_v2", "aramalar")) manager.deleteNotificationChannel(old)
         manager.createNotificationChannel(
             NotificationChannel(CH_MESSAGES, "Mesajlar", NotificationManager.IMPORTANCE_HIGH).apply {
                 description = "Yeni mesaj bildirimleri"
@@ -60,7 +67,17 @@ object Notifier {
                         .build(),
                 )
                 enableVibration(true)
-                vibrationPattern = longArrayOf(0, 600, 400, 600, 400, 600)
+                vibrationPattern = longArrayOf(0, 700, 500, 700, 500)
+                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+                setBypassDnd(false)
+            },
+        )
+        manager.createNotificationChannel(
+            NotificationChannel(CH_ONGOING, com.bayx.chat.t("Süren görüşme"), NotificationManager.IMPORTANCE_LOW).apply {
+                description = com.bayx.chat.t("Görüşme sürerken gösterilir")
+                setShowBadge(false)
+                setSound(null, null)
+                enableVibration(false)
             },
         )
         manager.createNotificationChannel(
@@ -147,7 +164,7 @@ object Notifier {
             .build()
     }
 
-    private fun canNotify(context: Context): Boolean {
+    fun canNotify(context: Context): Boolean {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
@@ -174,7 +191,14 @@ object Notifier {
         if (ChatPrefs.isMuted(roomId)) return
         val id = roomId.hashCode()
         val text = if (unread > 1) com.bayx.chat.tf("%s yeni mesaj", unread) else com.bayx.chat.t("Yeni mesajın var")
+        val now = System.currentTimeMillis()
+        val quiet = synchronized(lastAlert) {
+            val recent = now - (lastAlert[roomId] ?: 0L) < 4_000
+            if (!recent) lastAlert[roomId] = now
+            recent
+        }
         val notification = NotificationCompat.Builder(context, CH_MESSAGES)
+            .setOnlyAlertOnce(quiet)
             .setSmallIcon(R.drawable.ic_stat_tayfa)
             .setContentTitle(roomName ?: "Tayfa")
             .setContentText(text)
@@ -228,22 +252,80 @@ object Notifier {
             .build()
     }
 
-    fun showIncomingCall(context: Context, callerName: String, video: Boolean) {
-        if (!canNotify(context)) return
+    /**
+     * Gelen arama bildirimi: telefonun zil sesiyle, cevaplanana ya da reddedilene kadar çalar
+     * (ısrarcı); kilit ekranında tam ekran açılır. Gösterilemediyse false döner, o zaman
+     * zil sesini uygulama çalar.
+     */
+    fun showIncomingCall(context: Context, callerName: String, video: Boolean, from: String? = null, callId: String? = null): Boolean {
+        if (!canNotify(context)) return false
+        createChannels(context)
+        val channel = NotificationManagerCompat.from(context).getNotificationChannel(CH_CALLS)
+        if (channel != null && channel.importance == NotificationManager.IMPORTANCE_NONE) return false
+        val name = callerName.ifBlank { "Tayfa" }
         val open = openIntent(context, null, CALL_NOTIFICATION_ID)
-        val notification = NotificationCompat.Builder(context, CH_CALLS)
+        val answer = PendingIntent.getActivity(
+            context, CALL_NOTIFICATION_ID + 1,
+            Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                putExtra(EXTRA_ACCEPT_CALL, callId ?: "*")
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val decline = PendingIntent.getBroadcast(
+            context, CALL_NOTIFICATION_ID + 2,
+            Intent(context, CallActionReceiver::class.java)
+                .setAction(CallActionReceiver.ACTION_REJECT)
+                .putExtra(CallActionReceiver.EXTRA_FROM, from)
+                .putExtra(CallActionReceiver.EXTRA_CALL_ID, callId),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val text = if (video) com.bayx.chat.t("Görüntülü arama geliyor") else com.bayx.chat.t("Sesli arama geliyor")
+        fun base() = NotificationCompat.Builder(context, CH_CALLS)
             .setSmallIcon(R.drawable.ic_stat_tayfa)
-            .setContentTitle(callerName.ifBlank { "Tayfa" })
-            .setContentText(if (video) com.bayx.chat.t("Görüntülü arama geliyor") else "Sesli arama geliyor")
+            .setContentTitle(name)
+            .setContentText(text)
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOngoing(true)
-            .setAutoCancel(true)
+            .setOnlyAlertOnce(true)
             .setTimeoutAfter(45_000)
             .setContentIntent(open)
             .setFullScreenIntent(open, true)
+        val notification = runCatching {
+            val person = androidx.core.app.Person.Builder().setName(name).setImportant(true).build()
+            base().setStyle(NotificationCompat.CallStyle.forIncomingCall(person, decline, answer).setIsVideo(video)).build()
+        }.getOrElse {
+            base()
+                .addAction(R.drawable.ic_stat_tayfa, com.bayx.chat.t("Reddet"), decline)
+                .addAction(R.drawable.ic_stat_tayfa, com.bayx.chat.t("Cevapla"), answer)
+                .build()
+        }
+        // Israrcı: zil sesi ve titreşim bildirim kapanana kadar tekrar eder.
+        notification.flags = notification.flags or android.app.Notification.FLAG_INSISTENT
+        return runCatching { NotificationManagerCompat.from(context).notify(CALL_NOTIFICATION_ID, notification) }.isSuccess
+    }
+
+    /** Görüşme sürerken (CallService) gösterilen sessiz bildirim; "Kapat" ile görüşme biter. */
+    fun ongoingCallNotification(context: Context, peerName: String, video: Boolean): android.app.Notification {
+        createChannels(context)
+        val hangup = PendingIntent.getBroadcast(
+            context, CALL_NOTIFICATION_ID + 3,
+            Intent(context, CallActionReceiver::class.java).setAction(CallActionReceiver.ACTION_HANGUP),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        return NotificationCompat.Builder(context, CH_ONGOING)
+            .setSmallIcon(R.drawable.ic_stat_tayfa)
+            .setContentTitle(peerName.ifBlank { "Tayfa" })
+            .setContentText(if (video) com.bayx.chat.t("Görüntülü görüşme sürüyor") else com.bayx.chat.t("Sesli görüşme sürüyor"))
+            .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setOngoing(true)
+            .setSilent(true)
+            .setUsesChronometer(true)
+            .setContentIntent(openIntent(context, null, CALL_NOTIFICATION_ID + 4))
+            .addAction(R.drawable.ic_stat_tayfa, com.bayx.chat.t("Kapat"), hangup)
             .build()
-        runCatching { NotificationManagerCompat.from(context).notify(CALL_NOTIFICATION_ID, notification) }
     }
 
     fun cancelCall(context: Context) {

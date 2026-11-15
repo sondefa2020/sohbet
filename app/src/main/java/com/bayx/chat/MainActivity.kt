@@ -94,6 +94,12 @@ class MainActivity : FragmentActivity() {
 
     private fun handleIntent(intent: Intent?) {
         intent?.getStringExtra("tayfa_open")?.let { Bayx.pendingOpen.value = it }
+        // Arama bildirimindeki "Cevapla": arama ekranı açılınca izinleri alıp hemen cevaplar.
+        intent?.getStringExtra(Notifier.EXTRA_ACCEPT_CALL)?.let {
+            intent.removeExtra(Notifier.EXTRA_ACCEPT_CALL)
+            com.bayx.chat.data.Calls.autoAcceptCallId = it
+            com.bayx.chat.data.Notifier.cancelCall(this)
+        }
         val roomId = intent?.getStringExtra(Notifier.EXTRA_ROOM_ID) ?: return
         intent.removeExtra(Notifier.EXTRA_ROOM_ID)
         Bayx.pendingRoom.value = roomId
