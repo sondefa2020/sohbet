@@ -15,8 +15,8 @@ android {
         applicationId = "com.tayfa.chat"
         minSdk = 26
         targetSdk = 35
-        versionCode = 42
-        versionName = "0.42.0"
+        versionCode = 43
+        versionName = "0.43.0"
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }
