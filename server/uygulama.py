@@ -221,6 +221,42 @@ async def presence(request: Request):
     return reply(request, await sync(kayit.presence, request.headers, await body(request, optional=True)))
 
 
+# ------------------------------------------------------------------ telefon (WhatsApp mantığı)
+
+
+@app.post("/bayx/v4/phone/start")
+async def phone_start(request: Request):
+    return reply(request, await sync(kayit.phone_start, await body(request), client_ip(request)))
+
+
+@app.post("/bayx/v4/phone/verify")
+async def phone_verify(request: Request):
+    return reply(request, await sync(kayit.phone_verify, request.headers, await body(request), client_ip(request)))
+
+
+@app.post("/bayx/v4/phone/me")
+async def phone_me(request: Request):
+    return reply(request, await sync(kayit.phone_me, request.headers))
+
+
+@app.post("/bayx/v4/contacts/match")
+async def contacts_match(request: Request):
+    return reply(request, await sync(kayit.contacts_match, request.headers, await body(request, 400_000)))
+
+
+@app.post("/bayx/local/smstest")
+async def local_smstest(request: Request):
+    # Sunucudaki tayfa-sms-test komutu: ayarların doğru olup olmadığını dener.
+    local_only(request)
+    import telefon
+
+    phone = telefon.normalize((await body(request)).get("phone") or "")
+    if not phone:
+        raise ApiError(400, "GECERSIZ_NUMARA", "Numara geçersiz.")
+    ok, detail = await sync(telefon.send_sms, phone, "Tayfa SMS denemesi. Ayarlar dogru!")
+    return reply(request, {"ok": ok, "detail": detail})
+
+
 # ------------------------------------------------------------------ hesap
 
 
@@ -522,6 +558,9 @@ def validate_signal(caller, data):
 
 def deliver(caller, data):
     to, event = validate_signal(caller, data)
+    if event["type"] == "invite" and not (kayit.are_friends(caller, to) or kayit.knows_number(caller, to)):
+        # WhatsApp kuralı: yalnızca numarası rehberinde kayıtlı (ya da kişi listendeki) birini arayabilirsin.
+        raise ApiError(403, "KISI_DEGIL", "Bu kişiyi arayabilmek için numarası rehberinde kayıtlı olmalı.")
     HUB.publish(to, event)
     if event["type"] == "invite":
         # Uygulaması kapalı olan aranana bildirim (Firebase): ağ isteği, arka planda.

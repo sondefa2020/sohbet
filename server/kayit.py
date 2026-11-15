@@ -1606,3 +1606,196 @@ class Server(ThreadingHTTPServer):
 
 if __name__ == "__main__":
     main()
+
+
+# ====================================================================== telefon (WhatsApp mantığı)
+# Kayıt ve giriş telefon numarası + SMS koduyla yapılır; şifre yoktur. Numara sunucuda yalnızca
+# eşleştirme için tutulur. Rehber eşleştirmesinde numaralar açık değil, özet olarak gelir.
+
+import telefon  # noqa: E402
+
+PHONE_CODES = telefon.Codes()
+
+
+def _phones():
+    return GIRIS.data.setdefault("phones", {})  # numara -> kullanıcı
+
+
+def _phone_of_user():
+    return GIRIS.data.setdefault("user_phones", {})  # kullanıcı -> numara
+
+
+def _phone_hashes():
+    return GIRIS.data.setdefault("phone_hashes", {})  # özet -> kullanıcı
+
+
+def _knows():
+    return GIRIS.data.setdefault("knows", {})  # kullanıcı -> rehberinde kayıtlı Tayfa kullanıcıları
+
+
+def phone_of(uid):
+    with GIRIS.lock:
+        return _phone_of_user().get(uid)
+
+
+def _bind_phone(uid, phone):
+    with GIRIS.lock:
+        old = _phone_of_user().get(uid)
+        if old and old != phone:
+            _phones().pop(old, None)
+            _phone_hashes().pop(telefon.contact_hash(old), None)
+        _phones()[phone] = uid
+        _phone_of_user()[uid] = phone
+        _phone_hashes()[telefon.contact_hash(phone)] = uid
+    GIRIS.save()
+
+
+def _clean_phone(body):
+    phone = telefon.normalize(body.get("phone") or "")
+    if not phone:
+        raise ApiError(400, "GECERSIZ_NUMARA", "Telefon numarası geçersiz. Cep numaranı 05xx xxx xx xx biçiminde yaz.")
+    return phone
+
+
+def phone_start(body, ip):
+    """Numaraya 6 haneli doğrulama kodu gönderir."""
+    phone = _clean_phone(body)
+    if not telefon.sms_ready():
+        raise ApiError(503, "SMS_AYARSIZ", "SMS servisi henüz ayarlanmadı. Yönetici sunucuda tayfa-sms-ayarla komutunu çalıştırmalı.")
+    wait = PHONE_CODES.can_send(phone, ip)
+    if wait > 0:
+        raise ApiError(429, "BEKLE", "Yeni kod için %d saniye bekle." % wait)
+    if wait < 0:
+        raise ApiError(429, "COK_FAZLA_DENEME", "Çok fazla kod istendi. Bir saat sonra tekrar dene.")
+    code = PHONE_CODES.new(phone, ip)
+    ok, detail = telefon.send_sms(phone, "Tayfa dogrulama kodun: %s. Bu kodu kimseyle paylasma." % code)
+    if not ok:
+        PHONE_CODES.drop(phone)
+        print("SMS gönderilemedi (%s): %s" % (telefon.mask(phone), detail), flush=True)
+        raise ApiError(502, "SMS_GITMEDI", "SMS gönderilemedi. Biraz sonra tekrar dene.")
+    return {"ok": True, "phone": phone, "masked": telefon.mask(phone), "seconds": telefon.CODE_SECONDS, "resend": telefon.RESEND_SECONDS}
+
+
+def phone_verify(headers, body, ip):
+    """Kodu doğrular. Numara kayıtlıysa o hesaba giriş, değilse yeni hesap açar.
+
+    Oturum açıkken (Authorization) çağrılırsa numarayı mevcut hesaba bağlar.
+    """
+    phone = _clean_phone(body)
+    if _reset_attempts.blocked("tel:" + ip):
+        raise ApiError(429, "COK_FAZLA_DENEME", "Çok fazla hatalı deneme. Bir saat sonra tekrar dene.")
+    result = PHONE_CODES.check(phone, body.get("code") or "")
+    if result != "ok":
+        _reset_attempts.fail("tel:" + ip)
+        if result == "wrong":
+            raise ApiError(400, "KOD_YANLIS", "Kod yanlış. Tekrar dene.")
+        if result == "locked":
+            raise ApiError(429, "KOD_KILITLI", "Çok fazla yanlış deneme. Yeni kod iste.")
+        raise ApiError(400, "KOD_GECERSIZ", "Kodun süresi doldu. Yeni kod iste.")
+
+    with GIRIS.lock:
+        owner = _phones().get(phone)
+
+    if headers.get("Authorization"):
+        uid = member_from_token(headers)
+        if owner and owner != uid:
+            raise ApiError(409, "NUMARA_KULLANIMDA", "Bu numara başka bir hesaba bağlı.")
+        _bind_phone(uid, phone)
+        return {"ok": True, "phone": phone}
+
+    if owner and active_user(owner) is not None:
+        reply = session_reply(owner)
+        reply["new"] = False
+        return reply
+
+    # Yeni hesap: kullanıcı adı rastgele (numara kullanıcı kimliğinde görünmez).
+    if len(list_members()) >= MAX_MEMBERS:
+        raise ApiError(403, "KAPASITE_DOLU", "Üye sınırına ulaşıldı. Yeni kayıt alınamıyor.")
+    name = str(body.get("name") or "").strip()[:40] or "Tayfa"
+    with _register_lock:
+        for _ in range(5):
+            username = "t" + secrets.token_hex(5)
+            uid = user_id(username)
+            status, _ = synapse("GET", "/_synapse/admin/v2/users/" + quote(uid))
+            if status == 404:
+                break
+        status, _ = synapse(
+            "PUT",
+            "/_synapse/admin/v2/users/" + quote(uid),
+            {"password": secrets.token_urlsafe(32), "displayname": name, "admin": False, "locked": False},
+        )
+        if status not in (200, 201):
+            raise ApiError(502, "SUNUCU_HATASI", "Hesap oluşturulamadı.")
+    _bind_phone(uid, phone)
+    reply = session_reply(uid)
+    reply["new"] = True
+    return reply
+
+
+def phone_me(headers):
+    uid = member_from_token(headers)
+    phone = phone_of(uid)
+    return {"phone": phone or "", "masked": telefon.mask(phone) if phone else ""}
+
+
+def contacts_match(headers, body):
+    """Rehber eşleştirme: uygulama rehberdeki numaraların özetlerini gönderir; Tayfa kullananlar döner.
+
+    İki kişi birbirinin numarasını rehberinde tutuyorsa otomatik "kişi" (arkadaş) olurlar:
+    durum ve çevrimiçi bilgisini birbirlerine gösterir (WhatsApp'taki "Kişilerim" kuralı).
+    """
+    uid = member_from_token(headers)
+    hashes = body.get("hashes")
+    if not isinstance(hashes, list) or len(hashes) > 5000:
+        raise ApiError(400, "GECERSIZ_ISTEK", "Geçersiz istek.")
+    if _reset_attempts.blocked("rehber:" + uid):
+        raise ApiError(429, "COK_FAZLA_DENEME", "Rehber çok sık eşleştirildi. Biraz sonra tekrar dene.")
+    _reset_attempts.fail("rehber:" + uid)  # saatte en fazla 15 eşleştirme
+    wanted = {h for h in hashes if isinstance(h, str) and re.match(r"^[0-9a-f]{64}$", h)}
+    found = []
+    changed = False
+    with GIRIS.lock:
+        index = _phone_hashes()
+        knows = set(_knows().get(uid, []))
+        for h in wanted:
+            other = index.get(h)
+            if other and other != uid:
+                found.append((h, other))
+        new_knows = {o for _, o in found}
+        if new_knows != knows:
+            _knows()[uid] = sorted(new_knows)
+            changed = True
+        # karşılıklı rehber -> arkadaş; artık karşılıklı değilse otomatik arkadaşlık kalkar
+        for other in new_knows | knows:
+            mine, theirs = _crec(uid), _crec(other)
+            mutual = other in new_knows and uid in _knows().get(other, [])
+            blocked = other in mine["blocked"] or uid in theirs["blocked"]
+            if mutual and not blocked and other not in mine["friends"]:
+                mine["friends"].append(other)
+                theirs["friends"].append(uid)
+                for rec, x in ((mine, other), (theirs, uid)):
+                    for k in ("incoming", "outgoing"):
+                        if x in rec[k]:
+                            rec[k].remove(x)
+                changed = True
+    if changed:
+        GIRIS.save()
+    out = []
+    for h, other in found:
+        prof = _profiles.get(other, {})
+        status, info = synapse("GET", "/_synapse/admin/v2/users/" + quote(other))
+        if status != 200 or info.get("deactivated"):
+            continue
+        out.append({
+            "hash": h,
+            "user_id": other,
+            "display_name": info.get("displayname") or "",
+            "avatar_url": info.get("avatar_url") or "",
+            "status": prof.get("status", ""),
+        })
+    return {"matches": out}
+
+
+def knows_number(caller, callee):
+    with GIRIS.lock:
+        return callee in _knows().get(caller, [])

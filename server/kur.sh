@@ -156,7 +156,9 @@ say "Kayıt ve yönetim servisi kuruluyor"
 id bayx >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin bayx
 install -d -m 755 /opt/bayx
 install -d -m 750 -o root -g bayx /etc/bayx
-BAYX_FILES="kayit.py giris.py eposta.py arama.py uygulama.py"
+BAYX_FILES="kayit.py giris.py eposta.py arama.py uygulama.py telefon.py"
+# SMS (telefonla kayıt) ayarları: tayfa-sms-ayarla yazar; yoksa boş dosya (servis yine açılır).
+[ -f /etc/bayx/sms.env ] || install -m 640 -o root -g bayx /dev/null /etc/bayx/sms.env
 for f in $BAYX_FILES; do
     curl -fsSL -o "/opt/bayx/$f.yeni" "$RAW_BASE/$f" || fail "$f indirilemedi."
     python3 -m py_compile "/opt/bayx/$f.yeni" || fail "$f bozuk indi."
@@ -216,6 +218,46 @@ set_env BAYX_APP_ID com.tayfa.chat
 WEB_DOMAIN="${BAYX_WEB_DOMAIN:-web.acioglu.tr}"
 set_env BAYX_PUBLIC_BASE "https://$DOMAIN"
 set_env BAYX_WEB_ORIGIN "https://$WEB_DOMAIN"
+# Telefonla kayıt açık: eski 50 kişilik sınırı 5000'e çıkar (elle değiştirildiyse dokunma).
+grep -qE '^BAYX_MAX_MEMBERS=50$' "$ENV_FILE" && set_env BAYX_MAX_MEMBERS 5000
+
+# SMS ayarı (telefonla kayıt): sudo tayfa-sms-ayarla — bilgiler yalnızca bu sunucuda saklanır.
+cat > /usr/local/bin/tayfa-sms-ayarla <<'SMSCMD'
+#!/bin/bash
+# Tayfa: SMS sağlayıcısı (oztekbayi) bilgilerini sunucuya kaydeder. Şifre ekranda görünmez.
+set -eu
+[ "$(id -u)" = 0 ] || { echo "sudo ile çalıştır: sudo tayfa-sms-ayarla"; exit 1; }
+read -r -p "Kullanıcı no (kno): " KNO
+read -r -p "Kullanıcı adı: " KUL
+read -r -s -p "Şifre (ekranda görünmez): " SIF; echo
+read -r -p "Gönderen başlığı (ör. TAYFA): " GON
+for v in "$KNO" "$KUL" "$SIF" "$GON"; do
+    [ -n "$v" ] || { echo "Boş bırakılamaz."; exit 1; }
+    case "$v" in *$'\n'*|*'"'*) echo "Geçersiz karakter."; exit 1;; esac
+done
+umask 027
+cat > /etc/bayx/sms.env <<EOF
+BAYX_SMS_KNO=$KNO
+BAYX_SMS_USER=$KUL
+BAYX_SMS_PASS=$SIF
+BAYX_SMS_SENDER=$GON
+EOF
+chown root:bayx /etc/bayx/sms.env
+chmod 640 /etc/bayx/sms.env
+unset SIF
+systemctl restart bayx-kayit
+echo "Kaydedildi. Denemek için: sudo tayfa-sms-test 05xxxxxxxxx"
+SMSCMD
+chmod 755 /usr/local/bin/tayfa-sms-ayarla
+
+cat > /usr/local/bin/tayfa-sms-test <<'SMSTEST'
+#!/bin/bash
+# Tayfa: SMS ayarını dener: sudo tayfa-sms-test 05xxxxxxxxx
+[ -n "${1:-}" ] || { echo "Kullanım: sudo tayfa-sms-test 05xxxxxxxxx"; exit 1; }
+curl -sS -X POST http://127.0.0.1:8010/bayx/local/smstest -H 'Content-Type: application/json' \
+    -d "{\"phone\":\"$(printf %s "$1" | tr -cd '0-9+')\"}"; echo
+SMSTEST
+chmod 755 /usr/local/bin/tayfa-sms-test
 
 # Sunucudan giriş bağlantısı üretme komutu: sudo tayfa-giris <kullanıcı_adı>
 cat > /usr/local/bin/tayfa-giris <<'GIRISCMD'
@@ -309,6 +351,11 @@ if grep -E "^BAYX_SMTP_PASS=.+" /etc/bayx/smtp.env >/dev/null; then
 else
     MAIL_OK="hayır (/etc/bayx/smtp.env içine SMTP şifresi yazılmalı)"
 fi
+if grep -E "^BAYX_SMS_PASS=.+" /etc/bayx/sms.env >/dev/null 2>&1; then
+    SMS_OK="ayarlı (denemek için: sudo tayfa-sms-test 05xxxxxxxxx)"
+else
+    SMS_OK="hayır (telefonla kayıt için: sudo tayfa-sms-ayarla)"
+fi
 
 # Bildirimler: Firebase servis hesabı dosyası sunucuya elle konur (gizli anahtar içerir).
 PUSH_OK="hayır (/etc/bayx/firebase.json yok)"
@@ -333,6 +380,7 @@ User=bayx
 Group=bayx
 EnvironmentFile=$ENV_FILE
 EnvironmentFile=-/etc/bayx/smtp.env
+EnvironmentFile=-/etc/bayx/sms.env
 ExecStart=$KAYIT_EXEC
 WorkingDirectory=/opt/bayx
 Restart=on-failure
@@ -695,6 +743,7 @@ Tayfa Web                              : $WEB_OK
 Otomatik yedek                         : $BACKUP_OK
 Veritabanı                             : $DB_KIND
 E-posta (doğrulama, şifre sıfırlama)   : $MAIL_OK
+SMS (telefonla kayıt)                  : $SMS_OK
 $FIREWALL_NOTE
 $ADMIN_NOTE
 =====================================================
