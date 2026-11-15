@@ -26,7 +26,7 @@ from kayit import ApiError
 
 HUB = arama.CallHub()
 
-WEB_PATHS = ("/bayx/v2/web/redeem", "/bayx/v3/web/start", "/bayx/v3/web/poll", "/bayx/presence")
+WEB_PATHS = ("/bayx/v2/web/redeem", "/bayx/v3/web/start", "/bayx/v3/web/poll", "/bayx/presence", "/bayx/config")
 
 
 @asynccontextmanager
@@ -48,10 +48,11 @@ app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None
 def cors_headers(request: Request):
     origin = request.headers.get("origin", "")
     path = request.url.path.rstrip("/")
-    if kayit.WEB_ORIGIN and origin == kayit.WEB_ORIGIN and path in WEB_PATHS:
+    # Tayfa Web: QR girişi, çevrimiçi bilgisi ve yönetim paneli (yönetim uçları ayrıca yönetici yetkisi ister).
+    if kayit.WEB_ORIGIN and origin == kayit.WEB_ORIGIN and (path in WEB_PATHS or path.startswith("/bayx/admin/")):
         return {
             "Access-Control-Allow-Origin": kayit.WEB_ORIGIN,
-            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
             "Access-Control-Allow-Headers": "Content-Type, Authorization",
             "Vary": "Origin",
         }
@@ -145,8 +146,11 @@ async def config(request: Request):
 
 @app.post("/bayx/admin/config")
 async def admin_config(request: Request):
-    await sync(kayit.require_admin, request.headers)
-    return reply(request, await sync(kayit.set_config, await body(request)))
+    caller = await sync(kayit.require_admin, request.headers)
+    data = await body(request)
+    result = await sync(kayit.set_config, data)
+    kayit.audit(caller, "config", "", ", ".join(sorted(k for k in data if k in ("announcement", "latest_version", "apk_url"))))
+    return reply(request, result)
 
 
 # ------------------------------------------------------------------ kişiler ve durum
@@ -503,12 +507,17 @@ async def web_poll(request: Request):
 
 @app.get("/bayx/admin/members")
 async def admin_members(request: Request):
-    def run():
-        kayit.require_admin(request.headers)
-        listed = kayit.list_members()
-        return {"members": listed, "count": len(listed), "max": kayit.MAX_MEMBERS, "invites": kayit.GIRIS.invite_count()}
+    return reply(request, await sync(kayit.admin_members_full, request.headers))
 
-    return reply(request, await sync(run))
+
+@app.get("/bayx/admin/stats")
+async def admin_stats(request: Request):
+    return reply(request, await sync(kayit.admin_stats, request.headers))
+
+
+@app.get("/bayx/admin/audit")
+async def admin_audit(request: Request):
+    return reply(request, await sync(kayit.admin_audit, request.headers))
 
 
 @app.post("/bayx/admin/invite")
@@ -516,7 +525,10 @@ async def admin_invite(request: Request):
     data = await body(request)
 
     def run():
-        return kayit.create_invite(data, kayit.require_admin(request.headers))
+        caller = kayit.require_admin(request.headers)
+        result = kayit.create_invite(data, caller)
+        kayit.audit(caller, "invite", "", "%s kullanım" % data.get("uses", 1))
+        return result
 
     return reply(request, await sync(run))
 
@@ -563,6 +575,7 @@ def deliver(caller, data):
         raise ApiError(403, "KISI_DEGIL", "Bu kişiyi arayabilmek için numarası rehberinde kayıtlı olmalı.")
     HUB.publish(to, event)
     if event["type"] == "invite":
+        kayit.stat_inc("calls")
         # Uygulaması kapalı olan aranana bildirim (Firebase): ağ isteği, arka planda.
         name = str(event["data"].get("name", ""))[:40]
         asyncio.get_running_loop().run_in_executor(

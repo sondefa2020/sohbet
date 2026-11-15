@@ -121,6 +121,7 @@ def list_members():
                     "avatar_url": user.get("avatar_url") or "",
                     "admin": bool(user.get("admin")),
                     "pending": bool(user.get("locked")),
+                    "created": int(user.get("creation_ts") or 0),
                 }
             )
         start = data.get("next_token")
@@ -983,6 +984,9 @@ def public_profile(uid, now):
     return {"mode": mode if online else "offline", "status": prof.get("status", "")}
 
 
+_active_today = {}
+
+
 def presence(headers, body):
     """Çağıranın yoklamasını, durumunu ve durum mesajını kaydeder; üyelerin durumlarını döndürür."""
     uid = member_from_token(headers)
@@ -1005,12 +1009,22 @@ def presence(headers, body):
             save_profiles()
         if body.get("active", True):
             _last_seen[uid] = now
+            day = time.strftime("%Y-%m-%d")
+            if _active_today.get("day") != day:
+                _active_today.clear()
+                _active_today["day"] = day
+                _active_today["users"] = set()
+            first_today = uid not in _active_today["users"]
+            _active_today["users"].add(uid)
         else:
+            first_today = False
             _last_seen.pop(uid, None)
         visible = set(friends_of(uid))
         users = {u: public_profile(u, now) for u in visible}
         online = [u for u, p in users.items() if p["mode"] != "offline"]
         mine = {"mode": _profiles.get(uid, {}).get("mode", "online"), "status": _profiles.get(uid, {}).get("status", "")}
+    if first_today:
+        stat_inc("active")  # günlük aktif kullanıcı (yalnızca sayı)
     return {"online": online, "users": users, "me": mine}
 
 
@@ -1262,8 +1276,12 @@ def target_user(body, caller):
 
 def admin_action(action, body, caller):
     uid, info = target_user(body, caller)
-    if action == "approve":
+    if action in ("approve", "unlock"):
         status, _ = synapse("PUT", "/_synapse/admin/v2/users/" + quote(uid), {"locked": False})
+    elif action == "lock":
+        if info.get("admin"):
+            raise ApiError(400, "YONETICI", "Yönetici hesabı kilitlenemez.")
+        status, _ = synapse("PUT", "/_synapse/admin/v2/users/" + quote(uid), {"locked": True})
     elif action == "reject":
         if not info.get("locked"):
             raise ApiError(400, "BEKLEMIYOR", "Bu hesap onay beklemiyor.")
@@ -1286,6 +1304,7 @@ def admin_action(action, body, caller):
         raise ApiError(404, "BULUNAMADI", "Bulunamadı.")
     if status != 200:
         raise ApiError(502, "SUNUCU_HATASI", "İşlem tamamlanamadı.")
+    audit(caller, action, uid)
     if action in ("reject", "remove"):
         GIRIS.forget_user(uid)
         EMAILS.remove(uid)
@@ -1673,6 +1692,7 @@ def phone_start(body, ip):
         PHONE_CODES.drop(phone)
         print("SMS gönderilemedi (%s): %s" % (telefon.mask(phone), detail), flush=True)
         raise ApiError(502, "SMS_GITMEDI", "SMS gönderilemedi. Biraz sonra tekrar dene.")
+    stat_inc("sms")
     return {"ok": True, "phone": phone, "masked": telefon.mask(phone), "seconds": telefon.CODE_SECONDS, "resend": telefon.RESEND_SECONDS}
 
 
@@ -1704,6 +1724,7 @@ def phone_verify(headers, body, ip):
         return {"ok": True, "phone": phone}
 
     if owner and active_user(owner) is not None:
+        stat_inc("logins")
         reply = session_reply(owner)
         reply["new"] = False
         return reply
@@ -1727,6 +1748,7 @@ def phone_verify(headers, body, ip):
         if status not in (200, 201):
             raise ApiError(502, "SUNUCU_HATASI", "Hesap oluşturulamadı.")
     _bind_phone(uid, phone)
+    stat_inc("signups")
     reply = session_reply(uid)
     reply["new"] = True
     return reply
@@ -1799,3 +1821,88 @@ def contacts_match(headers, body):
 def knows_number(caller, callee):
     with GIRIS.lock:
         return callee in _knows().get(caller, [])
+
+
+
+# ====================================================================== yönetim: istatistik ve günlük
+# Mesaj içerikleri uçtan uca şifrelidir ve burada hiçbir zaman görünmez; yalnızca sayılar tutulur.
+
+import shutil  # noqa: E402
+
+
+def _today():
+    return time.strftime("%Y-%m-%d")
+
+
+def stat_inc(name, n=1):
+    with GIRIS.lock:
+        stats = GIRIS.data.setdefault("stats", {})
+        day = stats.setdefault(_today(), {})
+        day[name] = day.get(name, 0) + n
+        if len(stats) > 120:  # son 120 gün
+            for k in sorted(stats)[:-120]:
+                del stats[k]
+    GIRIS.save()
+
+
+def audit(actor, action, target="", detail=""):
+    with GIRIS.lock:
+        log = GIRIS.data.setdefault("audit", [])
+        log.append({"ts": int(time.time()), "actor": actor, "action": action, "target": target, "detail": str(detail)[:200]})
+        del log[:-1000]
+    GIRIS.save()
+
+
+def admin_stats(headers):
+    require_admin(headers)
+    now = time.time()
+    members = list_members()
+    day_ms, week_ms = (now - 86400) * 1000, (now - 7 * 86400) * 1000
+    with _presence_lock:
+        online = sum(1 for m in members if now - _last_seen.get(m["user_id"], 0) < PRESENCE_WINDOW)
+    with GIRIS.lock:
+        phones = len(_phone_of_user())
+        stats = dict(GIRIS.data.get("stats", {}))
+    status, rooms = synapse("GET", "/_synapse/admin/v1/rooms?limit=1")
+    disk = shutil.disk_usage("/")
+    days = []
+    for i in range(13, -1, -1):
+        key = time.strftime("%Y-%m-%d", time.localtime(now - i * 86400))
+        days.append({"day": key, **stats.get(key, {})})
+    return {
+        "members": len(members),
+        "pending": sum(1 for m in members if m["pending"]),
+        "admins": sum(1 for m in members if m["admin"]),
+        "online": online,
+        "with_phone": phones,
+        "new_24h": sum(1 for m in members if m.get("created", 0) > day_ms),
+        "new_7d": sum(1 for m in members if m.get("created", 0) > week_ms),
+        "rooms": (rooms or {}).get("total_rooms", 0) if status == 200 else 0,
+        "max_members": MAX_MEMBERS,
+        "disk_used": disk.used,
+        "disk_total": disk.total,
+        "sms_ready": telefon.sms_ready(),
+        "days": days,
+    }
+
+
+def admin_members_full(headers):
+    require_admin(headers)
+    now = time.time()
+    members = list_members()
+    with GIRIS.lock:
+        phones = dict(_phone_of_user())
+    with _presence_lock:
+        for m in members:
+            m["mode"] = public_profile(m["user_id"], now)["mode"]
+            m["last_seen"] = int(_last_seen.get(m["user_id"], 0) or 0)
+    for m in members:
+        p = phones.get(m["user_id"])
+        m["phone"] = telefon.mask(p) if p else ""
+    return {"members": members, "count": len(members), "max": MAX_MEMBERS, "invites": GIRIS.invite_count()}
+
+
+def admin_audit(headers):
+    require_admin(headers)
+    with GIRIS.lock:
+        return {"entries": list(reversed(GIRIS.data.get("audit", [])[-300:]))}

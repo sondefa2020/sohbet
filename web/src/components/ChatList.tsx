@@ -2,7 +2,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { locale, t } from "../i18n";
 import { chats, online } from "../session";
 import { Avatar } from "./Avatar";
-import { KeyIcon, SearchIcon } from "./Icons";
+import { KeyIcon, SearchIcon, ShieldIcon } from "./Icons";
 
 function timeLabel(ts: number) {
   if (!ts) return "";
@@ -22,6 +22,7 @@ export function ChatList({
   menu,
   backupLocked,
   onRecovery,
+  onAdmin,
 }: {
   selected: string | null;
   onSelect: (id: string) => void;
@@ -29,6 +30,7 @@ export function ChatList({
   menu: ReactNode;
   backupLocked: boolean;
   onRecovery: () => void;
+  onAdmin?: () => void;
 }) {
   const [query, setQuery] = useState("");
   const all = chats(t);
@@ -42,7 +44,14 @@ export function ChatList({
       <div className="chatlist-head">
         <div className="chatlist-title">
           <h1>{t("Sohbetler")}</h1>
-          <div className="only-narrow">{menu}</div>
+          <div className="only-narrow row-8">
+            {onAdmin && (
+              <button type="button" className="icon-btn" aria-label={t("Yönetim")} onClick={onAdmin}>
+                <ShieldIcon />
+              </button>
+            )}
+            {menu}
+          </div>
         </div>
         {backupLocked && (
           <button type="button" className="locked-banner" onClick={onRecovery}>

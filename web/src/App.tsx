@@ -7,7 +7,9 @@ import { ChatList } from "./components/ChatList";
 import { RoomView } from "./components/RoomView";
 import { Login } from "./components/Login";
 import { RecoveryDialog } from "./components/Recovery";
-import { ChatIcon, KeyIcon, LogoMark } from "./components/Icons";
+import { ChatIcon, KeyIcon, LogoMark, ShieldIcon } from "./components/Icons";
+import { AdminPanel } from "./components/AdminPanel";
+import { isAdmin } from "./admin";
 
 function useDark(): [boolean, (v: boolean) => void] {
   const [dark, setDark] = useState(() => {
@@ -60,6 +62,12 @@ function Main({ dark, setDark }: { dark: boolean; setDark: (v: boolean) => void 
   const [selected, setSelected] = useState<string | null>(null);
   const [recovery, setRecovery] = useState(false);
   const [backup, setBackup] = useState<"none" | "locked" | "ready">("none");
+  const [admin, setAdmin] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
+  // Yönetici hesabıysa "Yönetim" bölümü açılır (sunucu her işlemde yetkiyi ayrıca denetler).
+  useEffect(() => {
+    isAdmin().then(setAdmin);
+  }, []);
   const ready = syncState === SyncState.Prepared || syncState === SyncState.Syncing;
 
   // İlk eşitlemeden sonra: sunucuda mesaj yedeği var ama bu tarayıcı kilitliyse anahtarı sor.
@@ -107,9 +115,14 @@ function Main({ dark, setDark }: { dark: boolean; setDark: (v: boolean) => void 
     <div className={"app" + (room ? " has-room" : "")}>
       <nav className="rail" aria-label={t("Ana menü")}>
         <LogoMark size={42} />
-        <button type="button" className="rail-btn active" aria-label={t("Sohbetler")} onClick={() => setSelected(null)}>
+        <button type="button" className={"rail-btn" + (showAdmin ? "" : " active")} aria-label={t("Sohbetler")} onClick={() => { setShowAdmin(false); setSelected(null); }}>
           <ChatIcon />
         </button>
+        {admin && (
+          <button type="button" className={"rail-btn" + (showAdmin ? " active" : "")} aria-label={t("Yönetim")} onClick={() => setShowAdmin(true)}>
+            <ShieldIcon />
+          </button>
+        )}
         <div className="grow" />
         {backup === "locked" && (
           <button type="button" className="rail-btn" aria-label={t("Eski mesajları aç")} onClick={() => setRecovery(true)}>
@@ -119,6 +132,10 @@ function Main({ dark, setDark }: { dark: boolean; setDark: (v: boolean) => void 
         <SettingsMenu dark={dark} setDark={setDark} backupLocked={backup === "locked"} onRecovery={() => setRecovery(true)} placement="rail" />
       </nav>
 
+      {showAdmin ? (
+        <AdminPanel onClose={() => setShowAdmin(false)} />
+      ) : (
+      <>
       <ChatList
         selected={selected}
         onSelect={setSelected}
@@ -126,6 +143,7 @@ function Main({ dark, setDark }: { dark: boolean; setDark: (v: boolean) => void 
         menu={<SettingsMenu dark={dark} setDark={setDark} backupLocked={backup === "locked"} onRecovery={() => setRecovery(true)} placement="top" />}
         backupLocked={backup === "locked"}
         onRecovery={() => setRecovery(true)}
+        onAdmin={admin ? () => setShowAdmin(true) : undefined}
       />
 
       {room ? (
@@ -135,6 +153,9 @@ function Main({ dark, setDark }: { dark: boolean; setDark: (v: boolean) => void 
           <LogoMark size={64} />
           <span className="muted">{t("Bir sohbet seç")}</span>
         </section>
+      )}
+
+      </>
       )}
 
       {offline && (
