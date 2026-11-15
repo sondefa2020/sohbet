@@ -473,3 +473,55 @@ button:disabled { cursor: default; opacity: 0.55; }
   .login-header { padding: 16px 20px; }
   .login-title { font-size: 28px; }
 }
+
+/* ---------------------------------------------------------------- eklemeler */
+.chatlist-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.menu.top { bottom: auto; top: 52px; inset-inline-start: auto; inset-inline-end: 0; }
+.locked-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--chip);
+  color: var(--accent-text);
+  padding: 12px 14px;
+  text-align: start;
+  min-height: 44px;
+}
+.locked-banner > span { display: flex; flex-direction: column; gap: 2px; }
+.locked-banner .small { color: var(--ink); opacity: 0.8; }
+.ticks { margin-inline-start: 6px; letter-spacing: -0.15em; }
+.ticks.read { color: #9fe0b5; }
+:root:not([data-theme="dark"]) .theirs .ticks.read { color: var(--online-text); }
+:root[data-theme="dark"] .mine .ticks.read { color: #14532d; }
+.composer-field textarea {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  outline: none;
+  font-size: 15px;
+  line-height: 1.4;
+  resize: none;
+  padding: 12px 0;
+  max-height: 140px;
+  field-sizing: content;
+}
+.room { position: relative; }
+.room.dragging .timeline { opacity: 0.35; }
+.drop-hint {
+  position: absolute;
+  inset: 90px 24px 90px;
+  border: 2px dashed var(--accent);
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: var(--accent-text);
+  z-index: 5;
+  pointer-events: none;
+}

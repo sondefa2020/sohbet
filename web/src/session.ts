@@ -14,6 +14,7 @@ import {
   NotificationCountType,
   Room,
   RoomEvent,
+  RoomMemberEvent,
   SyncState,
 } from "matrix-js-sdk";
 import { decodeRecoveryKey } from "matrix-js-sdk/lib/crypto-api";
@@ -29,6 +30,8 @@ export interface Saved {
 }
 
 let homeserver = "";
+/** Yalnızca yerel uçtan uca testlerde (config.json'da "test": true) açılır; gerçek kurulumda yoktur. */
+let testHooks = false;
 
 /** Sunucu adresi çalışma anında public/config.json'dan okunur (aynı derleme her sunucuda çalışır). */
 export async function loadConfig(): Promise<string> {
@@ -37,6 +40,7 @@ export async function loadConfig(): Promise<string> {
     const r = await fetch("/config.json", { cache: "no-store" });
     const j = await r.json();
     homeserver = String(j.homeserver || "").replace(/\/+$/, "");
+    testHooks = j.test === true;
   } catch {
     homeserver = "";
   }
@@ -110,6 +114,7 @@ export function start(saved: Saved): Promise<MatrixClient> {
 }
 
 async function doStart(saved: Saved): Promise<MatrixClient> {
+  await loadConfig();
   homeserver = saved.homeserver;
   const c = createClient({
     baseUrl: saved.homeserver,
@@ -138,7 +143,15 @@ async function doStart(saved: Saved): Promise<MatrixClient> {
   c.on(RoomEvent.Name, () => bump());
   c.on(RoomEvent.Receipt, () => bump());
   c.on(RoomEvent.LocalEchoUpdated, () => bump());
-  c.on(MatrixEventEvent.Decrypted, () => bump());
+  c.on(MatrixEventEvent.Decrypted, (ev) => {
+    bump();
+    maybeNotify(ev);
+  });
+  c.on(RoomMemberEvent.Typing, () => bump());
+  c.on(RoomEvent.Timeline, (ev, room, toStart, removed, data) => {
+    if (toStart || removed || !data?.liveEvent || !room) return;
+    maybeNotify(ev);
+  });
   // Özel bir arkadaş çevresi: davetler otomatik kabul edilir (telefondaki uygulama gibi).
   c.on(RoomEvent.MyMembership, (room, membership) => {
     if (membership === KnownMembership.Invite) c.joinRoom(room.roomId).catch(() => undefined);
@@ -153,6 +166,14 @@ async function doStart(saved: Saved): Promise<MatrixClient> {
     bump();
   });
 
+  if (testHooks) {
+    (window as unknown as Record<string, unknown>).__tayfaTest = {
+      client: c,
+      setKey: (k: Uint8Array<ArrayBuffer>) => {
+        pendingRecoveryKey = k;
+      },
+    };
+  }
   await c.startClient({ initialSyncLimit: 30, lazyLoadMembers: true });
   startPresence();
   return c;
@@ -494,4 +515,103 @@ export function retry(ev: MatrixEvent) {
 
 export function getHomeserver() {
   return homeserver;
+}
+
+
+// ------------------------------------------------------------ yazıyor, okundu
+
+/** Bu sohbette şu an yazmakta olan diğer kişilerin adları. */
+export function typingNames(room: Room): string[] {
+  const me = client?.getUserId();
+  return room
+    .getMembers()
+    .filter((m) => m.typing && m.userId !== me)
+    .map((m) => m.name);
+}
+
+let typingRoom = "";
+let typingUntil = 0;
+
+/** Yazmaya başlayınca/bırakınca karşı tarafa "yazıyor…" bildirir (sık istek göndermeden). */
+export function setTyping(roomId: string, typing: boolean) {
+  const c = client;
+  if (!c) return;
+  const now = Date.now();
+  if (typing) {
+    if (typingRoom === roomId && now < typingUntil) return;
+    typingRoom = roomId;
+    typingUntil = now + 4000;
+    c.sendTyping(roomId, true, 6000).catch(() => undefined);
+  } else if (typingRoom === roomId) {
+    typingRoom = "";
+    typingUntil = 0;
+    c.sendTyping(roomId, false, 0).catch(() => undefined);
+  }
+}
+
+/** Kendi mesajımı karşı taraf okudu mu? */
+export function readByOthers(room: Room, ev: MatrixEvent): boolean {
+  const me = client?.getUserId();
+  return room.getUsersReadUpTo(ev).some((u) => u !== me);
+}
+
+// ------------------------------------------------------------ bildirim ve ses
+
+/** Ekranda açık olan sohbet: onun mesajları için bildirim gösterilmez. */
+export let openRoomId: string | null = null;
+export function setOpenRoom(id: string | null) {
+  openRoomId = id;
+}
+
+const incomingSound = typeof Audio !== "undefined" ? new Audio("/gelen.wav") : null;
+const notified = new Set<string>();
+const startedAt = Date.now();
+
+export function notificationsAllowed(): boolean {
+  return typeof Notification !== "undefined" && Notification.permission === "granted";
+}
+
+export async function askNotifications(): Promise<boolean> {
+  if (typeof Notification === "undefined") return false;
+  if (Notification.permission === "granted") return true;
+  return (await Notification.requestPermission()) === "granted";
+}
+
+/** Yeni gelen mesaj: ses çalar, sekme gizliyse masaüstü bildirimi gösterir (içerik gösterilmez). */
+function maybeNotify(ev: MatrixEvent) {
+  const c = client;
+  if (!c || !displayable(ev) || ev.getType() === EventType.RoomMessageEncrypted && !ev.isDecryptionFailure()) return;
+  const id = ev.getId();
+  if (!id || notified.has(id)) return;
+  if (ev.getSender() === c.getUserId() || ev.getTs() < startedAt - 5000 || Date.now() - ev.getTs() > 60_000) return;
+  const roomId = ev.getRoomId() ?? "";
+  const room = c.getRoom(roomId);
+  if (!room) return;
+  notified.add(id);
+  const visible = document.visibilityState === "visible";
+  if (visible && openRoomId === roomId) return;
+  if (localStorage.getItem("tayfa_ses") !== "kapali") incomingSound?.play().catch(() => undefined);
+  if (!visible && notificationsAllowed()) {
+    const n = new Notification(room.name || "Tayfa", { body: tNew(), icon: "/icon-192.png", tag: roomId });
+    n.onclick = () => {
+      window.focus();
+      window.dispatchEvent(new CustomEvent("tayfa-ac", { detail: roomId }));
+      n.close();
+    };
+  }
+}
+
+let tNew = () => "Yeni mesaj";
+export function setNotificationText(fn: () => string) {
+  tNew = fn;
+}
+
+/** Sekme başlığında okunmamış mesaj sayısı: "(3) Tayfa". */
+export function unreadTotal(): number {
+  const c = client;
+  if (!c) return 0;
+  return c
+    .getRooms()
+    .filter((r) => r.getMyMembership() === KnownMembership.Join)
+    .reduce((sum, r) => sum + r.getUnreadNotificationCount(NotificationCountType.Total), 0);
 }

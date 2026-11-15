@@ -1,8 +1,8 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { locale, t } from "../i18n";
 import { chats, online } from "../session";
 import { Avatar } from "./Avatar";
-import { SearchIcon } from "./Icons";
+import { KeyIcon, SearchIcon } from "./Icons";
 
 function timeLabel(ts: number) {
   if (!ts) return "";
@@ -15,7 +15,21 @@ function timeLabel(ts: number) {
   return d.toLocaleDateString(locale(), { day: "2-digit", month: "2-digit" });
 }
 
-export function ChatList({ selected, onSelect, ready }: { selected: string | null; onSelect: (id: string) => void; ready: boolean }) {
+export function ChatList({
+  selected,
+  onSelect,
+  ready,
+  menu,
+  backupLocked,
+  onRecovery,
+}: {
+  selected: string | null;
+  onSelect: (id: string) => void;
+  ready: boolean;
+  menu: ReactNode;
+  backupLocked: boolean;
+  onRecovery: () => void;
+}) {
   const [query, setQuery] = useState("");
   const all = chats(t);
   const list = useMemo(() => {
@@ -26,7 +40,19 @@ export function ChatList({ selected, onSelect, ready }: { selected: string | nul
   return (
     <aside className="chatlist" aria-label={t("Sohbet listesi")}>
       <div className="chatlist-head">
-        <h1>{t("Sohbetler")}</h1>
+        <div className="chatlist-title">
+          <h1>{t("Sohbetler")}</h1>
+          <div className="only-narrow">{menu}</div>
+        </div>
+        {backupLocked && (
+          <button type="button" className="locked-banner" onClick={onRecovery}>
+            <KeyIcon size={20} />
+            <span>
+              <strong>{t("Eski mesajlar kilitli")}</strong>
+              <span className="small">{t("Okumak için yedek anahtarını gir")}</span>
+            </span>
+          </button>
+        )}
         <label className="search">
           <SearchIcon size={18} />
           <span className="sr-only">{t("Sohbetlerde ara")}</span>

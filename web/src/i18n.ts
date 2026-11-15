@@ -76,6 +76,14 @@ const EN: Record<string, string> = {
   "Ana menü": "Main menu",
   "Sohbet listesi": "Chat list",
   "Açık sohbet": "Open chat",
+  "Masaüstü bildirimleri": "Desktop notifications",
+  "Mesaj sesi": "Message sound",
+  "Eski mesajlar kilitli": "Older messages are locked",
+  "Okumak için yedek anahtarını gir": "Enter your backup key to read them",
+  "Okundu": "Read",
+  "Gönderildi": "Sent",
+  "Göndermek için bırak": "Drop to send",
+  "Yeni mesaj": "New message",
 };
 
 const AR: Record<string, string> = {
@@ -151,6 +159,14 @@ const AR: Record<string, string> = {
   "Ana menü": "القائمة الرئيسية",
   "Sohbet listesi": "قائمة المحادثات",
   "Açık sohbet": "المحادثة المفتوحة",
+  "Masaüstü bildirimleri": "إشعارات سطح المكتب",
+  "Mesaj sesi": "صوت الرسائل",
+  "Eski mesajlar kilitli": "الرسائل القديمة مقفلة",
+  "Okumak için yedek anahtarını gir": "أدخل مفتاح النسخ الاحتياطي لقراءتها",
+  "Okundu": "مقروءة",
+  "Gönderildi": "مرسلة",
+  "Göndermek için bırak": "أفلت للإرسال",
+  "Yeni mesaj": "رسالة جديدة",
 };
 
 let current: Lang = (localStorage.getItem("tayfa_dil") as Lang) || "tr";

@@ -1,9 +1,12 @@
-import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ClipboardEvent, type DragEvent, type FormEvent, type KeyboardEvent } from "react";
 import { MsgType, type MatrixEvent, type Room } from "matrix-js-sdk";
 import { locale, t } from "../i18n";
-import { client, describe, dmPartner, eventStatus, isSecret, loadOlder, MAX_UPLOAD, markRead, mediaUrl, messages, online, retry, sendFile, sendText } from "../session";
+import { client, describe, dmPartner, eventStatus, isSecret, loadOlder, MAX_UPLOAD, markRead, mediaUrl, messages, online, readByOthers, retry, sendFile, sendText, setTyping, typingNames } from "../session";
 import { Avatar } from "./Avatar";
 import { BackIcon, ClipIcon, FileIcon, LockIcon, SendIcon } from "./Icons";
+
+const outgoingSound = new Audio("/giden.wav");
+outgoingSound.volume = 0.6;
 
 function dayLabel(ts: number) {
   const d = new Date(ts);
@@ -89,7 +92,7 @@ function Media({ ev }: { ev: MatrixEvent }) {
   );
 }
 
-function Bubble({ ev, mine, showSender }: { ev: MatrixEvent; mine: boolean; showSender: boolean }) {
+function Bubble({ ev, mine, showSender, read }: { ev: MatrixEvent; mine: boolean; showSender: boolean; read: boolean }) {
   const content = ev.getContent();
   const media =
     !ev.isRedacted() &&
@@ -111,7 +114,14 @@ function Bubble({ ev, mine, showSender }: { ev: MatrixEvent; mine: boolean; show
           ) : status === "sending" ? (
             t("Gönderiliyor…")
           ) : (
-            clock(ev.getTs())
+            <>
+              {clock(ev.getTs())}
+              {mine && (
+                <span className={"ticks" + (read ? " read" : "")} aria-label={read ? t("Okundu") : t("Gönderildi")}>
+                  {read ? "✓✓" : "✓"}
+                </span>
+              )}
+            </>
           )}
         </span>
       </div>
@@ -134,7 +144,10 @@ export function RoomView({ room, onBack }: { room: Room; onBack: () => void }) {
   const members = room.getJoinedMemberCount();
   const isDirect = !!partner && members <= 2;
   const secret = isSecret(room);
-  const subtitle = isDirect
+  const typing = typingNames(room);
+  const subtitle = typing.length > 0
+    ? (isDirect ? "" : typing.join(", ") + " ") + t("yazıyor…")
+    : isDirect
     ? partner && online.has(partner)
       ? t("Çevrimiçi") + " · " + t("şifreli")
       : t("şifreli")
@@ -177,7 +190,35 @@ export function RoomView({ room, onBack }: { room: Room; onBack: () => void }) {
     if (!body) return;
     setText("");
     atBottom.current = true;
-    sendText(room.roomId, body).catch(() => setError(t("Gönderilemedi")));
+    setTyping(room.roomId, false);
+    sendText(room.roomId, body)
+      .then(() => {
+        if (localStorage.getItem("tayfa_ses") !== "kapali") outgoingSound.play().catch(() => undefined);
+      })
+      .catch(() => setError(t("Gönderilemedi")));
+  };
+
+  // Enter gönderir, Shift+Enter yeni satır açar.
+  const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      submit(e as unknown as FormEvent);
+    }
+  };
+
+  // Panodan yapıştırılan fotoğraf ya da dosya doğrudan gönderilir.
+  const onPaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
+    if (e.clipboardData.files.length > 0) {
+      e.preventDefault();
+      void pick(e.clipboardData.files);
+    }
+  };
+
+  // Sohbetin üstüne sürüklenip bırakılan dosyalar gönderilir.
+  const onDrop = (e: DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    if (e.dataTransfer.files.length > 0) void pick(e.dataTransfer.files);
   };
 
   const pick = async (files: FileList | null) => {
@@ -193,9 +234,33 @@ export function RoomView({ room, onBack }: { room: Room; onBack: () => void }) {
     if (fileInput.current) fileInput.current.value = "";
   };
 
+  // Okundu tiki: karşı tarafın okuduğu son mesaja kadar olan kendi mesajlarım.
+  let readUpTo = -1;
+  for (let i = list.length - 1; i >= 0; i--) {
+    if (list[i].getSender() === me && readByOthers(room, list[i])) {
+      readUpTo = i;
+      break;
+    }
+  }
+  const [dragging, setDragging] = useState(false);
+
   let lastDay = "";
   return (
-    <section className="room" aria-label={t("Açık sohbet")}>
+    <section
+      className={"room" + (dragging ? " dragging" : "")}
+      aria-label={t("Açık sohbet")}
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes("Files")) {
+          e.preventDefault();
+          setDragging(true);
+        }
+      }}
+      onDragLeave={(e) => {
+        if (e.currentTarget === e.target) setDragging(false);
+      }}
+      onDrop={onDrop}
+    >
+      {dragging && <div className="drop-hint">{t("Göndermek için bırak")}</div>}
       <header className="room-head">
         <button type="button" className="icon-btn only-narrow" aria-label={t("Geri")} onClick={onBack}>
           <BackIcon />
@@ -203,7 +268,7 @@ export function RoomView({ room, onBack }: { room: Room; onBack: () => void }) {
         <Avatar name={room.name} size={44} colorKey={room.roomId} mxc={room.getMxcAvatarUrl() ?? (partner ? room.getMember(partner)?.getMxcAvatarUrl() : undefined) ?? undefined} />
         <span className="room-title">
           <span className="room-name">{secret ? t("Gizli sohbet") + " · " + room.name : room.name}</span>
-          <span className={"room-sub" + (isDirect && partner && online.has(partner) ? " on" : "")}>{subtitle}</span>
+          <span className={"room-sub" + ((isDirect && partner && online.has(partner)) || typing.length > 0 ? " on" : "")}>{subtitle}</span>
         </span>
       </header>
 
@@ -212,14 +277,14 @@ export function RoomView({ room, onBack }: { room: Room; onBack: () => void }) {
           <LockIcon size={14} />
           <span>{t("Mesajlar uçtan uca şifreli. Tayfa dahil kimse okuyamaz.")}</span>
         </div>
-        {list.map((ev) => {
+        {list.map((ev, index) => {
           const day = dayLabel(ev.getTs());
           const showDay = day !== lastDay;
           lastDay = day;
           return (
             <div key={ev.getId() ?? ev.getTxnId()}>
               {showDay && <div className="day">{day}</div>}
-              <Bubble ev={ev} mine={ev.getSender() === me} showSender={!isDirect} />
+              <Bubble ev={ev} mine={ev.getSender() === me} showSender={!isDirect} read={index <= readUpTo} />
             </div>
           );
         })}
@@ -237,11 +302,17 @@ export function RoomView({ room, onBack }: { room: Room; onBack: () => void }) {
         </button>
         <label className="composer-field">
           <span className="sr-only">{t("Mesaj")}</span>
-          <input
-            type="text"
+          <textarea
+            rows={1}
             placeholder={t("Mesaj yaz")}
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => {
+              setText(e.target.value);
+              setTyping(room.roomId, e.target.value.trim().length > 0);
+            }}
+            onKeyDown={onKeyDown}
+            onPaste={onPaste}
+            onBlur={() => setTyping(room.roomId, false)}
             autoComplete="off"
           />
         </label>

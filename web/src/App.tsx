@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { SyncState } from "matrix-js-sdk";
-import { getLang, setLang, t, type Lang } from "./i18n";
-import { backupState, client, getVersion, loggedOut, logout, savedSession, start, subscribe, syncState } from "./session";
+import { t } from "./i18n";
+import { backupState, client, getVersion, loggedOut, savedSession, setNotificationText, setOpenRoom, start, subscribe, syncState, unreadTotal } from "./session";
+import { SettingsMenu } from "./components/SettingsMenu";
 import { ChatList } from "./components/ChatList";
 import { RoomView } from "./components/RoomView";
 import { Login } from "./components/Login";
 import { RecoveryDialog } from "./components/Recovery";
-import { ChatIcon, KeyIcon, LogoMark, SettingsIcon } from "./components/Icons";
+import { ChatIcon, KeyIcon, LogoMark } from "./components/Icons";
 
 function useDark(): [boolean, (v: boolean) => void] {
   const [dark, setDark] = useState(() => {
@@ -57,7 +58,6 @@ export function App() {
 function Main({ dark, setDark }: { dark: boolean; setDark: (v: boolean) => void }) {
   useSyncExternalStore(subscribe, getVersion);
   const [selected, setSelected] = useState<string | null>(null);
-  const [menu, setMenu] = useState(false);
   const [recovery, setRecovery] = useState(false);
   const [backup, setBackup] = useState<"none" | "locked" | "ready">("none");
   const ready = syncState === SyncState.Prepared || syncState === SyncState.Syncing;
@@ -73,6 +73,20 @@ function Main({ dark, setDark }: { dark: boolean; setDark: (v: boolean) => void 
       }
     });
   }, [ready, recovery]);
+
+  // Açık sohbet (o sohbetin mesajları için bildirim çıkmaz) ve sekme başlığında okunmamış sayısı.
+  useEffect(() => setOpenRoom(selected), [selected]);
+  useEffect(() => setNotificationText(() => t("Yeni mesaj")), []);
+  const unread = unreadTotal();
+  useEffect(() => {
+    document.title = unread > 0 ? `(${unread}) Tayfa` : "Tayfa";
+  }, [unread]);
+  // Masaüstü bildirimine tıklanınca o sohbeti aç.
+  useEffect(() => {
+    const open = (e: Event) => setSelected((e as CustomEvent<string>).detail);
+    window.addEventListener("tayfa-ac", open);
+    return () => window.removeEventListener("tayfa-ac", open);
+  }, []);
 
   if (loggedOut) {
     return (
@@ -102,44 +116,17 @@ function Main({ dark, setDark }: { dark: boolean; setDark: (v: boolean) => void 
             <KeyIcon />
           </button>
         )}
-        <div className="menu-wrap">
-          <button type="button" className="rail-btn" aria-label={t("Ayarlar")} aria-expanded={menu} onClick={() => setMenu((m) => !m)}>
-            <SettingsIcon />
-          </button>
-          {menu && (
-            <div className="menu" role="menu">
-              <label className="menu-row">
-                <span>{t("Karanlık mod")}</span>
-                <input type="checkbox" checked={dark} onChange={(e) => setDark(e.target.checked)} />
-              </label>
-              <label className="menu-row">
-                <span>{t("Dil")}</span>
-                <select
-                  value={getLang()}
-                  onChange={(e) => {
-                    setLang(e.target.value as Lang);
-                    location.reload();
-                  }}
-                >
-                  <option value="tr">Türkçe</option>
-                  <option value="en">English</option>
-                  <option value="ar">العربية</option>
-                </select>
-              </label>
-              {backup === "locked" && (
-                <button type="button" className="menu-row" onClick={() => setRecovery(true)}>
-                  {t("Eski mesajları aç")}
-                </button>
-              )}
-              <button type="button" className="menu-row danger" onClick={() => void logout()}>
-                {t("Çıkış yap")}
-              </button>
-            </div>
-          )}
-        </div>
+        <SettingsMenu dark={dark} setDark={setDark} backupLocked={backup === "locked"} onRecovery={() => setRecovery(true)} placement="rail" />
       </nav>
 
-      <ChatList selected={selected} onSelect={setSelected} ready={ready} />
+      <ChatList
+        selected={selected}
+        onSelect={setSelected}
+        ready={ready}
+        menu={<SettingsMenu dark={dark} setDark={setDark} backupLocked={backup === "locked"} onRecovery={() => setRecovery(true)} placement="top" />}
+        backupLocked={backup === "locked"}
+        onRecovery={() => setRecovery(true)}
+      />
 
       {room ? (
         <RoomView room={room} onBack={() => setSelected(null)} />
