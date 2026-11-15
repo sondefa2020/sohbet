@@ -50,16 +50,20 @@ import kotlinx.coroutines.launch
 
 private val USERNAME = Regex("^[a-z0-9][a-z0-9._-]{2,19}$")
 
-/** Şifreli kayıt ve giriş: kullanıcı adı + şifre, e-posta isteğe bağlı. */
+/** Giriş: varsayılan telefon numarası + SMS kodu (WhatsApp mantığı); eski hesaplar için kullanıcı adıyla giriş. */
 @Composable
 fun AuthFlow() {
-    var page by remember { mutableStateOf("login") }
+    var page by remember { mutableStateOf("phone") }
     when (page) {
+        "phone" -> PhoneAuthScreen(onUsernameLogin = { page = "login" })
         "register" -> RegisterScreen(onBack = { page = "login" })
         "forgot" -> ForgotScreen(onBack = { page = "login" })
-        else -> LoginScreen(onRegister = { page = "register" }, onForgot = { page = "forgot" })
+        else -> LoginScreen(onRegister = { page = "phone" }, onForgot = { page = "forgot" })
     }
 }
+
+@Composable
+internal fun AuthPageBox(content: @Composable ColumnScope.() -> Unit) = AuthPage(content)
 
 @Composable
 private fun AuthPage(content: @Composable ColumnScope.() -> Unit) {
@@ -117,7 +121,7 @@ private fun LoginScreen(onRegister: () -> Unit, onForgot: () -> Unit) {
         }
         Spacer(Modifier.height(12.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onRegister) { Text(t("Hesap oluştur"), fontSize = 15.sp) }
+            TextButton(onClick = onRegister) { Text(t("Telefonla giriş"), fontSize = 15.sp) }
             Text("·", color = Muted)
             TextButton(onClick = onForgot) { Text(t("Şifremi unuttum"), fontSize = 15.sp) }
         }

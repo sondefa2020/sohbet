@@ -1,6 +1,7 @@
 package com.bayx.chat
 
 import androidx.compose.material.icons.outlined.PersonAddAlt
+import androidx.compose.material.icons.outlined.Contacts
 import androidx.compose.material.icons.outlined.PersonSearch
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.graphics.asImageBitmap
@@ -66,6 +67,7 @@ import com.bayx.chat.data.Bayx
 import com.bayx.chat.data.ProfileRepo
 import com.bayx.chat.data.PresenceRepo
 import com.bayx.chat.data.ContactsRepo
+import com.bayx.chat.data.PhonebookRepo
 import com.bayx.chat.data.ChatFlags
 import com.bayx.chat.data.ChatPrefs
 import com.bayx.chat.data.ChatSummary
@@ -358,8 +360,17 @@ fun ChatListScreen(
     var findResult by remember { mutableStateOf<Api.ContactFind?>(null) }
     var finding by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val toast = rememberToast()
     val context = LocalContext.current
+    val phonebook by PhonebookRepo.entries.collectAsState()
+    val phonebookSyncing by PhonebookRepo.syncing.collectAsState()
+    var contactsAllowed by remember { mutableStateOf(PhonebookRepo.hasPermission(context)) }
+    val contactsPermission = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        contactsAllowed = granted
+        if (granted) scope.launch { PhonebookRepo.sync(context) }
+    }
+    val toast = rememberToast()
     val tabs = listOf(
         "Sohbetler" to Icons.Outlined.ChatBubbleOutline,
         t("Kişiler") to Icons.Outlined.Group,
@@ -538,29 +549,69 @@ fun ChatListScreen(
                         }
                     }
                     1 -> {
-                        val friends = members.filter { query.isBlank() || it.displayName.contains(query, true) || it.userId.contains(query, true) }
+                        // WhatsApp mantığı: kişiler cihaz rehberinden gelir; yalnızca numarası kayıtlı olanlar.
+                        val book = phonebook.filter { query.isBlank() || it.name.contains(query, true) || it.phone.contains(query.filter { c -> c.isDigit() }) }
                         LazyColumn {
-                            item {
-                                Column(Modifier.padding(horizontal = 16.dp)) {
-                                    OutlinedTextField(
-                                        value = findText,
-                                        onValueChange = { findText = it.lowercase().trim(); findResult = null },
-                                        singleLine = true,
-                                        placeholder = { Text(t("Kullanıcı adıyla kişi bul"), color = Muted) },
-                                        leadingIcon = { Icon(Icons.Outlined.PersonSearch, contentDescription = null, tint = Muted) },
-                                        trailingIcon = {
-                                            TextButton(onClick = { doFind() }, enabled = findText.isNotBlank() && !finding) { Text("Bul") }
+                            if (!contactsAllowed) {
+                                item {
+                                    Column(
+                                        Modifier.padding(16.dp).fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(CardBg).padding(20.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                    ) {
+                                        Icon(Icons.Outlined.Contacts, contentDescription = null, tint = Blue, modifier = Modifier.size(40.dp))
+                                        Spacer(Modifier.height(10.dp))
+                                        Text(t("Rehberindeki Tayfa kullanıcılarını bul"), color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp, textAlign = TextAlign.Center)
+                                        Spacer(Modifier.height(6.dp))
+                                        Text(
+                                            t("Tayfa, rehberindeki numaralardan kimlerin Tayfa kullandığını bulur. Numaralar sunucuya açık gönderilmez."),
+                                            color = Muted, fontSize = 14.sp, textAlign = TextAlign.Center, lineHeight = 20.sp,
+                                        )
+                                        Spacer(Modifier.height(14.dp))
+                                        SandButton(t("Rehbere erişime izin ver")) { contactsPermission.launch(android.Manifest.permission.READ_CONTACTS) }
+                                    }
+                                }
+                            } else {
+                                item {
+                                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Text(tf("Tayfa'daki kişilerin (%s)", phonebook.size), color = Muted, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                                        TextButton(onClick = { scope.launch { PhonebookRepo.sync(context) } }, enabled = !phonebookSyncing) {
+                                            Text(if (phonebookSyncing) t("Yenileniyor…") else t("Yenile"))
+                                        }
+                                    }
+                                }
+                                if (book.isEmpty() && !phonebookSyncing) {
+                                    item {
+                                        Text(
+                                            t("Rehberinde henüz Tayfa kullanan kimse yok. Arkadaşlarını davet et."),
+                                            color = Muted, textAlign = TextAlign.Center, lineHeight = 22.sp,
+                                            modifier = Modifier.fillMaxWidth().padding(28.dp),
+                                        )
+                                    }
+                                }
+                                items(book, key = { "pb-" + it.userId }) { entry ->
+                                    val p = presences[entry.userId]
+                                    PersonRow(
+                                        entry.name,
+                                        (p?.status ?: entry.status).ifBlank { "+" + entry.phone },
+                                        mode = p?.mode,
+                                        url = entry.avatarUrl,
+                                    ) { openDirectId(entry.userId) }
+                                }
+                                item {
+                                    TextButton(
+                                        onClick = {
+                                            val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                                type = "text/plain"
+                                                putExtra(android.content.Intent.EXTRA_TEXT, t("Tayfa'da benimle uçtan uca şifreli sohbet et: https://sohbet.acioglu.tr"))
+                                            }
+                                            context.startActivity(android.content.Intent.createChooser(send, t("Arkadaşlarını davet et")))
                                         },
-                                        shape = RoundedCornerShape(22.dp),
-                                        colors = OutlinedTextFieldDefaults.colors(
-                                            focusedContainerColor = CardBg,
-                                            unfocusedContainerColor = CardBg,
-                                            unfocusedBorderColor = Line,
-                                            focusedBorderColor = Blue,
-                                        ),
-                                        modifier = Modifier.fillMaxWidth(),
-                                    )
-                                    findResult?.takeIf { it.found }?.let { r -> FindResultCard(r, onRequest = { sendRequest(r.username) }, onOpen = { openDirectId(it) }) }
+                                        modifier = Modifier.padding(horizontal = 8.dp),
+                                    ) {
+                                        Icon(Icons.Outlined.PersonAddAlt, contentDescription = null)
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(t("Arkadaşlarını davet et"), fontWeight = FontWeight.SemiBold)
+                                    }
                                 }
                             }
                             if (contacts.incoming.isNotEmpty()) {
@@ -570,32 +621,6 @@ fun ChatListScreen(
                                         onAccept = { scope.launch { if (ContactsRepo.acceptContact(m.userId.substringBefore(":").removePrefix("@"))) toast(tf("%s artık kişilerinde.", m.displayName)) } },
                                         onReject = { scope.launch { ContactsRepo.rejectContact(m.userId.substringBefore(":").removePrefix("@")) } })
                                 }
-                            }
-                            if (contacts.outgoing.isNotEmpty()) {
-                                item { SectionLabel(tf("Gönderilen istekler (%s)", contacts.outgoing.size)) }
-                                items(contacts.outgoing, key = { "out-" + it.userId }) { m ->
-                                    RequestRow(m, incoming = false, onAccept = {},
-                                        onReject = { scope.launch { ContactsRepo.rejectContact(m.userId.substringBefore(":").removePrefix("@")) } })
-                                }
-                            }
-                            item { SectionLabel(tf("Kişilerim (%s)", friends.size)) }
-                            if (friends.isEmpty()) {
-                                item {
-                                    Text(
-                                        t("Henüz kişin yok. Yukarıdan kullanıcı adıyla birini bul ve istek gönder."),
-                                        color = Muted, textAlign = TextAlign.Center, lineHeight = 22.sp,
-                                        modifier = Modifier.fillMaxWidth().padding(28.dp),
-                                    )
-                                }
-                            }
-                            items(friends, key = { it.userId }) { member ->
-                                val p = presences[member.userId]
-                                PersonRow(
-                                    member.displayName,
-                                    (p?.status ?: member.status).ifBlank { modeLabel(p?.mode ?: member.mode) },
-                                    mode = p?.mode ?: member.mode,
-                                    url = member.avatarUrl,
-                                ) { openDirect(member) }
                             }
                         }
                     }

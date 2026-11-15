@@ -356,6 +356,7 @@ object Bayx {
         roomsPrimed = false
         PresenceRepo.reset()
         ContactsRepo.reset()
+        runCatching { PhonebookRepo.reset(appContext) }
         StatusRepo.reset()
         ProfileRepo.reset()
         synchronized(effectSeen) { effectSeen.clear() }
@@ -485,6 +486,9 @@ object Bayx {
         refreshRooms()
     }
 
+    /** Rehber güncellenince sohbet adlarını yenile. */
+    fun refreshNames() = refreshRooms()
+
     internal fun refreshRooms() {
         refreshJob?.cancel()
         refreshJob = scope.launch {
@@ -545,9 +549,11 @@ object Bayx {
             }
             else -> Unit
         }
+        val partner = if (info.isDirect) dmPartner(room) else null
         return ChatSummary(
             id = info.id,
-            name = info.displayName?.takeIf { it.isNotBlank() } ?: "Sohbet",
+            // WhatsApp gibi: birebir sohbette kişi rehberdeki adıyla görünür.
+            name = PhonebookRepo.nameFor(partner) ?: info.displayName?.takeIf { it.isNotBlank() } ?: "Sohbet",
             lastMessage = text,
             time = time,
             unread = info.numUnreadMessages.toInt(),
@@ -555,7 +561,7 @@ object Bayx {
             lastFromMe = fromMe,
             secret = secretLifetime(info.topic) != null,
             avatarUrl = info.avatarUrl ?: if (info.isDirect || secretLifetime(info.topic) != null) heroAvatar(room) else null,
-            dmUserId = if (info.isDirect) dmPartner(room) else null,
+            dmUserId = partner,
         )
     }
 

@@ -281,7 +281,7 @@ private fun statusText(call: CallState): String {
                 else -> time
             }
         }
-        CallPhase.ENDED -> call.endReason ?: "Arama sona erdi"
+        CallPhase.ENDED -> t(call.endReason ?: "Arama sona erdi")
     }
 }
 

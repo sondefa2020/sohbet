@@ -1,5 +1,6 @@
 package com.bayx.chat
 
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.material3.TextButton
@@ -278,7 +279,41 @@ private fun MainNav(me: AuthState.LoggedIn) {
         }
     }
 
+    // Rehber eşleştirmesi (WhatsApp mantığı) ve yeni hesapta ad sorma; eski hesapta numara bağlama önerisi.
+    var askName by remember { mutableStateOf(NamePrompt.pending(context)) }
+    LaunchedEffect(Unit) {
+        com.bayx.chat.data.PhonebookRepo.start(context)
+        val token = Bayx.accessToken ?: return@LaunchedEffect
+        val phone = runCatching { com.bayx.chat.data.Api.phoneMe(token) }.getOrNull()
+        val prefs = context.getSharedPreferences("tayfa_giris", android.content.Context.MODE_PRIVATE)
+        if (phone != null && phone.isEmpty() && !prefs.getBoolean("numara_soruldu", false)) {
+            prefs.edit().putBoolean("numara_soruldu", true).apply()
+            nav.navigate("phonelink") { launchSingleTop = true }
+        }
+    }
+    if (askName) {
+        TextInputDialog(
+            title = t("Adın"),
+            initial = "",
+            maxLength = 40,
+            onDismiss = {},
+            onSave = { name ->
+                val clean = name.trim()
+                if (clean.isNotEmpty()) {
+                    askName = false
+                    NamePrompt.done(context)
+                    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                        com.bayx.chat.data.ProfileRepo.setDisplayName(clean)
+                    }
+                }
+            },
+        )
+    }
+
     NavHost(navController = nav, startDestination = "chats") {
+        composable("phonelink") {
+            PhoneAuthScreen(linkToken = Bayx.accessToken, onLinked = { nav.popBackStack() })
+        }
         composable("chats") {
             ChatListScreen(
                 me = me,

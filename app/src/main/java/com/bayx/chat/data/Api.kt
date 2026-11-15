@@ -147,6 +147,29 @@ private data class PresenceDto(
     val me: PresenceMeDto = PresenceMeDto(),
 )
 
+@Serializable private data class PhoneStartDto(val phone: String = "", val masked: String = "", val resend: Int = 60)
+
+@Serializable
+private data class PhoneVerifyDto(
+    val username: String = "",
+    val otp: String = "",
+    @SerialName("new") val isNew: Boolean = false,
+    val phone: String = "",
+)
+
+@Serializable private data class PhoneMeDto(val phone: String = "", val masked: String = "")
+
+@Serializable
+private data class MatchDto(
+    val hash: String = "",
+    @SerialName("user_id") val userId: String = "",
+    @SerialName("display_name") val displayName: String = "",
+    @SerialName("avatar_url") val avatarUrl: String = "",
+    val status: String = "",
+)
+
+@Serializable private data class MatchesDto(val matches: List<MatchDto> = emptyList())
+
 @Serializable private data class CallEventsDto(val events: List<JsonObject> = emptyList())
 
 /** Tayfa kayıt/yönetim servisi ve birkaç doğrudan Matrix çağrısı için HTTP istemcisi. */
@@ -266,6 +289,38 @@ object Api {
     suspend fun emailSet(token: String, email: String) =
         post<EmailDto>("/bayx/v3/email/set", buildJsonObject { put("email", email) }, token).toStatus()
     suspend fun emailResend(token: String) = post<EmailDto>("/bayx/v3/email/resend", token = token).toStatus()
+
+    // ---------------------------------------------------------------- telefon (WhatsApp mantığı)
+
+    data class PhoneStart(val phone: String, val masked: String, val resendSeconds: Int)
+    /** Doğrulama sonucu: [username] + tek seferlik [otp] ile giriş yapılır; [isNew] yeni hesap mı. */
+    data class PhoneVerify(val username: String, val otp: String, val isNew: Boolean)
+    data class PhoneMatch(val hash: String, val userId: String, val displayName: String, val avatarUrl: String?, val status: String)
+
+    suspend fun phoneStart(phone: String): PhoneStart {
+        val dto = post<PhoneStartDto>("/bayx/v4/phone/start", buildJsonObject { put("phone", phone) })
+        return PhoneStart(dto.phone, dto.masked, dto.resend)
+    }
+
+    /** [token] verilirse numarayı oturumdaki hesaba bağlar; verilmezse giriş/kayıt yapar. */
+    suspend fun phoneVerify(phone: String, code: String, token: String? = null): PhoneVerify {
+        val dto = post<PhoneVerifyDto>("/bayx/v4/phone/verify", buildJsonObject {
+            put("phone", phone)
+            put("code", code)
+        }, token)
+        return PhoneVerify(dto.username, dto.otp, dto.isNew)
+    }
+
+    suspend fun phoneMe(token: String): String = post<PhoneMeDto>("/bayx/v4/phone/me", token = token).phone
+
+    suspend fun contactsMatch(token: String, hashes: List<String>): List<PhoneMatch> {
+        val body = buildJsonObject {
+            put("hashes", kotlinx.serialization.json.JsonArray(hashes.map { kotlinx.serialization.json.JsonPrimitive(it) }))
+        }
+        return post<MatchesDto>("/bayx/v4/contacts/match", body, token).matches.map {
+            PhoneMatch(it.hash, it.userId, it.displayName, it.avatarUrl.ifEmpty { null }, it.status)
+        }
+    }
 
     // ---------------------------------------------------------------- kişiler
 
