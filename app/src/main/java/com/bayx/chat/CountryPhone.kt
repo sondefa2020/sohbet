@@ -147,7 +147,10 @@ fun CountryPhoneField(
         }
         Spacer(Modifier.width(8.dp))
         OutlinedTextField(
-            value = Phones.formatAsYouType(region, digits),
+            // Alanda yalnızca rakamlar tutulur; boşluklar sadece görünümde eklenir.
+            // Böylece yazarken imleç kaymaz.
+            value = digits,
+            visualTransformation = remember(region) { PhoneFormatTransformation(region) },
             onValueChange = { v ->
                 val clean = v.filter { it.isDigit() }.take(17)
                 // Numara + ile yapıştırıldıysa ülkeyi de oradan al.
@@ -254,4 +257,31 @@ private fun CountryDialog(current: String, onPick: (String) -> Unit, onDismiss: 
             }
         }
     }
+}
+
+
+/** Numarayı yazarken biçimlendirir (ör. 544 072 27 27); imleç rakamlara göre doğru yerde kalır. */
+private class PhoneFormatTransformation(private val region: String) : androidx.compose.ui.text.input.VisualTransformation {
+    override fun filter(text: androidx.compose.ui.text.AnnotatedString): androidx.compose.ui.text.input.TransformedText {
+        val raw = text.text
+        val formatted = runCatching { Phones.formatAsYouType(region, raw) }.getOrDefault(raw)
+        // Biçimlenmiş metin aynı rakamları aynı sırada içermiyorsa düz göster.
+        if (formatted.filter { it.isDigit() } != raw) {
+            return androidx.compose.ui.text.input.TransformedText(text, androidx.compose.ui.text.input.OffsetMapping.Identity)
+        }
+        // digitPos[i] = biçimli metinde i. rakamın konumu
+        val digitPos = formatted.indices.filter { formatted[it].isDigit() }
+        val mapping = object : androidx.compose.ui.text.input.OffsetMapping {
+            override fun originalToTransformed(offset: Int): Int = when {
+                offset <= 0 -> if (digitPos.isEmpty()) 0 else digitPos[0]
+                offset >= digitPos.size -> formatted.length
+                else -> digitPos[offset - 1] + 1
+            }
+            override fun transformedToOriginal(offset: Int): Int =
+                digitPos.count { it < offset }.coerceIn(0, raw.length)
+        }
+        return androidx.compose.ui.text.input.TransformedText(androidx.compose.ui.text.AnnotatedString(formatted), mapping)
+    }
+    override fun equals(other: Any?) = other is PhoneFormatTransformation && other.region == region
+    override fun hashCode() = region.hashCode()
 }
