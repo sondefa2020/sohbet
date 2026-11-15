@@ -92,6 +92,19 @@ def clean_message(msg):
     return "".join(ch for ch in msg if ch in _ALLOWED)
 
 
+def _success(text):
+    """Sağlayıcı yanıtı başarılı mı? Hatalar "2:Kullanici bulunamadi" gibi "kod:açıklama" biçiminde gelir."""
+    if not text:
+        return False
+    low = text.lower()
+    if any(w in low for w in ("bulunamadi", "hata", "error", "gecersiz", "yetersiz", "hatali", "yetkisiz", "basarisiz")):
+        return False
+    m = re.match(r"^\s*(-?\d+)\s*:", text)
+    if m and m.group(1) not in ("1", "00"):
+        return False  # yalnızca 1 (ya da 00) başarı kodu sayılır; diğer kodlar hata
+    return True
+
+
 def send_sms(phone, message):
     """SMS gönderir. (başarılı mı, sağlayıcı yanıtı) döner."""
     if not sms_ready():
@@ -116,8 +129,7 @@ def send_sms(phone, message):
             req.add_header("Content-Type", "application/x-www-form-urlencoded")
             with urllib.request.urlopen(req, timeout=20) as r:
                 text = r.read().decode("utf-8", "replace").strip()
-            ok = bool(text) and not re.match(r"^(0\d\b|-|hata|error|err)", text, re.I)
-            return ok, text[:200]
+            return _success(text), text[:200]
         except Exception as e:  # ağ hatası: bir sonraki adresi dene
             last = type(e).__name__
     return False, last
