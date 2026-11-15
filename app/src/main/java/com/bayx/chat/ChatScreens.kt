@@ -106,6 +106,10 @@ import com.bayx.chat.data.Api
 import com.bayx.chat.data.ApiException
 import com.bayx.chat.data.AuthState
 import com.bayx.chat.data.Bayx
+import com.bayx.chat.data.RecoveryRepo
+import com.bayx.chat.data.ProfileRepo
+import com.bayx.chat.data.PresenceRepo
+import com.bayx.chat.data.ContactsRepo
 import com.bayx.chat.data.Calls
 import com.bayx.chat.data.ChatMessage
 import com.bayx.chat.data.ChatSession
@@ -152,8 +156,8 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
     val messages by session.messages.collectAsState()
     val title by session.title.collectAsState()
     val partner by session.dmUserId.collectAsState()
-    val onlineUsers by Bayx.online.collectAsState()
-    val presences by Bayx.presences.collectAsState()
+    val onlineUsers by PresenceRepo.online.collectAsState()
+    val presences by PresenceRepo.presences.collectAsState()
     val typing by session.typing.collectAsState()
     val rooms by Bayx.rooms.collectAsState()
     val partnerOnline = partner != null && partner in onlineUsers
@@ -743,7 +747,7 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
                 TextButton(onClick = {
                     blockPeer = null
                     scope.launch {
-                        if (Bayx.blockContact(uname)) { toast("@$uname engellendi."); onBack() } else toast("Engellenemedi.")
+                        if (ContactsRepo.blockContact(uname)) { toast("@$uname engellendi."); onBack() } else toast("Engellenemedi.")
                     }
                 }) { Text("Engelle", color = Color(0xFFB4232A)) }
             },
@@ -1048,20 +1052,20 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
     val toast = rememberToast()
     val context = LocalContext.current
     val name = me.displayName.ifEmpty { me.userId.substringBefore(":").removePrefix("@") }
-    val myMode by Bayx.myMode.collectAsState()
-    val myStatus by Bayx.myStatus.collectAsState()
-    val myAvatar by Bayx.myAvatarUrl.collectAsState()
+    val myMode by PresenceRepo.myMode.collectAsState()
+    val myStatus by PresenceRepo.myStatus.collectAsState()
+    val myAvatar by ProfileRepo.myAvatarUrl.collectAsState()
     var editName by remember { mutableStateOf(false) }
     var editStatus by remember { mutableStateOf(false) }
     var pickMode by remember { mutableStateOf(false) }
     var uploading by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { Bayx.refreshMyAvatar() }
+    LaunchedEffect(Unit) { ProfileRepo.refreshMyAvatar() }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) {
             uploading = true
             scope.launch {
                 val jpeg = withContext(Dispatchers.IO) { avatarJpeg(context, uri) }
-                val ok = jpeg != null && Bayx.setAvatar(jpeg)
+                val ok = jpeg != null && ProfileRepo.setAvatar(jpeg)
                 uploading = false
                 toast(if (ok) t("Profil fotoğrafı güncellendi.") else t("Fotoğraf yüklenemedi."))
             }
@@ -1229,12 +1233,12 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
                 }) {
                     ThemeState.toggle()
                 }
-                val recState by Bayx.recoveryState.collectAsState()
+                val recState by RecoveryRepo.recoveryState.collectAsState()
                 SettingRow(Icons.Outlined.Backup, t("Mesaj yedeği"), trailing = {
                     Text(recoveryLabel(recState), color = Muted, fontSize = 14.sp)
                 }) {
                     when (recState) {
-                        org.matrix.rustcomponents.sdk.RecoveryState.INCOMPLETE -> Bayx.recoveryPrompt.value = true
+                        org.matrix.rustcomponents.sdk.RecoveryState.INCOMPLETE -> RecoveryRepo.recoveryPrompt.value = true
                         org.matrix.rustcomponents.sdk.RecoveryState.UNKNOWN -> info = t("Bağlantı kuruluyor, birazdan tekrar dene.")
                         else -> confirmNewKey = true
                     }
@@ -1325,7 +1329,7 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
         ) { value ->
             editName = false
             if (value.isNotBlank() && value != name) {
-                scope.launch { toast(if (Bayx.setDisplayName(value.trim())) t("Adın güncellendi.") else t("Ad değiştirilemedi.")) }
+                scope.launch { toast(if (ProfileRepo.setDisplayName(value.trim())) t("Adın güncellendi.") else t("Ad değiştirilemedi.")) }
             }
         }
     }
@@ -1337,7 +1341,7 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
             onDismiss = { editStatus = false },
         ) { value ->
             editStatus = false
-            Bayx.setStatusMessage(value.trim())
+            PresenceRepo.setStatusMessage(value.trim())
         }
     }
     if (pickMode) {
@@ -1350,7 +1354,7 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
                         Row(
                             Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable {
                                 pickMode = false
-                                Bayx.setMode(mode)
+                                PresenceRepo.setMode(mode)
                             }.padding(vertical = 12.dp, horizontal = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -1367,7 +1371,7 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
     info?.let { message -> InfoDialog(message) { info = null } }
 
     if (confirmNewKey) {
-        val enabled = Bayx.recoveryState.collectAsState().value == org.matrix.rustcomponents.sdk.RecoveryState.ENABLED
+        val enabled = RecoveryRepo.recoveryState.collectAsState().value == org.matrix.rustcomponents.sdk.RecoveryState.ENABLED
         AlertDialog(
             onDismissRequest = { confirmNewKey = false },
             title = { Text(t("Mesaj yedeği")) },
@@ -1380,7 +1384,7 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
             confirmButton = {
                 TextButton(onClick = {
                     confirmNewKey = false
-                    scope.launch { Bayx.createRecoveryKey()?.let { info = t(it) } }
+                    scope.launch { RecoveryRepo.createRecoveryKey()?.let { info = t(it) } }
                 }) { Text(if (enabled) t("Yeni anahtar oluştur") else t("Yedeği aç")) }
             },
             dismissButton = { TextButton(onClick = { confirmNewKey = false }) { Text(t("Vazgeç")) } },
@@ -1851,7 +1855,7 @@ private fun ActionRow(icon: ImageVector, label: String, onClick: () -> Unit, tin
 /** İletme: kişilerden birini seç, metni ona ilet. */
 @Composable
 private fun ForwardDialog(msg: ChatMessage, onDismiss: () -> Unit) {
-    val contacts by Bayx.contacts.collectAsState()
+    val contacts by ContactsRepo.contacts.collectAsState()
     val scope = rememberCoroutineScope()
     val toast = rememberToast()
     var busy by remember { mutableStateOf(false) }

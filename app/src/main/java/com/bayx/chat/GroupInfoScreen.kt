@@ -26,6 +26,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bayx.chat.data.Bayx
+import com.bayx.chat.data.GroupRepo
+import com.bayx.chat.data.ContactsRepo
 import kotlinx.coroutines.launch
 
 private val LeaveRed = Color(0xFFB4232A)
@@ -34,17 +36,17 @@ private val LeaveRed = Color(0xFFB4232A)
 fun GroupInfoScreen(roomId: String, onBack: () -> Unit, onLeft: () -> Unit) {
     val scope = rememberCoroutineScope()
     val toast = rememberToast()
-    var info by remember { mutableStateOf<Bayx.GroupInfo?>(null) }
+    var info by remember { mutableStateOf<GroupRepo.GroupInfo?>(null) }
     var loading by remember { mutableStateOf(true) }
     var busy by remember { mutableStateOf(false) }
 
     var renaming by remember { mutableStateOf(false) }
     var adding by remember { mutableStateOf(false) }
     var leaving by remember { mutableStateOf(false) }
-    var actionMember by remember { mutableStateOf<Bayx.GroupMember?>(null) }
+    var actionMember by remember { mutableStateOf<GroupRepo.GroupMember?>(null) }
 
     suspend fun reload() {
-        info = Bayx.groupInfo(roomId)
+        info = GroupRepo.groupInfo(roomId)
         loading = false
     }
     LaunchedEffect(roomId) { reload() }
@@ -184,7 +186,7 @@ fun GroupInfoScreen(roomId: String, onBack: () -> Unit, onLeft: () -> Unit) {
                 TextButton(onClick = {
                     val n = name.trim()
                     renaming = false
-                    if (n.isNotEmpty()) act({ Bayx.renameGroup(roomId, n) }, t("Ad değiştirilemedi."))
+                    if (n.isNotEmpty()) act({ GroupRepo.renameGroup(roomId, n) }, t("Ad değiştirilemedi."))
                 }) { Text("Kaydet") }
             },
             dismissButton = { TextButton(onClick = { renaming = false }) { Text(t("Vazgeç")) } },
@@ -199,7 +201,7 @@ fun GroupInfoScreen(roomId: String, onBack: () -> Unit, onLeft: () -> Unit) {
             onDismiss = { adding = false },
             onAdd = { ids ->
                 adding = false
-                if (ids.isNotEmpty()) act({ Bayx.addGroupMembers(roomId, ids) }, t("Üye eklenemedi."))
+                if (ids.isNotEmpty()) act({ GroupRepo.addGroupMembers(roomId, ids) }, t("Üye eklenemedi."))
             },
         )
     }
@@ -214,7 +216,7 @@ fun GroupInfoScreen(roomId: String, onBack: () -> Unit, onLeft: () -> Unit) {
                 TextButton(onClick = {
                     leaving = false
                     scope.launch {
-                        if (Bayx.leaveGroup(roomId)) onLeft() else toast(t("Gruptan ayrılınamadı."))
+                        if (GroupRepo.leaveGroup(roomId)) onLeft() else toast(t("Gruptan ayrılınamadı."))
                     }
                 }) { Text(t("Ayrıl"), color = LeaveRed) }
             },
@@ -231,11 +233,11 @@ fun GroupInfoScreen(roomId: String, onBack: () -> Unit, onLeft: () -> Unit) {
             onDismiss = { actionMember = null },
             onToggleAdmin = {
                 actionMember = null
-                act({ Bayx.setGroupAdmin(roomId, m.userId, !m.isAdmin) }, t("Yetki değiştirilemedi."))
+                act({ GroupRepo.setGroupAdmin(roomId, m.userId, !m.isAdmin) }, t("Yetki değiştirilemedi."))
             },
             onRemove = {
                 actionMember = null
-                act({ Bayx.removeGroupMember(roomId, m.userId) }, t("Üye çıkarılamadı."))
+                act({ GroupRepo.removeGroupMember(roomId, m.userId) }, t("Üye çıkarılamadı."))
             },
         )
     }
@@ -244,7 +246,7 @@ fun GroupInfoScreen(roomId: String, onBack: () -> Unit, onLeft: () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MemberActionSheet(
-    member: Bayx.GroupMember,
+    member: GroupRepo.GroupMember,
     amAdmin: Boolean,
     onDismiss: () -> Unit,
     onToggleAdmin: () -> Unit,
@@ -281,7 +283,7 @@ private fun MemberActionSheet(
 
 @Composable
 private fun AddMembersDialog(existing: Set<String>, onDismiss: () -> Unit, onAdd: (List<String>) -> Unit) {
-    val contacts by Bayx.contacts.collectAsState()
+    val contacts by ContactsRepo.contacts.collectAsState()
     val candidates = contacts.friends.filter { it.userId !in existing }
     val selected = remember { mutableStateListOf<String>() }
     AlertDialog(

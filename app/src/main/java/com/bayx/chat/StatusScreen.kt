@@ -42,6 +42,7 @@ import com.bayx.chat.data.MediaTools
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.bayx.chat.data.Bayx
+import com.bayx.chat.data.StatusRepo
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -55,7 +56,7 @@ private fun parseColor(hex: String, fallback: Color): Color = runCatching {
 
 @Composable
 fun StatusScreen(onBack: () -> Unit) {
-    val data by Bayx.statuses.collectAsState()
+    val data by StatusRepo.statuses.collectAsState()
     val scope = rememberCoroutineScope()
     var composing by remember { mutableStateOf(false) }
     var viewing by remember { mutableStateOf<Api.StatusUser?>(null) }
@@ -68,14 +69,14 @@ fun StatusScreen(onBack: () -> Unit) {
             uploading = true
             scope.launch {
                 val image = withContext(Dispatchers.IO) { MediaTools.prepareImage(context, uri) }
-                val ok = image != null && Bayx.addImageStatus(image.bytes, "")
+                val ok = image != null && StatusRepo.addImageStatus(image.bytes, "")
                 uploading = false
-                if (!ok) toast(Bayx.statusError.value?.let { t(it) } ?: t("Fotoğraf yüklenemedi."))
+                if (!ok) toast(StatusRepo.statusError.value?.let { t(it) } ?: t("Fotoğraf yüklenemedi."))
             }
         }
     }
 
-    LaunchedEffect(Unit) { Bayx.refreshStatuses() }
+    LaunchedEffect(Unit) { StatusRepo.refreshStatuses() }
 
     Column(Modifier.fillMaxSize().background(PageBrush).systemBarsPadding()) {
         Row(
@@ -86,7 +87,7 @@ fun StatusScreen(onBack: () -> Unit) {
             Text(t("Durum"), color = Ink, fontSize = 22.sp, fontWeight = FontWeight.Bold)
         }
 
-        val statusError by Bayx.statusError.collectAsState()
+        val statusError by StatusRepo.statusError.collectAsState()
         statusError?.let { err ->
             Text(
                 t(err),
@@ -177,7 +178,7 @@ fun StatusScreen(onBack: () -> Unit) {
             onDismiss = { composing = false },
             onShare = { text, bg ->
                 composing = false
-                scope.launch { Bayx.addTextStatus(text, bg)?.let { toast(t(it)) } }
+                scope.launch { StatusRepo.addTextStatus(text, bg)?.let { toast(t(it)) } }
             },
         )
     }
@@ -188,8 +189,8 @@ fun StatusScreen(onBack: () -> Unit) {
             user = user,
             mine = mine,
             onClose = { viewing = null },
-            onSeen = { item -> if (!mine) Bayx.markStatusSeen(user.userId, item.id) },
-            onDelete = { item -> scope.launch { Bayx.deleteStatus(item.id) }; viewing = null },
+            onSeen = { item -> if (!mine) StatusRepo.markStatusSeen(user.userId, item.id) },
+            onDelete = { item -> scope.launch { StatusRepo.deleteStatus(item.id) }; viewing = null },
         )
     }
 }
@@ -308,7 +309,7 @@ private fun StatusViewer(
 
     val photo by produceState<android.graphics.Bitmap?>(initialValue = null, item.id) {
         value = if (item.type == "image" && item.media.isNotBlank()) {
-            Bayx.loadStatusImage(item.media, item.key)?.let { MediaTools.decodeSampled(it, 1600) }
+            StatusRepo.loadStatusImage(item.media, item.key)?.let { MediaTools.decodeSampled(it, 1600) }
         } else null
     }
 

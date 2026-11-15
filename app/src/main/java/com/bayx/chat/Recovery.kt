@@ -16,6 +16,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bayx.chat.data.Bayx
+import com.bayx.chat.data.RecoveryRepo
 import kotlinx.coroutines.launch
 import org.matrix.rustcomponents.sdk.RecoveryState
 
@@ -24,9 +25,9 @@ import org.matrix.rustcomponents.sdk.RecoveryState
 fun RecoveryDialogs() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val newKey by Bayx.newRecoveryKey.collectAsState()
-    val state by Bayx.recoveryState.collectAsState()
-    val prompt by Bayx.recoveryPrompt.collectAsState()
+    val newKey by RecoveryRepo.newRecoveryKey.collectAsState()
+    val state by RecoveryRepo.recoveryState.collectAsState()
+    val prompt by RecoveryRepo.recoveryPrompt.collectAsState()
     val prefs = remember { context.getSharedPreferences("tayfa_yedek", Context.MODE_PRIVATE) }
     // t("Şimdi değil") bir kez seçilince kalıcı olarak hatırlanır; sonra yalnızca Ayarlar'dan açılır.
     var dismissed by remember { mutableStateOf(prefs.getBoolean("sorma", false)) }
@@ -65,7 +66,7 @@ fun RecoveryDialogs() {
                 }
             },
             confirmButton = {
-                TextButton(onClick = { Bayx.newRecoveryKey.value = null }) { Text(t("Kaydettim")) }
+                TextButton(onClick = { RecoveryRepo.newRecoveryKey.value = null }) { Text(t("Kaydettim")) }
             },
         )
         return
@@ -81,7 +82,7 @@ fun RecoveryDialogs() {
         fun close() {
             dismissed = true
             prefs.edit().putBoolean("sorma", true).apply()
-            Bayx.recoveryPrompt.value = false
+            RecoveryRepo.recoveryPrompt.value = false
         }
         if (noKey) {
             AlertDialog(
@@ -97,7 +98,7 @@ fun RecoveryDialogs() {
                     TextButton(enabled = !busy, onClick = {
                         busy = true
                         scope.launch {
-                            val err = Bayx.createRecoveryKey()
+                            val err = RecoveryRepo.createRecoveryKey()
                             busy = false
                             if (err == null) { noKey = false; close() } else { error = t(err); noKey = false }
                         }
@@ -139,7 +140,7 @@ fun RecoveryDialogs() {
                     busy = true
                     error = null
                     scope.launch {
-                        val err = Bayx.recoverWithKey(key)
+                        val err = RecoveryRepo.recoverWithKey(key)
                         busy = false
                         if (err == null) close() else error = t(err)
                     }

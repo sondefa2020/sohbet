@@ -6,6 +6,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.test.core.app.ApplicationProvider
 import com.bayx.chat.data.AuthState
 import com.bayx.chat.data.Bayx
+import com.bayx.chat.data.PresenceRepo
 import com.bayx.chat.data.ChatMessage
 import com.bayx.chat.data.ChatSession
 import com.bayx.chat.data.ChatSummary
@@ -59,7 +60,7 @@ class EkranGoruntuleriTest {
             ChatSummary("!c", "Can", "Sesli mesaj", now - 7_200_000, 0, true, "@can:x", lastFromMe = true),
             ChatSummary("!d", "Elif", "Harika görünüyor!", now - 90_000_000, 0, true, "@elif:x"),
         )
-        Bayx.presences.value = mapOf("@ayse:x" to UserPresence("online", ""), "@can:x" to UserPresence("busy", ""))
+        PresenceRepo.presences.value = mapOf("@ayse:x" to UserPresence("online", ""), "@can:x" to UserPresence("busy", ""))
         compose.setContent { BayxTheme { ChatListScreen(me, onOpenChat = {}, onProfile = {}) } }
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/2-sohbetler.png")
     }
@@ -70,7 +71,7 @@ class EkranGoruntuleriTest {
         session.title.value = "Ayşe"
         session.isDirect = true
         session.dmUserId.value = "@ayse:x"
-        Bayx.presences.value = mapOf("@ayse:x" to UserPresence("online", ""))
+        PresenceRepo.presences.value = mapOf("@ayse:x" to UserPresence("online", ""))
         session.messages.value = listOf(
             ChatMessage("1", MsgKind.TEXT, "Merhaba! Tayfa'nın yeni tasarımını beğendin mi? :)", false, "Ayşe", now - 300_000, MsgState.NONE),
             ChatMessage("2", MsgKind.TEXT, "Harika görünüyor! (Y)", true, "Ben", now - 240_000, MsgState.READ),
@@ -86,7 +87,7 @@ class EkranGoruntuleriTest {
 
     @Test
     fun profil() {
-        Bayx.myStatus.value = "Kodlamaya devam 🎧"
+        PresenceRepo.myStatus.value = "Kodlamaya devam 🎧"
         compose.setContent { BayxTheme { ProfileScreen(me, onBack = {}, onAdmin = {}, onWebLink = {}) } }
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/4-profil.png")
     }

@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.bayx.chat.data.Bayx
+import com.bayx.chat.data.ProfileRepo
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.BinaryBitmap
 import com.google.zxing.DecodeHintType
@@ -67,7 +68,7 @@ fun WebLinkScreen(onBack: () -> Unit) {
         busy = true
         error = null
         scope.launch {
-            val err = Bayx.approveWeb(pairingId, enteredCode)
+            val err = ProfileRepo.approveWeb(pairingId, enteredCode)
             busy = false
             if (err == null) {
                 done = true

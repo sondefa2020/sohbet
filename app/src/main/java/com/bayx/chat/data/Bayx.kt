@@ -87,121 +87,27 @@ import java.security.SecureRandom
 import java.time.Duration
 import java.util.Locale
 
-sealed interface AuthState {
-    data object Loading : AuthState
-    data object LoggedOut : AuthState
-    data object Offline : AuthState
-    data class LoggedIn(val userId: String, val displayName: String) : AuthState
-}
-
-data class ChatSummary(
-    val id: String,
-    val name: String,
-    val lastMessage: String,
-    val time: Long,
-    val unread: Int,
-    val isDirect: Boolean,
-    val dmUserId: String? = null,
-    val lastFromMe: Boolean = false,
-    val secret: Boolean = false,
-    val avatarUrl: String? = null,
-)
-
-enum class MsgKind { TEXT, DATE, IMAGE, VIDEO, VOICE, LOCATION, NUDGE, EFFECT, FILE, POLL }
-enum class MsgState { NONE, SENDING, SENT, READ, FAILED }
-
-/** Bir mesaja bağlı medya: şifreli kaynak adresi ve gösterim için gereken bilgiler. */
-class MediaRef(
-    val source: MediaSource?,
-    val thumbnail: MediaSource?,
-    val mime: String,
-    val durationMs: Long,
-    val width: Int,
-    val height: Int,
-    val geoUri: String?,
-    /** Müzik dosyasıysa şarkı adı, belgede dosya adı; sesli mesajda null. */
-    val title: String? = null,
-    /** Belgenin bayt cinsinden boyutu. */
-    val size: Long = 0L,
-)
-
-/** Bir mesaja verilen tepki: emoji, kaç kişi, ben de verdim mi. */
-data class MsgReaction(val key: String, val count: Int, val mine: Boolean)
-
-/** Anket: seçenekler (kimlik, metin), oy sayıları, benim oylarım. */
-data class PollInfo(
-    val eventId: String?,
-    val question: String,
-    val answers: List<Pair<String, String>>,
-    val counts: Map<String, Int>,
-    val mine: Set<String>,
-    val ended: Boolean,
-) {
-    val total get() = counts.values.sum()
-}
-
-data class ChatMessage(
-    val key: String,
-    val kind: MsgKind,
-    val text: String,
-    val mine: Boolean,
-    val sender: String,
-    val time: Long,
-    val state: MsgState,
-    val media: MediaRef? = null,
-    val eventId: EventOrTransactionId? = null,
-    val reactions: List<MsgReaction> = emptyList(),
-    val poll: PollInfo? = null,
-)
-
-/** Açık bir sohbetin canlı durumu. */
-class ChatSession internal constructor(val roomId: String) {
-    val messages = MutableStateFlow<List<ChatMessage>>(emptyList())
-    val title = MutableStateFlow("")
-    @Volatile var isDirect: Boolean = true
-    val dmUserId = MutableStateFlow<String?>(null)
-    /** Şu an yazmakta olan diğer üyelerin adları. */
-    val typing = MutableStateFlow<List<String>>(emptyList())
-    /** Gizli sohbet mi; öyleyse mesajların kaybolma süresi (ms). */
-    @Volatile var secret: Boolean = false
-    @Volatile var lifetimeMs: Long = 0L
-    /** Normal sohbette kaybolan mesaj süresi (ms, 0 = kapalı); ekranda göstermek için. */
-    val disappearing = MutableStateFlow(0L)
-    internal var room: Room? = null
-    internal var typingHandle: TaskHandle? = null
-    internal var expiryJob: Job? = null
-    internal var timeline: Timeline? = null
-    internal var handle: TaskHandle? = null
-    internal val items = ArrayList<TimelineItem>()
-}
 
 /** Matrix oturumu, eşitleme ve sohbet işlemlerinin tek merkezi. */
 object Bayx {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    internal val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val authMutex = Mutex()
-    private lateinit var appContext: Context
-    private lateinit var store: SecureStore
+    internal lateinit var appContext: Context
+        private set
+    internal lateinit var store: SecureStore
+        private set
 
-    private var client: Client? = null
+    internal var client: Client? = null
+        private set
     private var syncService: SyncService? = null
     private var roomListResult: RoomListEntriesWithDynamicAdaptersResult? = null
     private var delegateHandle: TaskHandle? = null
     private val roomEntries = ArrayList<Room>()
     private var refreshJob: Job? = null
-    private var presenceJob: Job? = null
-    @Volatile private var foreground = false
+    @Volatile internal var foreground = false
+        private set
     private val nudgeSeen = HashSet<String>()
 
-    /** Şu an çevrimiçi olan üyelerin kullanıcı kimlikleri. */
-    val online = MutableStateFlow<Set<String>>(emptySet())
-
-    /** Üyelerin MSN tarzı durumları ve durum mesajları. */
-    val presences = MutableStateFlow<Map<String, UserPresence>>(emptyMap())
-
-    /** Kendi durumum (online, busy, away, invisible) ve durum mesajım. */
-    val myMode = MutableStateFlow("online")
-    val myStatus = MutableStateFlow("")
-    val myAvatarUrl = MutableStateFlow<String?>(null)
 
     /** Gelen ya da gönderilen sohbet efekti (kalp, konfeti, kar). */
     val effects = MutableSharedFlow<String>(extraBufferCapacity = 4)
@@ -447,24 +353,16 @@ object Bayx {
 
     private fun teardown() {
         refreshJob?.cancel()
-        presenceJob?.cancel()
-        presenceJob = null
         roomsPrimed = false
-        online.value = emptySet()
-        presences.value = emptyMap()
-        contacts.value = Api.Contacts(emptyList(), emptyList(), emptyList())
-        myMode.value = "online"
-        myStatus.value = ""
-        myAvatarUrl.value = null
-        avatarCache.evictAll()
+        PresenceRepo.reset()
+        ContactsRepo.reset()
+        StatusRepo.reset()
+        ProfileRepo.reset()
         synchronized(effectSeen) { effectSeen.clear() }
         synchronized(nudgeSeen) { nudgeSeen.clear() }
         runCatching { roomListResult?.entriesStream()?.cancel() }
         runCatching { delegateHandle?.cancel() }
-        runCatching { recoveryHandle?.cancel() }
-        recoveryHandle = null
-        recoveryState.value = RecoveryState.UNKNOWN
-        newRecoveryKey.value = null
+        RecoveryRepo.reset()
         runCatching { syncService?.close() }
         runCatching { client?.close() }
         roomListResult = null
@@ -525,94 +423,22 @@ object Bayx {
         result.controller().setFilter(RoomListEntriesDynamicFilterKind.NonLeft)
         roomListResult = result
         sync.start()
-        watchRecovery(c)
-        startPresence()
+        RecoveryRepo.watchRecovery(c)
+        PresenceRepo.startPresence()
         scope.launch { registerPush() }
-        scope.launch { refreshMyAvatar() }
+        scope.launch { ProfileRepo.refreshMyAvatar() }
     }
 
-    // ------------------------------------------- mesaj yedeği (anahtar kurtarma)
-    // Şifreli mesajların anahtarları sunucuda, kullanıcının yedek anahtarıyla şifreli saklanır.
-    // Uygulama silinip yeniden kurulursa ya da telefon değişirse bu anahtarla eski mesajlar geri gelir.
-    // Yedek anahtarı hiçbir yere kaydedilmez; yalnızca kullanıcıya bir kez gösterilir.
-
-    val recoveryState = MutableStateFlow(RecoveryState.UNKNOWN)
-    /** Yeni oluşturulan, kullanıcıya bir kez gösterilecek yedek anahtarı. */
-    val newRecoveryKey = MutableStateFlow<String?>(null)
-    /** Ayarlardan "anahtarı gir" penceresini açmak için. */
-    val recoveryPrompt = MutableStateFlow(false)
-    private var recoveryHandle: TaskHandle? = null
-
-    private val noProgress = object : EnableRecoveryProgressListener {
-        override fun onUpdate(status: EnableRecoveryProgress) = Unit
-    }
-
-    private fun watchRecovery(c: Client) {
-        runCatching {
-            val enc = c.encryption()
-            recoveryState.value = enc.recoveryState()
-            recoveryHandle = enc.recoveryStateListener(object : RecoveryStateListener {
-                override fun onUpdate(status: RecoveryState) {
-                    recoveryState.value = status
-                }
-            })
-        }
-        // İlk kez: sunucuda yedek yoksa otomatik aç ve anahtarı kullanıcıya göster.
-        scope.launch {
-            repeat(30) {
-                if (recoveryState.value != RecoveryState.UNKNOWN) return@repeat
-                delay(1000)
-            }
-            if (recoveryState.value != RecoveryState.DISABLED) return@launch
-            val hasBackup = runCatching { c.encryption().backupExistsOnServer() }.getOrDefault(true)
-            if (hasBackup) return@launch
-            runCatching { c.encryption().enableRecovery(false, null, noProgress) }
-                .onSuccess { newRecoveryKey.value = it }
-        }
-    }
-
-    /** Yedek anahtarıyla eski mesajların anahtarlarını geri yükler. Hata varsa mesaj döner. */
-    suspend fun recoverWithKey(key: String): String? = withContext(Dispatchers.IO) {
-        val c = client ?: return@withContext "Oturum yok."
-        runCatching { c.encryption().recover(key.trim()) }
-            .fold({ null }, { "Anahtar doğru değil. Boşlukları dahil, kaydettiğin gibi yaz." })
-    }
-
-    /** Yedeği açar ya da yeni anahtar üretir (eski anahtar geçersiz olur). */
-    suspend fun createRecoveryKey(): String? = withContext(Dispatchers.IO) {
-        val c = client ?: return@withContext "Oturum yok."
-        runCatching {
-            if (recoveryState.value == RecoveryState.ENABLED || recoveryState.value == RecoveryState.INCOMPLETE) {
-                c.encryption().disableRecovery()
-            }
-            c.encryption().enableRecovery(false, null, noProgress)
-        }.fold({ newRecoveryKey.value = it; null }, { "Yedek anahtarı oluşturulamadı. İnternet bağlantını kontrol et." })
-    }
 
     // ------------------------------------------------------ çevrimiçi durumu
 
-    private fun startPresence() {
-        presenceJob?.cancel()
-        presenceJob = scope.launch {
-            while (isActive) {
-                val token = accessToken
-                if (foreground && token != null) {
-                    runCatching { Api.presence(token, active = true) }.onSuccess { applyPresence(it) }
-                }
-                delay(30_000)
-            }
-        }
-    }
 
     /** Uygulama öne geldiğinde ya da arka plana geçtiğinde çağrılır. */
     fun setForeground(active: Boolean) {
         foreground = active
         if (!active) SecretLock.lock()
         Calls.onForeground(active)
-        val token = accessToken ?: return
-        scope.launch {
-            runCatching { Api.presence(token, active) }.onSuccess { if (active) applyPresence(it) }
-        }
+        PresenceRepo.report(active)
     }
 
     // --------------------------------------------------------------- titreşim
@@ -659,7 +485,7 @@ object Bayx {
         refreshRooms()
     }
 
-    private fun refreshRooms() {
+    internal fun refreshRooms() {
         refreshJob?.cancel()
         refreshJob = scope.launch {
             delay(120)
@@ -1206,99 +1032,6 @@ object Bayx {
         }.getOrNull()
     }
 
-    // ------------------------------------------------------------- grup yönetimi
-
-    data class GroupMember(
-        val userId: String,
-        val name: String,
-        val avatarUrl: String?,
-        val power: Long,
-        val isMe: Boolean,
-        val invited: Boolean,
-    ) {
-        val isAdmin get() = power >= 100
-        val isModerator get() = power >= 50
-    }
-
-    data class GroupInfo(
-        val roomId: String,
-        val name: String,
-        val members: List<GroupMember>,
-        val myPower: Long,
-    ) {
-        val amAdmin get() = myPower >= 100
-        val canManage get() = myPower >= 50
-    }
-
-    suspend fun groupInfo(roomId: String): GroupInfo? = withContext(Dispatchers.IO) {
-        val c = client ?: return@withContext null
-        val room = c.getRoom(roomId) ?: return@withContext null
-        val me = (auth.value as? AuthState.LoggedIn)?.userId
-        runCatching {
-            val list = ArrayList<GroupMember>()
-            val iterator = room.members()
-            while (true) {
-                val chunk = iterator.nextChunk(50u) ?: break
-                for (m in chunk) {
-                    val state = m.membership
-                    if (state != MembershipState.Join && state != MembershipState.Invite) continue
-                    val power = when (val pl = m.powerLevel) {
-                        is PowerLevel.Infinite -> 10_000L
-                        is PowerLevel.Value -> pl.value
-                    }
-                    list.add(
-                        GroupMember(
-                            userId = m.userId,
-                            name = m.displayName ?: m.userId.removePrefix("@").substringBefore(":"),
-                            avatarUrl = m.avatarUrl,
-                            power = power,
-                            isMe = m.userId == me,
-                            invited = state == MembershipState.Invite,
-                        ),
-                    )
-                }
-            }
-            iterator.close()
-            list.sortWith(compareByDescending<GroupMember> { it.power }.thenBy { it.name.lowercase() })
-            val myPower = list.firstOrNull { it.isMe }?.power ?: 0L
-            GroupInfo(roomId, room.displayName() ?: "Grup", list, myPower)
-        }.getOrNull()
-    }
-
-    suspend fun renameGroup(roomId: String, name: String): Boolean = withContext(Dispatchers.IO) {
-        val room = client?.getRoom(roomId) ?: return@withContext false
-        val ok = runCatching { room.setName(name.trim()) }.isSuccess
-        if (ok) refreshRooms()
-        ok
-    }
-
-    suspend fun addGroupMembers(roomId: String, userIds: List<String>): Boolean = withContext(Dispatchers.IO) {
-        val room = client?.getRoom(roomId) ?: return@withContext false
-        var allOk = true
-        for (id in userIds) {
-            allOk = runCatching { room.inviteUserById(id) }.isSuccess && allOk
-        }
-        allOk
-    }
-
-    suspend fun removeGroupMember(roomId: String, userId: String): Boolean = withContext(Dispatchers.IO) {
-        val room = client?.getRoom(roomId) ?: return@withContext false
-        runCatching { room.kickUser(userId, null) }.isSuccess
-    }
-
-    suspend fun setGroupAdmin(roomId: String, userId: String, admin: Boolean): Boolean = withContext(Dispatchers.IO) {
-        val room = client?.getRoom(roomId) ?: return@withContext false
-        runCatching {
-            room.updatePowerLevelsForUsers(listOf(UserPowerLevelUpdate(userId, if (admin) 100L else 0L)))
-        }.isSuccess
-    }
-
-    suspend fun leaveGroup(roomId: String): Boolean = withContext(Dispatchers.IO) {
-        val room = client?.getRoom(roomId) ?: return@withContext false
-        val ok = runCatching { room.leave() }.isSuccess
-        if (ok) refreshRooms()
-        ok
-    }
 
     // ------------------------------------------------------------- okundu
 
@@ -1341,153 +1074,9 @@ object Bayx {
         members.forEach { memberNames[it.userId] = it.displayName }
     }
 
-    // ------------------------------------------------------------- kişiler
 
-    val contacts = MutableStateFlow(Api.Contacts(emptyList(), emptyList(), emptyList()))
 
-    suspend fun refreshContacts() {
-        val token = accessToken ?: return
-        runCatching { Api.contacts(token) }.onSuccess {
-            contacts.value = it
-            rememberMembers(it.friends + it.incoming + it.outgoing)
-        }
-    }
 
-    suspend fun findUser(username: String): Api.ContactFind? {
-        val token = accessToken ?: return null
-        return runCatching { Api.contactFind(token, username) }.getOrNull()
-    }
-
-    // ---------------------------------------------------------- durum / hikâye
-    val statuses = MutableStateFlow<Api.StatusList?>(null)
-    /** Durum listesi alınamadıysa kullanıcıya gösterilecek açıklama. */
-    val statusError = MutableStateFlow<String?>(null)
-
-    private fun statusMessage(e: Throwable): String = when {
-        e is ApiException && e.code == "BULUNAMADI" ->
-            "Sunucu Durum özelliğini henüz tanımıyor. Sunucuda kurulum komutunu (kur.sh) yeniden çalıştır."
-        e is ApiException -> e.message ?: "İşlem tamamlanamadı."
-        else -> "Sunucuya ulaşılamadı. İnternet bağlantını kontrol et."
-    }
-
-    suspend fun refreshStatuses() {
-        val token = accessToken ?: return
-        runCatching { Api.statusList(token) }
-            .onSuccess { statuses.value = it; statusError.value = null }
-            .onFailure { statusError.value = statusMessage(it) }
-    }
-
-    /** Metin durumu paylaş. Hata varsa açıklama döner. */
-    suspend fun addTextStatus(text: String, bg: String): String? {
-        val token = accessToken ?: return "Oturum yok."
-        return runCatching { Api.statusAdd(token, text, bg) }
-            .fold({ refreshStatuses(); null }, { statusMessage(it) })
-    }
-
-    /** Fotoğraf durumu: görseli sunucuya yükler, adresini durum olarak paylaşır. */
-    suspend fun addImageStatus(jpeg: ByteArray, caption: String): Boolean = withContext(Dispatchers.IO) {
-        val token = accessToken ?: return@withContext false
-        val c = client ?: return@withContext false
-        // Görsel yüklenmeden önce rastgele bir anahtarla şifrelenir (AES-GCM); sunucudaki dosya
-        // tek başına okunamaz, anahtar yalnızca arkadaşlara durum listesiyle verilir.
-        val keyBytes = ByteArray(32).also { java.security.SecureRandom().nextBytes(it) }
-        val iv = ByteArray(12).also { java.security.SecureRandom().nextBytes(it) }
-        val sealed = runCatching {
-            val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
-            cipher.init(
-                javax.crypto.Cipher.ENCRYPT_MODE,
-                javax.crypto.spec.SecretKeySpec(keyBytes, "AES"),
-                javax.crypto.spec.GCMParameterSpec(128, iv),
-            )
-            iv + cipher.doFinal(jpeg)
-        }.getOrNull() ?: return@withContext false
-        val mxc = runCatching { c.uploadMedia("application/octet-stream", sealed, null) }.getOrNull() ?: return@withContext false
-        val key = android.util.Base64.encodeToString(keyBytes, android.util.Base64.NO_WRAP)
-        val result = runCatching { Api.statusAddImage(token, mxc, caption, key) }
-        result.exceptionOrNull()?.let { statusError.value = statusMessage(it) }
-        if (result.isSuccess) refreshStatuses()
-        result.isSuccess
-    }
-
-    /** Durum görselini indirir (bellek önbelleği loadMedia içinde). */
-    suspend fun loadStatusImage(mxc: String, key: String): ByteArray? = withContext(Dispatchers.IO) {
-        val raw = runCatching { MediaSource.fromUrl(mxc).use { loadMedia(it) } }.getOrNull() ?: return@withContext null
-        if (key.isBlank()) return@withContext raw
-        runCatching {
-            val keyBytes = android.util.Base64.decode(key, android.util.Base64.NO_WRAP)
-            val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
-            cipher.init(
-                javax.crypto.Cipher.DECRYPT_MODE,
-                javax.crypto.spec.SecretKeySpec(keyBytes, "AES"),
-                javax.crypto.spec.GCMParameterSpec(128, raw, 0, 12),
-            )
-            cipher.doFinal(raw, 12, raw.size - 12)
-        }.getOrNull()
-    }
-
-    suspend fun deleteStatus(id: String) {
-        val token = accessToken ?: return
-        runCatching { Api.statusDelete(token, id) }
-        refreshStatuses()
-    }
-
-    fun markStatusSeen(owner: String, id: String) {
-        val token = accessToken ?: return
-        scope.launch { runCatching { Api.statusSeen(token, owner, id) } }
-    }
-
-    /** Web oturumunu onaylar (QR pairing_id ya da 6 haneli kod). Hata varsa mesaj döner. */
-    suspend fun approveWeb(pairingId: String?, code: String?): String? {
-        val token = accessToken ?: return "Oturum yok."
-        return try {
-            Api.webApprove(token, pairingId, code)
-            null
-        } catch (e: ApiException) {
-            e.message
-        } catch (e: Exception) {
-            "Sunucuya ulaşılamadı."
-        }
-    }
-
-    /** Kişi isteği gönderir; hata varsa mesajı döndürür. */
-    suspend fun sendContactRequest(username: String): String? {
-        val token = accessToken ?: return "Oturum yok."
-        return try {
-            Api.contactRequest(token, username)
-            refreshContacts()
-            null
-        } catch (e: ApiException) {
-            e.message
-        }
-    }
-
-    suspend fun acceptContact(username: String): Boolean {
-        val token = accessToken ?: return false
-        val ok = runCatching { Api.contactAccept(token, username) }.isSuccess
-        if (ok) refreshContacts()
-        return ok
-    }
-
-    suspend fun rejectContact(username: String): Boolean {
-        val token = accessToken ?: return false
-        val ok = runCatching { Api.contactReject(token, username) }.isSuccess
-        if (ok) refreshContacts()
-        return ok
-    }
-
-    suspend fun blockContact(username: String): Boolean {
-        val token = accessToken ?: return false
-        val ok = runCatching { Api.contactBlock(token, username) }.isSuccess
-        if (ok) refreshContacts()
-        return ok
-    }
-
-    suspend fun unblockContact(username: String): Boolean {
-        val token = accessToken ?: return false
-        val ok = runCatching { Api.contactUnblock(token, username) }.isSuccess
-        if (ok) refreshContacts()
-        return ok
-    }
 
     // ------------------------------------------------------------- silme
 
@@ -1524,66 +1113,7 @@ object Bayx {
         ok
     }
 
-    // ------------------------------------------------------------- durum
 
-    private fun applyPresence(result: PresenceResult) {
-        presences.value = result.users
-        online.value = result.users.filterValues { it.mode != "offline" }.keys
-        myMode.value = result.myMode
-        myStatus.value = result.myStatus
-    }
-
-    /** MSN tarzı durum: online, busy, away ya da invisible (çevrimdışı görün). */
-    fun setMode(mode: String) {
-        myMode.value = mode
-        val token = accessToken ?: return
-        scope.launch { runCatching { Api.presence(token, foreground, mode = mode) }.onSuccess { applyPresence(it) } }
-    }
-
-    fun setStatusMessage(text: String) {
-        myStatus.value = text
-        val token = accessToken ?: return
-        scope.launch { runCatching { Api.presence(token, foreground, status = text) }.onSuccess { applyPresence(it) } }
-    }
-
-    // ------------------------------------------------------------- profil
-
-    suspend fun setDisplayName(name: String): Boolean = withContext(Dispatchers.IO) {
-        val c = client ?: return@withContext false
-        val ok = runCatching { c.setDisplayName(name) }.isSuccess
-        if (ok) {
-            val current = auth.value as? AuthState.LoggedIn
-            if (current != null) auth.value = current.copy(displayName = name)
-            store.load()?.let { saved -> runCatching { store.save(JSONObject(saved).put("displayName", name).toString()) } }
-        }
-        ok
-    }
-
-    suspend fun setAvatar(jpeg: ByteArray): Boolean = withContext(Dispatchers.IO) {
-        val c = client ?: return@withContext false
-        val ok = runCatching { c.uploadAvatar("image/jpeg", jpeg) }.isSuccess
-        if (ok) myAvatarUrl.value = runCatching { c.avatarUrl() }.getOrNull()
-        ok
-    }
-
-    suspend fun refreshMyAvatar() {
-        val c = client ?: return
-        myAvatarUrl.value = runCatching { c.avatarUrl() }.getOrNull()
-    }
-
-    private val avatarCache = LruCache<String, Bitmap>(60)
-
-    /** Profil fotoğrafını (mxc adresi) indirir; yalnızca bellekte önbelleğe alır. */
-    suspend fun loadAvatar(mxc: String): Bitmap? = withContext(Dispatchers.IO) {
-        avatarCache.get(mxc)?.let { return@withContext it }
-        val c = client ?: return@withContext null
-        val bytes = runCatching {
-            MediaSource.fromUrl(mxc).use { source -> c.getMediaThumbnail(source, 256uL, 256uL) }
-        }.getOrNull() ?: return@withContext null
-        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return@withContext null
-        avatarCache.put(mxc, bitmap)
-        bitmap
-    }
 
     private suspend fun heroAvatar(room: Room): String? {
         val me = (auth.value as? AuthState.LoggedIn)?.userId

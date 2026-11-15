@@ -335,7 +335,7 @@ object Calls {
     fun startCall(peerId: String, peerName: String, video: Boolean) {
         if (state.value?.let { it.phase != CallPhase.ENDED } == true) return
         val callId = newCallId()
-        val online = Bayx.online.value.contains(peerId)
+        val online = PresenceRepo.online.value.contains(peerId)
         val speaker = video && !headsetConnected()
         state.value = CallState(callId, peerId, peerName, video, CallPhase.OUTGOING, speaker = speaker, cameraOn = video, peerOnline = online, fromMe = true)
         ensurePolling()

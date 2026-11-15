@@ -63,6 +63,9 @@ import com.bayx.chat.data.Api
 import com.bayx.chat.data.ApiException
 import com.bayx.chat.data.AuthState
 import com.bayx.chat.data.Bayx
+import com.bayx.chat.data.ProfileRepo
+import com.bayx.chat.data.PresenceRepo
+import com.bayx.chat.data.ContactsRepo
 import com.bayx.chat.data.ChatFlags
 import com.bayx.chat.data.ChatPrefs
 import com.bayx.chat.data.ChatSummary
@@ -104,7 +107,7 @@ private val avatarTints = listOf(
 internal fun Avatar(name: String, size: Dp, online: Boolean = false, url: String? = null, mode: String? = null) {
     val (bg, fg) = avatarTints[(name.firstOrNull()?.code ?: 0) % avatarTints.size]
     val bitmap by produceState<android.graphics.Bitmap?>(initialValue = null, url) {
-        value = url?.let { Bayx.loadAvatar(it) }
+        value = url?.let { ProfileRepo.loadAvatar(it) }
     }
     Box(Modifier.size(size)) {
         Box(
@@ -335,14 +338,14 @@ fun ChatListScreen(
 ) {
     var tab by remember { mutableIntStateOf(0) }
     val allRooms by Bayx.rooms.collectAsState()
-    val onlineUsers by Bayx.online.collectAsState()
-    val presences by Bayx.presences.collectAsState()
+    val onlineUsers by PresenceRepo.online.collectAsState()
+    val presences by PresenceRepo.presences.collectAsState()
     var query by remember { mutableStateOf("") }
     var searching by remember { mutableStateOf(false) }
     val rooms = allRooms.filter { !it.secret }.filter {
         query.isBlank() || it.name.contains(query, ignoreCase = true) || it.lastMessage.contains(query, ignoreCase = true)
     }
-    val contacts by Bayx.contacts.collectAsState()
+    val contacts by ContactsRepo.contacts.collectAsState()
     val members = contacts.friends.filter { it.userId != me.userId }
     val chatFlagMap by ChatPrefs.state.collectAsState()
     fun chatFlags(roomId: String) = chatFlagMap[roomId] ?: ChatFlags()
@@ -364,7 +367,7 @@ fun ChatListScreen(
     )
 
     LaunchedEffect(Unit) {
-        Bayx.refreshContacts()
+        ContactsRepo.refreshContacts()
         loadedContacts = true
     }
 
@@ -373,7 +376,7 @@ fun ChatListScreen(
         if (name.isBlank() || finding) return
         finding = true
         scope.launch {
-            findResult = Bayx.findUser(name)
+            findResult = ContactsRepo.findUser(name)
             finding = false
             if (findResult?.found != true) toast(tf("@%s adında bir kullanıcı bulunamadı.", name))
         }
@@ -381,7 +384,7 @@ fun ChatListScreen(
 
     fun sendRequest(username: String) {
         scope.launch {
-            val error = Bayx.sendContactRequest(username)
+            val error = ContactsRepo.sendContactRequest(username)
             if (error == null) {
                 toast(t("İstek gönderildi."))
                 findResult = null
@@ -564,15 +567,15 @@ fun ChatListScreen(
                                 item { SectionLabel("Gelen istekler (${contacts.incoming.size})") }
                                 items(contacts.incoming, key = { "in-" + it.userId }) { m ->
                                     RequestRow(m, incoming = true,
-                                        onAccept = { scope.launch { if (Bayx.acceptContact(m.userId.substringBefore(":").removePrefix("@"))) toast(tf("%s artık kişilerinde.", m.displayName)) } },
-                                        onReject = { scope.launch { Bayx.rejectContact(m.userId.substringBefore(":").removePrefix("@")) } })
+                                        onAccept = { scope.launch { if (ContactsRepo.acceptContact(m.userId.substringBefore(":").removePrefix("@"))) toast(tf("%s artık kişilerinde.", m.displayName)) } },
+                                        onReject = { scope.launch { ContactsRepo.rejectContact(m.userId.substringBefore(":").removePrefix("@")) } })
                                 }
                             }
                             if (contacts.outgoing.isNotEmpty()) {
                                 item { SectionLabel(tf("Gönderilen istekler (%s)", contacts.outgoing.size)) }
                                 items(contacts.outgoing, key = { "out-" + it.userId }) { m ->
                                     RequestRow(m, incoming = false, onAccept = {},
-                                        onReject = { scope.launch { Bayx.rejectContact(m.userId.substringBefore(":").removePrefix("@")) } })
+                                        onReject = { scope.launch { ContactsRepo.rejectContact(m.userId.substringBefore(":").removePrefix("@")) } })
                                 }
                             }
                             item { SectionLabel(tf("Kişilerim (%s)", friends.size)) }
@@ -930,17 +933,17 @@ private fun FindResultCard(r: Api.ContactFind, onRequest: () -> Unit, onOpen: (S
 /** Arkadaş istekleri ekranı: gelen istekleri kabul et/yok de, gönderilenleri geri çek. */
 @Composable
 fun RequestsScreen(onBack: () -> Unit, onOpenChat: (String) -> Unit) {
-    val contacts by Bayx.contacts.collectAsState()
+    val contacts by ContactsRepo.contacts.collectAsState()
     val scope = rememberCoroutineScope()
     val toast = rememberToast()
-    LaunchedEffect(Unit) { Bayx.refreshContacts() }
+    LaunchedEffect(Unit) { ContactsRepo.refreshContacts() }
 
     fun handle(username: String, accept: Boolean, name: String) {
         scope.launch {
             if (accept) {
-                if (Bayx.acceptContact(username)) toast(tf("%s artık kişilerinde.", name))
+                if (ContactsRepo.acceptContact(username)) toast(tf("%s artık kişilerinde.", name))
             } else {
-                Bayx.rejectContact(username)
+                ContactsRepo.rejectContact(username)
             }
         }
     }
@@ -984,7 +987,7 @@ fun RequestsScreen(onBack: () -> Unit, onOpenChat: (String) -> Unit) {
                             Spacer(Modifier.width(14.dp))
                             Text(m.displayName, color = Ink, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                             TextButton(onClick = {
-                                scope.launch { if (Bayx.unblockContact(m.userId.substringBefore(":").removePrefix("@"))) toast(t("Engel kaldırıldı.")) }
+                                scope.launch { if (ContactsRepo.unblockContact(m.userId.substringBefore(":").removePrefix("@"))) toast(t("Engel kaldırıldı.")) }
                             }) { Text(t("Engeli kaldır")) }
                         }
                     }

@@ -37,7 +37,7 @@ class PushService : FirebaseMessagingService() {
                 val name = data["name"].orEmpty().ifBlank { "Biri" }
                 if (!Bayx.isForeground) Notifier.showContactRequest(applicationContext, name)
                 // Uygulama açıksa kişi listesini tazele ki istek hemen görünsün.
-                CoroutineScope(Dispatchers.IO).launch { runCatching { Bayx.refreshContacts() } }
+                CoroutineScope(Dispatchers.IO).launch { runCatching { ContactsRepo.refreshContacts() } }
             }
         }
     }
