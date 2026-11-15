@@ -352,16 +352,6 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
                 ) { showEmail = true }
                 HorizontalDivider(color = Line)
                 SettingRow(Icons.Outlined.Computer, t("Web'e bağlan"), onClick = onWebLink)
-                HorizontalDivider(color = Line)
-                SettingRow(Icons.Outlined.Password, t("Web için geçici şifre")) {
-                    withToken { token ->
-                        shareDialog = Triple(
-                            t("Web için geçici şifre"),
-                            t("Tayfa Web bir güvenlik adımında şifre sorarsa bunu yaz (tireler dahil). 5 dakika sonra geçersiz olur."),
-                            Api.CodeReply(Api.webPassword(token), ""),
-                        )
-                    }
-                }
                 if (isAdmin) {
                     HorizontalDivider(color = Line)
                     SettingRow(Icons.Outlined.HowToReg, t("Yönetim ve davetler"), onClick = onAdmin)

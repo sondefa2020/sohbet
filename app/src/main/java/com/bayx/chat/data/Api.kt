@@ -153,6 +153,8 @@ private data class PresenceDto(
 object Api {
     const val HOMESERVER = "https://sohbet.acioglu.tr"
     const val SERVER_NAME = "sohbet.acioglu.tr"
+    /** Tayfa Web'in adresi (bilgisayardan QR ile giriş). */
+    const val WEB_ADDRESS = "web.acioglu.tr"
 
     private val json = Json {
         ignoreUnknownKeys = true

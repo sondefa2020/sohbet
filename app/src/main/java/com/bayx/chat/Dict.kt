@@ -96,6 +96,10 @@ object Dict {
 
         // --- web'e bağlan
         "Web'e bağlan" to ("Link to Web" to "الربط بالويب"),
+        "Bilgisayarında %s adresini aç. Ekranda bir QR kod ve 6 haneli numara göreceksin." to
+            ("Open %s on your computer. You'll see a QR code and a 6-digit number." to "افتح %s على حاسوبك. سترى رمز QR ورقمًا من 6 خانات."),
+        "Web, eski şifreli mesajları açmak için yedek anahtarını sorabilir. Anahtarın yoksa Profil › Mesaj yedeği'nden yenisini oluşturabilirsin." to
+            ("The web app may ask for your backup key to unlock older encrypted messages. If you don't have it, create a new one in Profile › Message backup." to "قد يطلب الويب مفتاح النسخ الاحتياطي لفتح الرسائل المشفرة القديمة. إذا لم يكن لديك، أنشئ واحدًا جديدًا من الملف الشخصي › نسخ الرسائل الاحتياطي."),
         "Web oturumu açıldı" to ("Web session started" to "تم فتح جلسة الويب"),
         "Bilgisayarda web adresini aç. Ekranda bir QR kod ve 6 haneli numara göreceksin." to ("Open the web address on your computer. You'll see a QR code and a 6-digit number." to "افتح عنوان الويب على حاسوبك. سترى رمز QR ورقمًا من 6 خانات."),
         "Bilgisayarındaki Tayfa Web birkaç saniye içinde açılır." to ("Tayfa Web on your computer will open in a few seconds." to "سيُفتح Tayfa Web على حاسوبك خلال ثوانٍ."),

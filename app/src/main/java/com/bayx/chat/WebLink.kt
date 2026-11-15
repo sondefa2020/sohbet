@@ -144,6 +144,11 @@ fun WebLinkScreen(onBack: () -> Unit) {
                         t("Bilgisayarındaki Tayfa Web birkaç saniye içinde açılır."),
                         color = SoftBlue, fontSize = 14.sp, textAlign = TextAlign.Center,
                     )
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        t("Web, eski şifreli mesajları açmak için yedek anahtarını sorabilir. Anahtarın yoksa Profil › Mesaj yedeği'nden yenisini oluşturabilirsin."),
+                        color = SoftBlue, fontSize = 13.sp, textAlign = TextAlign.Center,
+                    )
                     Spacer(Modifier.height(18.dp))
                     SandButton("Tamam") { onBack() }
                 }
@@ -154,7 +159,7 @@ fun WebLinkScreen(onBack: () -> Unit) {
         SoftCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(20.dp)) {
                 Text(
-                    t("Bilgisayarda web adresini aç. Ekranda bir QR kod ve 6 haneli numara göreceksin."),
+                    tf("Bilgisayarında %s adresini aç. Ekranda bir QR kod ve 6 haneli numara göreceksin.", com.bayx.chat.data.Api.WEB_ADDRESS),
                     color = SoftBlue, fontSize = 14.5.sp,
                 )
                 Spacer(Modifier.height(18.dp))
