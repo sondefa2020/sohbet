@@ -156,15 +156,30 @@ say "Kayıt ve yönetim servisi kuruluyor"
 id bayx >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin bayx
 install -d -m 755 /opt/bayx
 install -d -m 750 -o root -g bayx /etc/bayx
-for f in kayit.py giris.py eposta.py; do
+BAYX_FILES="kayit.py giris.py eposta.py arama.py uygulama.py"
+for f in $BAYX_FILES; do
     curl -fsSL -o "/opt/bayx/$f.yeni" "$RAW_BASE/$f" || fail "$f indirilemedi."
     python3 -m py_compile "/opt/bayx/$f.yeni" || fail "$f bozuk indi."
 done
-for f in kayit.py giris.py eposta.py; do
+for f in $BAYX_FILES; do
     mv "/opt/bayx/$f.yeni" "/opt/bayx/$f"
     chmod 644 "/opt/bayx/$f"
 done
 rm -rf /opt/bayx/__pycache__
+
+# Modern asenkron sunucu (FastAPI + uvicorn) kendi sanal ortamında; sistem Python'una dokunmaz.
+# Kurulamazsa (ör. internet sorunu) eski yerleşik sunucuyla çalışmaya devam eder.
+VENV=/opt/bayx/venv
+FASTAPI_OK=0
+DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-venv >/dev/null 2>&1 || true
+if [ ! -x "$VENV/bin/python" ]; then python3 -m venv "$VENV" >/dev/null 2>&1 || true; fi
+if [ -x "$VENV/bin/pip" ] && "$VENV/bin/pip" install -q --upgrade "fastapi==0.115.*" "uvicorn[standard]==0.32.*" >/dev/null 2>&1 \
+    && "$VENV/bin/python" -c "import fastapi, uvicorn" >/dev/null 2>&1; then
+    FASTAPI_OK=1
+    KAYIT_EXEC="$VENV/bin/uvicorn uygulama:app --app-dir /opt/bayx --host 127.0.0.1 --port 8010 --no-access-log --log-level warning --ws-max-size 131072 --timeout-graceful-shutdown 5"
+else
+    KAYIT_EXEC="/usr/bin/python3 /opt/bayx/kayit.py"
+fi
 
 json_field() { python3 -c 'import json,sys; print(json.load(sys.stdin).get(sys.argv[1],""))' "$1"; }
 
@@ -318,9 +333,12 @@ User=bayx
 Group=bayx
 EnvironmentFile=$ENV_FILE
 EnvironmentFile=-/etc/bayx/smtp.env
-ExecStart=/usr/bin/python3 /opt/bayx/kayit.py
+ExecStart=$KAYIT_EXEC
+WorkingDirectory=/opt/bayx
 Restart=on-failure
 RestartSec=3
+# Binlerce eşzamanlı bağlantı (arama sinyali, yoklama) için dosya sınırı
+LimitNOFILE=65535
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
@@ -334,8 +352,25 @@ EOF
 systemctl daemon-reload
 systemctl enable bayx-kayit >/dev/null 2>&1 || true
 systemctl restart bayx-kayit
-sleep 2
+KAYIT_UP=0
+for _ in $(seq 1 20); do
+    if curl -fsS -o /dev/null http://127.0.0.1:8010/bayx/health 2>/dev/null; then KAYIT_UP=1; break; fi
+    sleep 1
+done
+if [ "$KAYIT_UP" = 0 ] && [ "$FASTAPI_OK" = 1 ]; then
+    # Yeni sunucu açılmadıysa eski yerleşik sunucuya dön: servis kesintisiz kalsın.
+    FASTAPI_OK=0
+    sed -i "s|^ExecStart=.*|ExecStart=/usr/bin/python3 /opt/bayx/kayit.py|" /etc/systemd/system/bayx-kayit.service
+    systemctl daemon-reload
+    systemctl restart bayx-kayit
+    sleep 2
+fi
 curl -fsS -o /dev/null http://127.0.0.1:8010/bayx/health || fail "Kayıt servisi açılmadı. Günlük: journalctl -u bayx-kayit -n 50"
+if [ "$FASTAPI_OK" = 1 ]; then
+    KAYIT_ENGINE="FastAPI (asenkron, anlık arama sinyali)"
+else
+    KAYIT_ENGINE="yerleşik Python sunucusu (FastAPI kurulamadı)"
+fi
 
 # ------------------------------------------- 2b. Arama aktarma sunucusu (TURN)
 say "Arama aktarma sunucusu (coturn) kuruluyor"
@@ -500,6 +535,16 @@ location ^~ /_matrix/media/ {
     proxy_set_header X-Forwarded-For \$remote_addr;
     proxy_set_header X-Forwarded-Proto \$scheme;
     client_max_body_size 100M;
+}
+location = /bayx/call/ws {
+    # Anlık arama sinyali (WebSocket)
+    proxy_pass http://127.0.0.1:8010;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
 }
 location ^~ /bayx/ {
     proxy_pass http://127.0.0.1:8010;
@@ -676,6 +721,7 @@ cat <<EOF
 Sohbet sunucusu çalışıyor (yerel)      : $LOCAL_OK
 https://$DOMAIN üzerinden erişim : $PUBLIC_OK
 Kayıt servisi (https üzerinden)        : $KAYIT_OK
+Kayıt servisi altyapısı                : $KAYIT_ENGINE
 Arama aktarma sunucusu (coturn)        : $TURN_OK
 Bildirim servisi (Firebase)            : $PUSH_OK
 Tayfa Web                              : $WEB_OK

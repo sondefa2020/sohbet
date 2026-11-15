@@ -161,16 +161,32 @@ object Calls {
         if (active) ensurePolling()
     }
 
+    /** Arama dinlemesi sürmeli mi? (Uygulama açık, arka plan servisi çalışıyor ya da görüşme var.) */
+    private fun shouldListen() = foreground || keepAlive || state.value != null
+
     @Synchronized
     fun ensurePolling() {
         if (pollJob?.isActive == true) return
         pollJob = scope.launch {
             var failures = 0
-            while (foreground || keepAlive || state.value != null) {
+            var socketWorks = true
+            var pollsSinceSocket = 0
+            while (shouldListen()) {
                 val token = Bayx.accessToken
                 if (token == null) {
                     delay(3_000)
                     continue
+                }
+                // Önce anlık bağlantı (WebSocket); kurulamazsa (eski sunucu, kısıtlı ağ) uzun yoklama.
+                if (socketWorks) {
+                    val opened = runSocket(token)
+                    if (opened) {
+                        failures = 0
+                        delay(500) // bağlantı koptu: kısa bir aradan sonra yeniden bağlan
+                        continue
+                    }
+                    socketWorks = false
+                    pollsSinceSocket = 0
                 }
                 val events = try {
                     Api.callPoll(token, lastEventId).also { failures = 0 }
@@ -181,19 +197,77 @@ object Calls {
                     delay((1_000L * failures).coerceAtMost(cap))
                     continue
                 }
-                // Aynı paket içinde kapatılmış aramaların davetini atla.
-                val closed = events.filter { it.optString("type") in setOf("hangup", "reject") }
-                    .map { it.optString("call_id") }.toSet()
-                for (event in events) {
-                    val id = event.optLong("id", 0L)
-                    if (id > 0L) {
-                        if (id <= lastEventId) continue // daha önce işlendi (yanıt yolda kaybolup yeniden geldi)
-                        lastEventId = id
-                    }
-                    if (event.optString("type") == "invite" && event.optString("call_id") in closed) continue
-                    withContext(rtc) { runCatching { handle(event) } }
+                processEvents(events)
+                // Ara sıra anlık bağlantıyı yeniden dene (ör. ağ değişti ya da sunucu güncellendi).
+                if (!socketWorks && ++pollsSinceSocket >= 5) socketWorks = true
+            }
+        }
+    }
+
+    /** Gelen arama olaylarını sırayla işler; daha önce işlenmiş olanları atlar. */
+    private suspend fun processEvents(events: List<JSONObject>) {
+        // Aynı paket içinde kapatılmış aramaların davetini atla.
+        val closed = events.filter { it.optString("type") in setOf("hangup", "reject") }
+            .map { it.optString("call_id") }.toSet()
+        for (event in events) {
+            val id = event.optLong("id", 0L)
+            if (id > 0L) {
+                if (id <= lastEventId) continue // daha önce işlendi (yanıt yolda kaybolup yeniden geldi)
+                lastEventId = id
+            }
+            if (event.optString("type") == "invite" && event.optString("call_id") in closed) continue
+            withContext(rtc) { runCatching { handle(event) } }
+        }
+    }
+
+    /**
+     * Anlık arama sinyali: bağlantı açık kaldığı sürece olaylar geldiği anda işlenir.
+     * Bağlantı hiç kurulamadıysa false döner (çağıran uzun yoklamaya geçer).
+     */
+    private suspend fun runSocket(token: String): Boolean = suspendCancellableCoroutine { cont ->
+        var opened = false
+        val inbox = Channel<List<JSONObject>>(Channel.UNLIMITED)
+        lateinit var socket: okhttp3.WebSocket
+        val worker = scope.launch {
+            for (batch in inbox) {
+                processEvents(batch)
+                runCatching { socket.send(JSONObject().put("after", lastEventId).toString()) }
+            }
+        }
+        // Dinleme gerekmediğinde (uygulama kapandı, servis durdu) bağlantıyı kapat.
+        val watcher = scope.launch {
+            while (true) {
+                delay(5_000)
+                if (!shouldListen() || Bayx.accessToken != token) {
+                    runCatching { socket.close(1000, null) }
+                    break
                 }
             }
+        }
+        fun finish() {
+            watcher.cancel()
+            inbox.close()
+            if (cont.isActive) cont.resume(opened)
+        }
+        socket = Api.callSocket(token, lastEventId, object : okhttp3.WebSocketListener() {
+            override fun onOpen(webSocket: okhttp3.WebSocket, response: okhttp3.Response) {
+                opened = true
+            }
+
+            override fun onMessage(webSocket: okhttp3.WebSocket, text: String) {
+                val json = runCatching { JSONObject(text) }.getOrNull() ?: return
+                val array = json.optJSONArray("events") ?: return
+                inbox.trySend((0 until array.length()).map { array.getJSONObject(it) })
+            }
+
+            override fun onClosed(webSocket: okhttp3.WebSocket, code: Int, reason: String) = finish()
+
+            override fun onFailure(webSocket: okhttp3.WebSocket, t: Throwable, response: okhttp3.Response?) = finish()
+        })
+        cont.invokeOnCancellation {
+            worker.cancel()
+            watcher.cancel()
+            runCatching { socket.cancel() }
         }
     }
 

@@ -16,6 +16,8 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
+import okhttp3.WebSocket
+import okhttp3.WebSocketListener
 import org.json.JSONObject
 import java.io.IOException
 import java.util.concurrent.TimeUnit
@@ -425,6 +427,21 @@ object Api {
     suspend fun callPoll(token: String, after: Long): List<JSONObject> {
         val dto = post<CallEventsDto>("/bayx/call/poll", buildJsonObject { put("after", after) }, token, longPoll)
         return dto.events.map { JSONObject(it.toString()) }
+    }
+
+    /** Arama sinyalleri için WebSocket istemcisi: 20 sn'de bir canlılık sinyali, okuma süresi sınırsız. */
+    private val socketClient: OkHttpClient = http.newBuilder()
+        .readTimeout(0, TimeUnit.MILLISECONDS)
+        .pingInterval(20, TimeUnit.SECONDS)
+        .build()
+
+    /** Anlık arama sinyali bağlantısı; [after] alınan son olay numarası (teyit). */
+    fun callSocket(token: String, after: Long, listener: WebSocketListener): WebSocket {
+        val request = Request.Builder()
+            .url("$HOMESERVER/bayx/call/ws?after=$after")
+            .header("Authorization", "Bearer $token")
+            .build()
+        return socketClient.newWebSocket(request, listener)
     }
 
     suspend fun turn(token: String): JSONObject = JSONObject(send("GET", "/bayx/turn", token = token).ifBlank { "{}" })

@@ -1566,7 +1566,8 @@ class Handler(BaseHTTPRequestHandler):
         self._handle("POST")
 
 
-def main():
+def init():
+    """Kalıcı kayıtları yükler ve servisleri hazırlar (eski HTTP sunucusu da FastAPI uygulaması da kullanır)."""
     global FCM, GIRIS, EMAILS
     load_profiles()
     GIRIS = giris.Store(os.path.join(STATE_DIR, "giris.json"))
@@ -1576,6 +1577,10 @@ def main():
             FCM = Fcm(FCM_CREDENTIALS)
         except Exception:
             FCM = None
+
+
+def main():
+    init()
     server = Server((LISTEN_HOST, LISTEN_PORT), Handler)
 
     def stop(signum, frame):
