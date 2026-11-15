@@ -110,16 +110,22 @@ def send_sms(phone, message):
     """SMS gönderir. (başarılı mı, sağlayıcı yanıtı) döner."""
     if not sms_ready():
         return False, "SMS ayarlı değil"
+    # PHP örneğiyle birebir aynı biçim: gövde ham "data=<sms>..." olarak gider (form kodlaması yok).
+    # Sağlayıcı gövdeyi ham okuduğu için kodlanmış veriyi tanımıyor. Ham gönderimde & + % karakterleri
+    # bozulacağından mesajdan çıkarılır (doğrulama mesajında zaten yok).
+    message = re.sub(r"[&+%]", "", clean_message(message))
     xml = (
-        "<sms>"
-        "<kno>%s</kno><kulad>%s</kulad><sifre>%s</sifre><gonderen>%s</gonderen>"
-        "<mesaj>%s</mesaj><numaralar>%s</numaralar><tur>Turkce</tur>"
+        "<sms>\n"
+        "<kno>%s</kno> \n"
+        "<kulad>%s</kulad> \n"
+        "<sifre>%s</sifre>    \n"
+        "<gonderen>%s</gonderen> \n"
+        "<mesaj>%s</mesaj> \n"
+        "<numaralar>%s</numaralar>\n"
+        "<tur>Turkce</tur> \n"
         "</sms>"
-    ) % tuple(
-        html.escape(v, quote=False)
-        for v in (SMS_KNO, SMS_USER, SMS_PASS, SMS_SENDER, clean_message(message), phone)
-    )
-    body = urllib.parse.urlencode({"data": xml}).encode()
+    ) % (SMS_KNO, SMS_USER, SMS_PASS, SMS_SENDER, html.escape(message, quote=True), phone)
+    body = ("data=" + xml).encode("utf-8")
     urls = [SMS_URL]
     last = ""
     for url in urls:
