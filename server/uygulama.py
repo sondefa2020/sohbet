@@ -261,6 +261,14 @@ async def local_smstest(request: Request):
     return reply(request, {"ok": ok, "detail": detail})
 
 
+@app.post("/bayx/local/yonetici")
+async def local_make_admin(request: Request):
+    # Sunucudan çalıştırılır: telefon numarası ya da kullanıcı adıyla bir hesaba yönetim yetkisi verir/alır.
+    local_only(request)
+    data = await body(request)
+    return reply(request, await sync(kayit.set_admin, str(data.get("kim") or ""), data.get("yetki", True) is not False))
+
+
 # ------------------------------------------------------------------ hesap
 
 

@@ -1842,6 +1842,27 @@ def contacts_match(headers, body):
     return {"matches": out}
 
 
+def set_admin(who, on=True):
+    """Telefon numarası ya da kullanıcı adıyla bulunan hesabı yönetici yapar (ya da yetkisini alır)."""
+    who = who.strip()
+    uid = None
+    if _looks_like_phone(who):
+        phone = telefon.normalize(who)
+        with GIRIS.lock:
+            uid = _phones().get(phone) if phone else None
+    if uid is None:
+        raw = who.lower().lstrip("@").split(":")[0]
+        if USERNAME_RE.match(raw) and active_user(user_id(raw)) is not None:
+            uid = user_id(raw)
+    if uid is None:
+        raise ApiError(404, "KULLANICI_YOK", "Bu numara ya da kullanıcı adıyla kayıtlı hesap yok.")
+    status, _ = synapse("PUT", "/_synapse/admin/v2/users/" + quote(uid), {"admin": bool(on)})
+    if status not in (200, 201):
+        raise ApiError(502, "SUNUCU_HATASI", "Yetki değiştirilemedi.")
+    audit("sunucu", "yonetici-ver" if on else "yonetici-al", uid)
+    return {"ok": True, "user_id": uid, "admin": bool(on)}
+
+
 def has_blocked(owner, other):
     """owner, other'ı engellemiş mi?"""
     with GIRIS.lock:
