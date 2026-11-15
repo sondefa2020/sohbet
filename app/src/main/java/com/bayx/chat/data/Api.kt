@@ -1,10 +1,26 @@
 package com.bayx.chat.data
 
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.serializer
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
 import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
+import java.io.IOException
+import java.util.concurrent.TimeUnit
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 data class Member(
     val userId: String,
@@ -25,104 +41,256 @@ data class AdminMembers(val members: List<Member>, val count: Int, val max: Int,
 
 class ApiException(val code: String, message: String) : Exception(message)
 
-/** Bayx kayıt/yönetim servisi ve birkaç doğrudan Matrix çağrısı için küçük HTTP istemcisi. */
+// ------------------------------------------------------------- sunucu modelleri
+// Sunucunun JSON yanıtları; alan adları sunucudakiyle birebir. Bilinmeyen alanlar yok sayılır,
+// eksik alanlar varsayılan değeri alır: sunucu yeni alan eklese de uygulama bozulmaz.
+
+@Serializable
+private data class ErrorDto(val error: String = "", val errcode: String = "", val message: String = "")
+
+@Serializable
+private data class MemberDto(
+    @SerialName("user_id") val userId: String = "",
+    val username: String = "",
+    @SerialName("display_name") val displayName: String = "",
+    val admin: Boolean = false,
+    val pending: Boolean = false,
+    @SerialName("avatar_url") val avatarUrl: String = "",
+    val status: String = "",
+    val mode: String = "",
+) {
+    fun toMember(fallbackName: String) = Member(
+        userId = userId,
+        displayName = displayName.ifEmpty { fallbackName },
+        admin = admin,
+        pending = pending,
+        avatarUrl = avatarUrl.ifEmpty { null },
+        status = status,
+        mode = mode.ifEmpty { "offline" },
+    )
+}
+
+@Serializable private data class RegisterReply(@SerialName("email_pending") val emailPending: Boolean = false)
+@Serializable private data class MessageReply(val message: String = "")
+@Serializable private data class IdReply(val id: String = "")
+@Serializable private data class RelationReply(val relation: String = "")
+@Serializable private data class PasswordReply(val password: String = "")
+
+@Serializable
+private data class EmailDto(
+    val email: String = "",
+    val verified: Boolean = false,
+    @SerialName("days_left") val daysLeft: Int = 0,
+    @SerialName("mail_ready") val mailReady: Boolean = false,
+)
+
+@Serializable
+private data class ContactsDto(
+    val friends: List<MemberDto> = emptyList(),
+    val incoming: List<MemberDto> = emptyList(),
+    val outgoing: List<MemberDto> = emptyList(),
+    val blocked: List<MemberDto> = emptyList(),
+)
+
+@Serializable
+private data class FindDto(
+    val found: Boolean = false,
+    @SerialName("user_id") val userId: String = "",
+    val username: String = "",
+    @SerialName("display_name") val displayName: String = "",
+    val relation: String = "none",
+)
+
+@Serializable private data class ViewerDto(@SerialName("user_id") val userId: String = "", val name: String = "")
+
+@Serializable
+private data class StatusItemDto(
+    val id: String = "",
+    val type: String = "text",
+    val text: String = "",
+    val bg: String = "",
+    val media: String = "",
+    val time: Long = 0,
+    val seen: Boolean = false,
+    val key: String = "",
+    val viewers: List<ViewerDto> = emptyList(),
+)
+
+@Serializable
+private data class StatusUserDto(
+    @SerialName("user_id") val userId: String = "",
+    val name: String = "",
+    val items: List<StatusItemDto> = emptyList(),
+    @SerialName("last_time") val lastTime: Long = 0,
+    @SerialName("all_seen") val allSeen: Boolean = false,
+)
+
+@Serializable private data class StatusListDto(val mine: StatusUserDto? = null, val friends: List<StatusUserDto> = emptyList())
+@Serializable private data class CodeDto(val code: String = "", val url: String = "")
+
+@Serializable
+private data class ConfigDto(
+    val announcement: String = "",
+    @SerialName("latest_version") val latestVersion: Int = 0,
+    @SerialName("apk_url") val apkUrl: String = "",
+)
+
+@Serializable private data class MembersDto(val members: List<MemberDto> = emptyList(), val count: Int = 0, val max: Int = 10, val invites: Int = 0)
+@Serializable private data class PresenceUserDto(val mode: String = "offline", val status: String = "")
+@Serializable private data class PresenceMeDto(val mode: String = "online", val status: String = "")
+
+@Serializable
+private data class PresenceDto(
+    val users: Map<String, PresenceUserDto> = emptyMap(),
+    val me: PresenceMeDto = PresenceMeDto(),
+)
+
+@Serializable private data class CallEventsDto(val events: List<JsonObject> = emptyList())
+
+/** Tayfa kayıt/yönetim servisi ve birkaç doğrudan Matrix çağrısı için HTTP istemcisi. */
 object Api {
     const val HOMESERVER = "https://sohbet.acioglu.tr"
     const val SERVER_NAME = "sohbet.acioglu.tr"
 
-    private fun request(
-        method: String,
-        path: String,
-        body: JSONObject? = null,
-        token: String? = null,
-        readTimeoutMs: Int = 20_000,
-    ): JSONObject {
-        val conn = URL(HOMESERVER + path).openConnection() as HttpURLConnection
-        try {
-            conn.requestMethod = method
-            conn.connectTimeout = 15_000
-            conn.readTimeout = readTimeoutMs
-            conn.setRequestProperty("Accept", "application/json")
-            if (token != null) conn.setRequestProperty("Authorization", "Bearer $token")
-            if (body != null) {
-                conn.doOutput = true
-                conn.setRequestProperty("Content-Type", "application/json")
-                conn.outputStream.use { it.write(body.toString().toByteArray()) }
-            }
-            val status = conn.responseCode
-            val stream = if (status in 200..299) conn.inputStream else conn.errorStream
-            val text = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
-            val json = runCatching { JSONObject(text) }.getOrDefault(JSONObject())
-            if (status !in 200..299) {
-                val code = json.optString("error").ifEmpty { json.optString("errcode") }.ifEmpty { "HTTP_$status" }
-                val message = json.optString("message").ifEmpty { "İşlem tamamlanamadı ($status)." }
-                throw ApiException(code, message)
-            }
-            return json
-        } finally {
-            conn.disconnect()
-        }
+    private val json = Json {
+        ignoreUnknownKeys = true
+        coerceInputValues = true
+        explicitNulls = false
     }
 
-    private suspend fun <T> io(block: () -> T): T = withContext(Dispatchers.IO) {
-        try {
-            block()
-        } catch (e: ApiException) {
-            throw e
-        } catch (e: Exception) {
+    private val jsonType = "application/json".toMediaType()
+
+    /** Tek, paylaşılan istemci: bağlantılar yeniden kullanılır (her istekte yeni TLS el sıkışması yok). */
+    private val http: OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(20, TimeUnit.SECONDS)
+        .writeTimeout(20, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
+        .build()
+
+    /** Uzun yoklama için daha uzun okuma süresi; aynı bağlantı havuzunu paylaşır. */
+    private val longPoll: OkHttpClient = http.newBuilder().readTimeout(40, TimeUnit.SECONDS).build()
+
+    private suspend fun Call.await(): Response = suspendCancellableCoroutine { cont ->
+        cont.invokeOnCancellation { runCatching { cancel() } }
+        enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                if (!cont.isCompleted) cont.resumeWithException(e)
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                cont.resume(response)
+            }
+        })
+    }
+
+    /** İsteği gönderir; başarılıysa gövdeyi metin olarak, değilse anlamlı bir [ApiException] döndürür. */
+    private suspend fun send(
+        method: String,
+        path: String,
+        body: String? = null,
+        token: String? = null,
+        client: OkHttpClient = http,
+    ): String {
+        val builder = Request.Builder().url(HOMESERVER + path).header("Accept", "application/json")
+        if (token != null) builder.header("Authorization", "Bearer $token")
+        val requestBody = (body ?: if (method == "POST") "{}" else null)?.toRequestBody(jsonType)
+        builder.method(method, requestBody)
+        val response = try {
+            client.newCall(builder.build()).await()
+        } catch (e: IOException) {
             // Teknik ayrıntı sorun giderme içindir; şifre ya da anahtar içermez.
             val detail = (e::class.simpleName ?: "Hata") + ": " + (e.message ?: "").take(250)
             throw ApiException("BAGLANTI", "Sunucuya bağlanılamadı. İnternet bağlantını kontrol et.\n\nAyrıntı: $detail")
         }
+        response.use { r ->
+            val text = r.body?.string().orEmpty()
+            if (!r.isSuccessful) {
+                val err = runCatching { json.decodeFromString<ErrorDto>(text) }.getOrDefault(ErrorDto())
+                val code = err.error.ifEmpty { err.errcode }.ifEmpty { "HTTP_${r.code}" }
+                val message = err.message.ifEmpty { "İşlem tamamlanamadı (${r.code})." }
+                throw ApiException(code, message)
+            }
+            return text
+        }
     }
+
+    private suspend inline fun <reified T> get(path: String, token: String? = null): T =
+        decode(send("GET", path, token = token))
+
+    private suspend inline fun <reified T> post(path: String, body: JsonObject? = null, token: String? = null, client: OkHttpClient = http): T =
+        decode(send("POST", path, body?.toString(), token, client))
+
+    private inline fun <reified T> decode(text: String): T {
+        val serializer: KSerializer<T> = serializer()
+        return try {
+            json.decodeFromString(serializer, text.ifBlank { "{}" })
+        } catch (e: Exception) {
+            throw ApiException("YANIT", "Sunucudan beklenmeyen bir yanıt geldi.")
+        }
+    }
+
+    private suspend fun postUnit(path: String, body: JsonObject? = null, token: String? = null) {
+        send("POST", path, body?.toString(), token)
+    }
+
+    // ---------------------------------------------------------------- hesap
 
     /** Kolay kayıt: kullanıcı adı + şifre (+ isteğe bağlı e-posta). */
-    suspend fun registerSimple(username: String, password: String, email: String?): Boolean = io {
-        val body = JSONObject().put("username", username).put("password", password)
-        if (!email.isNullOrBlank()) body.put("email", email)
-        request("POST", "/bayx/v3/register", body).optBoolean("email_pending")
-    }
+    suspend fun registerSimple(username: String, password: String, email: String?): Boolean =
+        post<RegisterReply>("/bayx/v3/register", buildJsonObject {
+            put("username", username)
+            put("password", password)
+            if (!email.isNullOrBlank()) put("email", email)
+        }).emailPending
 
-    suspend fun resetRequest(login: String): String = io {
-        request("POST", "/bayx/v3/reset/request", JSONObject().put("login", login)).optString("message")
-    }
+    suspend fun resetRequest(login: String): String =
+        post<MessageReply>("/bayx/v3/reset/request", buildJsonObject { put("login", login) }).message
 
-    suspend fun resetConfirm(login: String, code: String, password: String) = io {
-        request("POST", "/bayx/v3/reset/confirm", JSONObject().put("login", login).put("code", code).put("password", password))
-        Unit
-    }
+    suspend fun resetConfirm(login: String, code: String, password: String) =
+        postUnit("/bayx/v3/reset/confirm", buildJsonObject {
+            put("login", login)
+            put("code", code)
+            put("password", password)
+        })
 
     data class EmailStatus(val email: String, val verified: Boolean, val daysLeft: Int, val mailReady: Boolean)
 
-    private fun emailStatus(json: JSONObject) =
-        EmailStatus(json.optString("email"), json.optBoolean("verified"), json.optInt("days_left"), json.optBoolean("mail_ready"))
+    private fun EmailDto.toStatus() = EmailStatus(email, verified, daysLeft, mailReady)
 
-    suspend fun emailStatus(token: String) = io { emailStatus(request("POST", "/bayx/v3/email/status", JSONObject(), token)) }
-    suspend fun emailSet(token: String, email: String) = io { emailStatus(request("POST", "/bayx/v3/email/set", JSONObject().put("email", email), token)) }
-    suspend fun emailResend(token: String) = io { emailStatus(request("POST", "/bayx/v3/email/resend", JSONObject(), token)) }
+    suspend fun emailStatus(token: String) = post<EmailDto>("/bayx/v3/email/status", token = token).toStatus()
+    suspend fun emailSet(token: String, email: String) =
+        post<EmailDto>("/bayx/v3/email/set", buildJsonObject { put("email", email) }, token).toStatus()
+    suspend fun emailResend(token: String) = post<EmailDto>("/bayx/v3/email/resend", token = token).toStatus()
 
     // ---------------------------------------------------------------- kişiler
 
     data class Contacts(val friends: List<Member>, val incoming: List<Member>, val outgoing: List<Member>, val blocked: List<Member> = emptyList())
     data class ContactFind(val found: Boolean, val userId: String, val username: String, val displayName: String, val relation: String)
 
-    private fun briefList(json: JSONObject, key: String): List<Member> {
-        val array = json.optJSONArray(key) ?: return emptyList()
-        return (0 until array.length()).map { i ->
-            val m = array.getJSONObject(i)
-            Member(
-                userId = m.optString("user_id"),
-                displayName = m.optString("display_name").ifEmpty { m.optString("username") },
-                admin = false,
-                pending = false,
-                avatarUrl = m.optString("avatar_url").ifEmpty { null },
-                status = m.optString("status"),
-                mode = m.optString("mode").ifEmpty { "offline" },
-            )
-        }
+    private fun List<MemberDto>.brief() = map { it.toMember(it.username) }
+
+    suspend fun contacts(token: String): Contacts {
+        val dto = post<ContactsDto>("/bayx/v3/contacts", token = token)
+        return Contacts(dto.friends.brief(), dto.incoming.brief(), dto.outgoing.brief(), dto.blocked.brief())
     }
 
-    // ---- durum / hikâye
+    suspend fun contactFind(token: String, username: String): ContactFind {
+        val dto = post<FindDto>("/bayx/v3/contacts/find", buildJsonObject { put("username", username) }, token)
+        return ContactFind(dto.found, dto.userId, dto.username, dto.displayName.ifEmpty { dto.username }, dto.relation)
+    }
+
+    private fun userBody(username: String) = buildJsonObject { put("username", username) }
+
+    suspend fun contactRequest(token: String, username: String): String =
+        post<RelationReply>("/bayx/v3/contacts/request", userBody(username), token).relation
+    suspend fun contactAccept(token: String, username: String) = postUnit("/bayx/v3/contacts/accept", userBody(username), token)
+    suspend fun contactReject(token: String, username: String) = postUnit("/bayx/v3/contacts/reject", userBody(username), token)
+    suspend fun contactBlock(token: String, username: String) = postUnit("/bayx/v3/contacts/block", userBody(username), token)
+    suspend fun contactUnblock(token: String, username: String) = postUnit("/bayx/v3/contacts/unblock", userBody(username), token)
+
+    // ---------------------------------------------------------- durum / hikâye
+
     data class StatusItem(
         val id: String,
         val type: String,
@@ -144,205 +312,133 @@ object Api {
     )
     data class StatusList(val mine: StatusUser?, val friends: List<StatusUser>)
 
-    private fun parseStatusItems(arr: org.json.JSONArray?): List<StatusItem> {
-        if (arr == null) return emptyList()
-        return (0 until arr.length()).map { i ->
-            val o = arr.getJSONObject(i)
-            StatusItem(
-                id = o.optString("id"),
-                type = o.optString("type", "text"),
-                text = o.optString("text"),
-                bg = o.optString("bg"),
-                media = o.optString("media"),
-                time = o.optLong("time"),
-                seen = o.optBoolean("seen"),
-                key = o.optString("key"),
-                viewers = o.optJSONArray("viewers")?.let { v ->
-                    (0 until v.length()).map { j -> v.getJSONObject(j).let { it.optString("user_id") to it.optString("name") } }
-                } ?: emptyList(),
-            )
+    private fun StatusUserDto.toUser(): StatusUser? {
+        val list = items.map {
+            StatusItem(it.id, it.type, it.text, it.bg, it.media, it.time, it.seen, it.key, it.viewers.map { v -> v.userId to v.name })
         }
+        if (list.isEmpty()) return null
+        return StatusUser(userId, name, list, lastTime, allSeen)
     }
 
-    private fun parseStatusUser(o: JSONObject?): StatusUser? {
-        if (o == null) return null
-        val items = parseStatusItems(o.optJSONArray("items"))
-        if (items.isEmpty()) return null
-        return StatusUser(
-            userId = o.optString("user_id"),
-            name = o.optString("name"),
-            items = items,
-            lastTime = o.optLong("last_time"),
-            allSeen = o.optBoolean("all_seen"),
-        )
+    suspend fun statusList(token: String): StatusList {
+        val dto = post<StatusListDto>("/bayx/v3/status/list", token = token)
+        return StatusList(dto.mine?.toUser(), dto.friends.mapNotNull { it.toUser() })
     }
 
-    suspend fun statusList(token: String): StatusList = io {
-        val json = request("POST", "/bayx/v3/status/list", JSONObject(), token)
-        val friendsArr = json.optJSONArray("friends")
-        val friends = if (friendsArr == null) emptyList() else
-            (0 until friendsArr.length()).mapNotNull { parseStatusUser(friendsArr.getJSONObject(it)) }
-        StatusList(parseStatusUser(json.optJSONObject("mine")), friends)
-    }
+    suspend fun statusAdd(token: String, text: String, bg: String): String =
+        post<IdReply>("/bayx/v3/status/add", buildJsonObject {
+            put("type", "text")
+            put("text", text)
+            put("bg", bg)
+        }, token).id
 
-    suspend fun statusAdd(token: String, text: String, bg: String): String = io {
-        val body = JSONObject().put("type", "text").put("text", text).put("bg", bg)
-        request("POST", "/bayx/v3/status/add", body, token).optString("id")
-    }
+    suspend fun statusAddImage(token: String, media: String, caption: String, key: String): String =
+        post<IdReply>("/bayx/v3/status/add", buildJsonObject {
+            put("type", "image")
+            put("media", media)
+            put("text", caption)
+            put("bg", "#14110F")
+            put("key", key)
+        }, token).id
 
-    suspend fun statusAddImage(token: String, media: String, caption: String, key: String): String = io {
-        val body = JSONObject().put("type", "image").put("media", media).put("text", caption).put("bg", "#14110F").put("key", key)
-        request("POST", "/bayx/v3/status/add", body, token).optString("id")
-    }
+    suspend fun statusDelete(token: String, id: String) =
+        postUnit("/bayx/v3/status/delete", buildJsonObject { put("id", id) }, token)
 
-    suspend fun statusDelete(token: String, id: String) = io {
-        request("POST", "/bayx/v3/status/delete", JSONObject().put("id", id), token); Unit
-    }
+    suspend fun statusSeen(token: String, owner: String, id: String) =
+        postUnit("/bayx/v3/status/seen", buildJsonObject {
+            put("owner", owner)
+            put("id", id)
+        }, token)
 
-    suspend fun statusSeen(token: String, owner: String, id: String) = io {
-        request("POST", "/bayx/v3/status/seen", JSONObject().put("owner", owner).put("id", id), token); Unit
-    }
-
-    suspend fun contacts(token: String): Contacts = io {
-        val json = request("POST", "/bayx/v3/contacts", JSONObject(), token)
-        Contacts(briefList(json, "friends"), briefList(json, "incoming"), briefList(json, "outgoing"), briefList(json, "blocked"))
-    }
-
-    suspend fun contactFind(token: String, username: String): ContactFind = io {
-        val json = request("POST", "/bayx/v3/contacts/find", JSONObject().put("username", username), token)
-        ContactFind(
-            found = json.optBoolean("found"),
-            userId = json.optString("user_id"),
-            username = json.optString("username"),
-            displayName = json.optString("display_name").ifEmpty { json.optString("username") },
-            relation = json.optString("relation", "none"),
-        )
-    }
-
-    suspend fun contactRequest(token: String, username: String): String = io {
-        request("POST", "/bayx/v3/contacts/request", JSONObject().put("username", username), token).optString("relation")
-    }
-    suspend fun contactAccept(token: String, username: String) = io { request("POST", "/bayx/v3/contacts/accept", JSONObject().put("username", username), token); Unit }
-    suspend fun contactReject(token: String, username: String) = io { request("POST", "/bayx/v3/contacts/reject", JSONObject().put("username", username), token); Unit }
-    suspend fun contactBlock(token: String, username: String) = io { request("POST", "/bayx/v3/contacts/block", JSONObject().put("username", username), token); Unit }
-    suspend fun contactUnblock(token: String, username: String) = io { request("POST", "/bayx/v3/contacts/unblock", JSONObject().put("username", username), token); Unit }
+    // ------------------------------------------------------- web ve davetler
 
     /** Kod ve (varsa) bağlantı döndüren uçlar: web kodu, davet. */
     data class CodeReply(val code: String, val url: String)
 
-    private fun codeReply(json: JSONObject) = CodeReply(json.optString("code"), json.optString("url"))
+    private fun CodeDto.toReply() = CodeReply(code, url)
 
-    suspend fun webCode(token: String) = io { codeReply(request("POST", "/bayx/v2/web/code", JSONObject(), token)) }
+    suspend fun webCode(token: String) = post<CodeDto>("/bayx/v2/web/code", token = token).toReply()
 
-    suspend fun webPassword(token: String): String = io {
-        request("POST", "/bayx/v2/web/password", JSONObject(), token).optString("password")
-    }
+    suspend fun webPassword(token: String): String = post<PasswordReply>("/bayx/v2/web/password", token = token).password
 
     /** WhatsApp Web tarzı: telefon, web'deki QR'ı (pairing_id) ya da 6 haneli kodu onaylar. */
-    suspend fun webApprove(token: String, pairingId: String?, code: String?): Unit = io {
-        val body = JSONObject()
-        if (!pairingId.isNullOrBlank()) body.put("pairing_id", pairingId)
-        if (!code.isNullOrBlank()) body.put("code", code)
-        request("POST", "/bayx/v3/web/approve", body, token)
-        Unit
-    }
+    suspend fun webApprove(token: String, pairingId: String?, code: String?) =
+        postUnit("/bayx/v3/web/approve", buildJsonObject {
+            if (!pairingId.isNullOrBlank()) put("pairing_id", pairingId)
+            if (!code.isNullOrBlank()) put("code", code)
+        }, token)
 
     // ------------------------------------------------- uygulama ayarı (modüler)
 
     data class AppConfig(val announcement: String, val latestVersion: Int, val apkUrl: String)
 
-    private fun appConfig(json: JSONObject) =
-        AppConfig(json.optString("announcement"), json.optInt("latest_version"), json.optString("apk_url"))
+    private fun ConfigDto.toConfig() = AppConfig(announcement, latestVersion, apkUrl)
 
-    suspend fun getConfig(token: String) = io { appConfig(request("POST", "/bayx/config", JSONObject(), token)) }
+    suspend fun getConfig(token: String) = post<ConfigDto>("/bayx/config", token = token).toConfig()
 
-    suspend fun setConfig(token: String, announcement: String, latestVersion: Int, apkUrl: String) = io {
-        appConfig(request("POST", "/bayx/admin/config", JSONObject()
-            .put("announcement", announcement).put("latest_version", latestVersion).put("apk_url", apkUrl), token))
-    }
+    suspend fun setConfig(token: String, announcement: String, latestVersion: Int, apkUrl: String) =
+        post<ConfigDto>("/bayx/admin/config", buildJsonObject {
+            put("announcement", announcement)
+            put("latest_version", latestVersion)
+            put("apk_url", apkUrl)
+        }, token).toConfig()
 
-    suspend fun createInvite(token: String, uses: Int, days: Int) = io {
-        codeReply(request("POST", "/bayx/admin/invite", JSONObject().put("uses", uses).put("days", days), token))
-    }
+    suspend fun createInvite(token: String, uses: Int, days: Int) =
+        post<CodeDto>("/bayx/admin/invite", buildJsonObject {
+            put("uses", uses)
+            put("days", days)
+        }, token).toReply()
 
     /** Hesap kullanılabiliyorsa null, değilse Matrix hata kodunu (ör. M_USER_LOCKED) döndürür. */
-    suspend fun accountProblem(token: String): String? = io {
-        try {
-            request("GET", "/_matrix/client/v3/account/whoami", token = token)
-            null
-        } catch (e: ApiException) {
-            e.code
-        }
+    suspend fun accountProblem(token: String): String? = try {
+        send("GET", "/_matrix/client/v3/account/whoami", token = token)
+        null
+    } catch (e: ApiException) {
+        e.code
     }
 
-    private fun parseMembers(json: JSONObject): List<Member> {
-        val array = json.optJSONArray("members") ?: return emptyList()
-        return (0 until array.length()).map { i ->
-            val m = array.getJSONObject(i)
-            Member(
-                userId = m.optString("user_id"),
-                displayName = m.optString("display_name").ifEmpty { m.optString("user_id") },
-                admin = m.optBoolean("admin"),
-                pending = m.optBoolean("pending"),
-                avatarUrl = m.optString("avatar_url").ifEmpty { null },
-                status = m.optString("status"),
-                mode = m.optString("mode").ifEmpty { "offline" },
-            )
-        }
-    }
+    // ---------------------------------------------------------- üyeler, durum
 
-    suspend fun members(token: String): List<Member> = io {
-        parseMembers(request("GET", "/bayx/members", token = token))
-    }
+    suspend fun members(token: String): List<Member> =
+        get<MembersDto>("/bayx/members", token).members.map { it.toMember(it.userId) }
 
-    /** Yoklama gönderir ve şu an çevrimiçi olan üyelerin kimliklerini döndürür. */
-    suspend fun presence(token: String, active: Boolean, mode: String? = null, status: String? = null): PresenceResult = io {
-        val body = JSONObject().put("active", active)
-        if (mode != null) body.put("mode", mode)
-        if (status != null) body.put("status", status)
-        val json = request("POST", "/bayx/presence", body, token)
-        val users = HashMap<String, UserPresence>()
-        json.optJSONObject("users")?.let { obj ->
-            obj.keys().forEach { uid ->
-                val p = obj.optJSONObject(uid) ?: return@forEach
-                users[uid] = UserPresence(p.optString("mode", "offline"), p.optString("status"))
-            }
-        }
-        val me = json.optJSONObject("me")
-        PresenceResult(users, me?.optString("mode", "online") ?: "online", me?.optString("status").orEmpty())
+    /** Yoklama gönderir ve şu an çevrimiçi olan üyelerin durumlarını döndürür. */
+    suspend fun presence(token: String, active: Boolean, mode: String? = null, status: String? = null): PresenceResult {
+        val dto = post<PresenceDto>("/bayx/presence", buildJsonObject {
+            put("active", active)
+            if (mode != null) put("mode", mode)
+            if (status != null) put("status", status)
+        }, token)
+        return PresenceResult(dto.users.mapValues { UserPresence(it.value.mode, it.value.status) }, dto.me.mode, dto.me.status)
     }
 
     // ------------------------------------------------------------ arama
 
-    suspend fun callSend(token: String, to: String, callId: String, type: String, data: JSONObject) = io {
-        request(
-            "POST",
-            "/bayx/call/send",
-            JSONObject().put("to", to).put("call_id", callId).put("type", type).put("data", data),
-            token,
-        )
-        Unit
+    suspend fun callSend(token: String, to: String, callId: String, type: String, data: JSONObject) {
+        // SDP/ICE içeriği WebRTC'den org.json olarak geliyor; olduğu gibi gömülür.
+        val body = "{\"to\":${JSONObject.quote(to)},\"call_id\":${JSONObject.quote(callId)}," +
+            "\"type\":${JSONObject.quote(type)},\"data\":$data}"
+        send("POST", "/bayx/call/send", body, token)
     }
 
-    /** Uzun yoklama: sunucu en fazla 25 saniye bekletir. */
-    /** [after]: alınan son olay numarası; sunucu teslim edilen olayları ancak bu teyitle siler. */
-    suspend fun callPoll(token: String, after: Long): List<JSONObject> = io {
-        val json = request("POST", "/bayx/call/poll", JSONObject().put("after", after), token, readTimeoutMs = 40_000)
-        val array = json.optJSONArray("events")
-        if (array == null) emptyList() else (0 until array.length()).map { array.getJSONObject(it) }
+    /** Uzun yoklama: sunucu en fazla 25 saniye bekletir. [after]: alınan son olay numarası (teyit). */
+    suspend fun callPoll(token: String, after: Long): List<JSONObject> {
+        val dto = post<CallEventsDto>("/bayx/call/poll", buildJsonObject { put("after", after) }, token, longPoll)
+        return dto.events.map { JSONObject(it.toString()) }
     }
 
-    suspend fun turn(token: String): JSONObject = io { request("GET", "/bayx/turn", token = token) }
+    suspend fun turn(token: String): JSONObject = JSONObject(send("GET", "/bayx/turn", token = token).ifBlank { "{}" })
 
-    suspend fun adminMembers(token: String): AdminMembers = io {
-        val json = request("GET", "/bayx/admin/members", token = token)
-        AdminMembers(parseMembers(json), json.optInt("count"), json.optInt("max", 10), json.optInt("invites"))
+    // ------------------------------------------------------------ yönetim
+
+    suspend fun adminMembers(token: String): AdminMembers {
+        val dto = get<MembersDto>("/bayx/admin/members", token)
+        return AdminMembers(dto.members.map { it.toMember(it.userId) }, dto.count, dto.max, dto.invites)
     }
 
-    suspend fun adminAction(token: String, action: String, userId: String, newPassword: String? = null) = io {
-        val body = JSONObject().put("user_id", userId)
-        if (newPassword != null) body.put("new_password", newPassword)
-        request("POST", "/bayx/admin/$action", body, token)
-        Unit
-    }
+    suspend fun adminAction(token: String, action: String, userId: String, newPassword: String? = null) =
+        postUnit("/bayx/admin/$action", buildJsonObject {
+            put("user_id", userId)
+            if (newPassword != null) put("new_password", newPassword)
+        }, token)
 }
