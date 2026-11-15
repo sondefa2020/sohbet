@@ -241,6 +241,9 @@ object Bayx {
     val pendingRoom = MutableStateFlow<String?>(null)
     val pendingOpen = MutableStateFlow<String?>(null)
 
+    /** Oturum kendiliğinden kapandıysa giriş ekranında gösterilecek açıklama. */
+    val logoutNotice = MutableStateFlow<String?>(null)
+
     fun roomName(roomId: String): String? =
         rooms.value.firstOrNull { it.id == roomId }?.takeIf { !it.secret }?.name
 
@@ -305,8 +308,11 @@ object Bayx {
     }
 
     private suspend fun restore() = authMutex.withLock {
+        val hadFile = store.exists()
         val saved = store.load()
         if (saved == null) {
+            // Dosya vardı ama açılamadıysa kullanıcıya nedenini söyle (sessizce çıkış yapmış gibi görünmesin).
+            if (hadFile) logoutNotice.value = "Bu cihazdaki kayıtlı oturum açılamadı. Lütfen tekrar giriş yap."
             wipeLocal()
             auth.value = AuthState.LoggedOut
             return@withLock
@@ -387,7 +393,9 @@ object Bayx {
         e is PendingApproval -> "Hesabın henüz onaylanmadı. Yönetici onaylayınca giriş yapabilirsin."
         e is ClientException.MatrixApi && e.code == "M_USER_LOCKED" ->
             "Hesabın henüz onaylanmadı. Yönetici onaylayınca giriş yapabilirsin."
-        e is ClientException.MatrixApi && e.code == "M_FORBIDDEN" -> "Giriş süresi doldu. Lütfen tekrar dene."
+        // Synapse yanlış kullanıcı adı/şifrede M_FORBIDDEN döndürür.
+        e is ClientException.MatrixApi && e.code == "M_FORBIDDEN" ->
+            "Kullanıcı adı ya da şifre yanlış. Şifreni hatırlamıyorsan \"Şifremi unuttum\"a dokun."
         e is ClientException.MatrixApi && e.code == "M_USER_DEACTIVATED" -> "Bu hesap kapatılmış."
         e is ClientException.MatrixApi && e.code == "M_LIMIT_EXCEEDED" -> "Çok fazla deneme yapıldı. Biraz sonra tekrar dene."
         e is ApiException -> e.message ?: "Giriş yapılamadı."
@@ -475,6 +483,7 @@ object Bayx {
     private suspend fun startSync(c: Client) {
         delegateHandle = c.setDelegate(object : ClientDelegate {
             override fun didReceiveAuthError(isSoftLogout: Boolean) {
+                logoutNotice.value = "Oturumun sunucu tarafından kapatıldı (şifre değişmiş ya da cihaz çıkarılmış olabilir). Lütfen tekrar giriş yap."
                 forceLocalLogout()
             }
 

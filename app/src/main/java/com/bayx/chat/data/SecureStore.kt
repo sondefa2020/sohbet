@@ -40,6 +40,8 @@ class SecureStore(context: Context) {
         file.writeBytes(byteArrayOf(iv.size.toByte()) + iv + encrypted)
     }
 
+    fun exists(): Boolean = file.exists()
+
     fun load(): String? {
         if (!file.exists()) return null
         return try {

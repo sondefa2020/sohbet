@@ -349,6 +349,12 @@ object Dict {
         "yazıyor…" to ("typing…" to "يكتب…"),
         "Çevrimdışı · aranıyor…" to ("Offline · calling…" to "غير متصل · جارٍ الاتصال…"),
         "Aranıyor…" to ("Calling…" to "جارٍ الاتصال…"),
+        "Kullanıcı adı ya da şifre yanlış. Şifreni hatırlamıyorsan \"Şifremi unuttum\"a dokun." to
+            ("Wrong username or password. If you forgot your password, tap \"Forgot password\"." to "اسم المستخدم أو كلمة المرور غير صحيحة. إذا نسيت كلمة المرور، اضغط \"نسيت كلمة المرور\"."),
+        "Bu cihazdaki kayıtlı oturum açılamadı. Lütfen tekrar giriş yap." to
+            ("The saved session on this device could not be opened. Please sign in again." to "تعذر فتح الجلسة المحفوظة على هذا الجهاز. يرجى تسجيل الدخول مرة أخرى."),
+        "Oturumun sunucu tarafından kapatıldı (şifre değişmiş ya da cihaz çıkarılmış olabilir). Lütfen tekrar giriş yap." to
+            ("Your session was ended by the server (password changed or device removed). Please sign in again." to "أنهى الخادم جلستك (ربما تغيّرت كلمة المرور أو أزيل الجهاز). يرجى تسجيل الدخول مرة أخرى."),
         "Görüntülü arama · aranıyor…" to ("Video call · calling…" to "مكالمة فيديو · جارٍ الاتصال…"),
         "Yeniden bağlanıyor…" to ("Reconnecting…" to "جارٍ إعادة الاتصال…"),
         "Sesli arama geliyor" to ("Incoming voice call" to "مكالمة صوتية واردة"),

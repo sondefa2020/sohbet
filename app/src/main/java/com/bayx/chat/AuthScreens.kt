@@ -29,6 +29,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -81,6 +83,13 @@ private fun LoginScreen(onRegister: () -> Unit, onForgot: () -> Unit) {
     var busy by remember { mutableStateOf(false) }
     var info by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+    val notice by Bayx.logoutNotice.collectAsState()
+    LaunchedEffect(notice) {
+        notice?.let {
+            info = t(it)
+            Bayx.logoutNotice.value = null
+        }
+    }
 
     AuthPage {
         Spacer(Modifier.height(70.dp))
@@ -102,7 +111,7 @@ private fun LoginScreen(onRegister: () -> Unit, onForgot: () -> Unit) {
                     val error = Bayx.login(user, pass)
                     pass = ""
                     busy = false
-                    if (error != null) info = error
+                    if (error != null) info = t(error)
                 }
             }
         }
@@ -157,7 +166,7 @@ private fun RegisterScreen(onBack: () -> Unit) {
                         try {
                             Api.registerSimple(user, pass, email.ifBlank { null })
                             val error = Bayx.login(user, pass)
-                            if (error != null) info = error
+                            if (error != null) info = t(error)
                         } catch (e: ApiException) {
                             info = e.message
                         }
