@@ -477,12 +477,36 @@ def status_list(headers):
     return {"mine": mine, "friends": friends}
 
 
+def _looks_like_phone(text):
+    """'0532 123 45 67', '+90 532...', '5321234567' gibi girişler numara sayılır."""
+    t = text.strip()
+    digits = re.sub(r"\D", "", t)
+    return len(digits) >= 7 and re.fullmatch(r"[+\d\s().-]+", t) is not None
+
+
 def contact_find(headers, body):
     me = member_from_token(headers)
-    raw = str(body.get("username", "")).strip().lower().lstrip("@").split(":")[0]
-    if not USERNAME_RE.match(raw):
-        raise ApiError(400, "GECERSIZ_KULLANICI_ADI", "Kullanıcı adını kontrol et.")
-    uid = user_id(raw)
+    text = str(body.get("username", "")).strip()
+    raw = text.lower().lstrip("@").split(":")[0]
+    uid = None
+    if _looks_like_phone(text):
+        # Telefonla arama (WhatsApp gibi): numarayla kayıtlı kullanıcıyı bul.
+        # Numara taramasını önlemek için kişi başına saatte sınırlı sorgu.
+        if _reset_attempts.blocked("numara-ara:" + me):
+            raise ApiError(429, "COK_FAZLA_DENEME", "Çok fazla numara aradın. Biraz sonra tekrar dene.")
+        _reset_attempts.fail("numara-ara:" + me)
+        phone = telefon.normalize(text)
+        if phone:
+            with GIRIS.lock:
+                uid = _phones().get(phone)
+    if uid is None:
+        if not USERNAME_RE.match(raw):
+            if _looks_like_phone(text):
+                return {"found": False}
+            raise ApiError(400, "GECERSIZ_KULLANICI_ADI", "Kullanıcı adını ya da telefon numarasını kontrol et.")
+        uid = user_id(raw)
+    if uid is None:
+        return {"found": False}
     brief = profile_brief(uid)
     if brief is None or uid == user_id(BOT_USER):
         return {"found": False}

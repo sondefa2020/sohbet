@@ -393,6 +393,27 @@ fun ChatListScreen(
         }
     }
 
+    // Kullanıcı adı ya da telefon numarasıyla Tayfa'da arama (yazmayı bırakınca otomatik).
+    var globalHit by remember { mutableStateOf<Api.ContactFind?>(null) }
+    var globalByPhone by remember { mutableStateOf(false) }
+    LaunchedEffect(query, tab) {
+        globalHit = null
+        val q = query.trim()
+        val digits = q.filter { it.isDigit() }
+        val phoneLike = digits.length >= 10 && q.all { it.isDigit() || it in "+ ()-." }
+        val nameLike = !phoneLike && Regex("^@?[a-zA-Z0-9][a-zA-Z0-9._-]{2,19}$").matches(q)
+        if (tab > 1 || (!phoneLike && !nameLike)) return@LaunchedEffect
+        kotlinx.coroutines.delay(700)
+        val key = if (phoneLike) {
+            PhonebookRepo.normalize(q, PhonebookRepo.region(context))?.let { "+$it" } ?: return@LaunchedEffect
+        } else q.lowercase().removePrefix("@")
+        val hit = ContactsRepo.findUser(key)
+        if (hit?.found == true && hit.userId != me.userId) {
+            globalByPhone = phoneLike
+            globalHit = hit
+        }
+    }
+
     fun sendRequest(username: String) {
         scope.launch {
             val error = ContactsRepo.sendContactRequest(username)
@@ -479,7 +500,7 @@ fun ChatListScreen(
                     value = query,
                     onValueChange = { query = it },
                     singleLine = true,
-                    placeholder = { Text(t("Sohbet, mesaj ya da kişi ara"), color = Muted) },
+                    placeholder = { Text(t("Sohbet, kişi, kullanıcı adı ya da numara ara"), color = Muted) },
                     leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null, tint = Muted) },
                     shape = RoundedCornerShape(24.dp),
                     colors = OutlinedTextFieldDefaults.colors(
@@ -497,6 +518,7 @@ fun ChatListScreen(
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when (tab) {
                     0 -> LazyColumn {
+                        globalHit?.let { hit -> item(key = "bul") { FoundUserRow(hit, globalByPhone, onMessage = { openDirectId(hit.userId); query = ""; searching = false }, onRequest = { sendRequest(hit.username); globalHit = null }) } }
                         if (query.isBlank()) {
                             item {
                                 Row(
@@ -552,6 +574,7 @@ fun ChatListScreen(
                         // WhatsApp mantığı: kişiler cihaz rehberinden gelir; yalnızca numarası kayıtlı olanlar.
                         val book = phonebook.filter { query.isBlank() || it.name.contains(query, true) || it.phone.contains(query.filter { c -> c.isDigit() }) }
                         LazyColumn {
+                            globalHit?.let { hit -> item(key = "bul") { FoundUserRow(hit, globalByPhone, onMessage = { openDirectId(hit.userId); query = ""; searching = false }, onRequest = { sendRequest(hit.username); globalHit = null }) } }
                             if (!contactsAllowed) {
                                 item {
                                     Column(
@@ -1039,6 +1062,30 @@ private fun RequestRow(member: Member, incoming: Boolean, onAccept: () -> Unit, 
             Button(onClick = onAccept, modifier = Modifier.height(40.dp)) { Text("Ekle") }
         } else {
             TextButton(onClick = onReject) { Text(t("Geri çek"), color = Muted) }
+        }
+    }
+}
+
+@Composable
+private fun FoundUserRow(hit: Api.ContactFind, byPhone: Boolean, onMessage: () -> Unit, onRequest: () -> Unit) {
+    Column(Modifier.fillMaxWidth()) {
+        Text(t("Tayfa'da bulundu"), color = Muted, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 20.dp, top = 4.dp))
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Avatar(hit.displayName, 52.dp)
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(hit.displayName, color = Ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                Text("@" + hit.username, color = Muted, fontSize = 13.sp, maxLines = 1)
+            }
+            when {
+                hit.relation == "friend" || byPhone -> TextButton(onClick = onMessage) { Text(t("Mesaj"), fontWeight = FontWeight.SemiBold) }
+                hit.relation == "outgoing" -> Text(t("İstek gönderildi"), color = Muted, fontSize = 13.sp)
+                hit.relation == "blocked" -> Text(t("Engelli"), color = Muted, fontSize = 13.sp)
+                else -> TextButton(onClick = onRequest) { Text(t("İstek gönder"), fontWeight = FontWeight.SemiBold) }
+            }
         }
     }
 }
