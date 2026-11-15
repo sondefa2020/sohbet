@@ -334,7 +334,7 @@ object Bayx {
             )
             client = c
             auth.value = AuthState.LoggedIn(json.getString("userId"), json.optString("displayName"))
-            startSync(c)
+            startSyncLater(c)
         } catch (e: Exception) {
             // Kayıtlı oturumu silme: sorun geçici (ör. internet yok) olabilir.
             teardown()
@@ -362,21 +362,28 @@ object Bayx {
                     "M_USER_LOCKED" -> throw PendingApproval()
                     else -> throw ApiException("HESAP", "Hesap şu an kullanılamıyor.")
                 }
-                val name = runCatching { c.displayName() }.getOrDefault("").ifEmpty { username }
-                store.save(
-                    JSONObject()
-                        .put("accessToken", session.accessToken)
-                        .put("refreshToken", session.refreshToken ?: "")
-                        .put("userId", session.userId)
-                        .put("deviceId", session.deviceId)
-                        .put("homeserverUrl", session.homeserverUrl)
-                        .put("displayName", name)
-                        .put("passphrase", passphrase)
-                        .toString(),
-                )
+                // Görünen ad ve eşitleme girişi bekletmesin: ana ekran hemen açılır, gerisi arkada yüklenir.
+                val name = username.trim().lowercase()
+                val saved = JSONObject()
+                    .put("accessToken", session.accessToken)
+                    .put("refreshToken", session.refreshToken ?: "")
+                    .put("userId", session.userId)
+                    .put("deviceId", session.deviceId)
+                    .put("homeserverUrl", session.homeserverUrl)
+                    .put("displayName", name)
+                    .put("passphrase", passphrase)
+                store.save(saved.toString())
                 client = c
                 auth.value = AuthState.LoggedIn(session.userId, name)
-                startSync(c)
+                startSyncLater(c)
+                val loggedIn = c
+                scope.launch {
+                    val real = runCatching { loggedIn.displayName() }.getOrDefault("")
+                    if (real.isNotEmpty() && real != name && client === loggedIn) {
+                        auth.value = AuthState.LoggedIn(session.userId, real)
+                        runCatching { store.save(saved.put("displayName", real).toString()) }
+                    }
+                }
                 null
             } catch (e: Exception) {
                 runCatching { c?.close() }
@@ -479,6 +486,21 @@ object Bayx {
     }
 
     // --------------------------------------------------------------- eşitleme
+
+    /** Eşitlemeyi giriş/açılış işlemini bekletmeden başlatır (çıkışla çakışmasın diye aynı kilitle). */
+    private fun startSyncLater(c: Client) {
+        scope.launch {
+            authMutex.withLock {
+                if (client === c) {
+                    runCatching { startSync(c) }.onFailure {
+                        // Oturum kayıtlı kalır; "tekrar dene" ekranı gösterilir (ör. internet yoksa).
+                        teardown()
+                        auth.value = AuthState.Offline
+                    }
+                }
+            }
+        }
+    }
 
     private suspend fun startSync(c: Client) {
         delegateHandle = c.setDelegate(object : ClientDelegate {
