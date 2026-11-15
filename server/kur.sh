@@ -432,65 +432,32 @@ else
 fi
 
 # ------------------------------------------------- 2c. Tayfa Web (tarayıcı)
-# Element Web, Tayfa adıyla ayrı bir alt alan adında yayınlanır (güvenlik için sohbet
+# Tayfa Web, ayrı bir alt alan adında yayınlanır (güvenlik için sohbet
 # sunucusundan ayrı bir adreste olmalı). Alt alan adı panelde oluşturulmamışsa atlanır.
 WEB_DIR="${BAYX_WEB_DIR:-/home/acioglu/acioglu.tr/subdomains/${WEB_DOMAIN%%.*}/public_html}"
 WEB_OK="hayır (panelde $WEB_DOMAIN alt alan adı yok)"
 if [ -d "$WEB_DIR" ]; then
     say "Tayfa Web kuruluyor ($WEB_DOMAIN)"
-    WEB_TAG="$(curl -fsSL https://api.github.com/repos/element-hq/element-web/releases/latest | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"])')" \
-        || fail "Element Web sürümü öğrenilemedi."
+    # Tayfa'nın kendi web uygulaması (uçtan uca şifreli, QR ile giriş). Element Web'in yerini alır.
     WEB_TMP="$(mktemp -d)"
-    curl -fsSL -o "$WEB_TMP/element.tar.gz" \
-        "https://github.com/element-hq/element-web/releases/download/$WEB_TAG/element-$WEB_TAG.tar.gz" \
-        || fail "Element Web indirilemedi."
-    tar -xzf "$WEB_TMP/element.tar.gz" -C "$WEB_TMP"
-    WEB_SRC="$(find "$WEB_TMP" -maxdepth 1 -type d -name 'element-*' | head -1)"
-    [ -f "$WEB_SRC/index.html" ] || fail "Element Web paketi beklenen yapıda değil."
+    curl -fsSL -o "$WEB_TMP/tayfa-web.tar.gz" "$RAW_BASE/web/tayfa-web.tar.gz" || fail "Tayfa Web indirilemedi."
+    tar -xzf "$WEB_TMP/tayfa-web.tar.gz" -C "$WEB_TMP"
+    WEB_SRC="$WEB_TMP/tayfa-web"
+    [ -f "$WEB_SRC/index.html" ] || fail "Tayfa Web paketi beklenen yapıda değil."
+    WEB_TAG="$(cat "$WEB_SRC/.surum" 2>/dev/null || echo yeni)"
     if [ -n "$(ls -A "$WEB_DIR" 2>/dev/null)" ] && [ ! -f "$WEB_DIR/.tayfa-web" ]; then
         mkdir -p "$WEB_DIR/../public_html.yedek"
         cp -a "$WEB_DIR/." "$WEB_DIR/../public_html.yedek/"
     fi
     find "$WEB_DIR" -mindepth 1 -delete
     cp -a "$WEB_SRC/." "$WEB_DIR/"
-    cat > "$WEB_DIR/config.json" <<WEBCONF
-{
-  "default_server_config": {
-    "m.homeserver": { "base_url": "https://$DOMAIN", "server_name": "$DOMAIN" }
-  },
-  "brand": "Tayfa",
-  "default_theme": "light",
-  "default_country_code": "TR",
-  "disable_custom_urls": true,
-  "disable_guests": true,
-  "disable_3pid_login": true,
-  "show_labs_settings": false,
-  "mobile_guide_toast": false,
-  "room_directory": { "servers": [] },
-  "embedded_pages": { "login_for_welcome": true },
-  "setting_defaults": {
-    "UIFeature.registration": false,
-    "UIFeature.passwordReset": false,
-    "UIFeature.voip": false,
-    "UIFeature.widgets": false,
-    "UIFeature.feedback": false,
-    "UIFeature.thirdPartyId": false,
-    "UIFeature.identityServer": false,
-    "UIFeature.shareSocialMedia": false,
-    "UIFeature.urlPreviews": false,
-    "UIFeature.locationSharing": false
-  }
-}
-WEBCONF
-    curl -fsSL -o "$WEB_DIR/giris.html" "$RAW_BASE/web/giris.html" || fail "giris.html indirilemedi."
-    curl -fsSL -o "$WEB_DIR/qrcode.js" "$RAW_BASE/web/qrcode.js" || fail "qrcode.js indirilemedi."
-    sed -i "s|__DOMAIN__|$DOMAIN|" "$WEB_DIR/giris.html"
-    echo "$WEB_TAG" > "$WEB_DIR/.tayfa-web"
+    printf '{ "homeserver": "https://%s" }\n' "$DOMAIN" > "$WEB_DIR/config.json"
+    echo "tayfa-web $WEB_TAG" > "$WEB_DIR/.tayfa-web"
     chown -R --reference="$(dirname "$WEB_DIR")" "$WEB_DIR"
     find "$WEB_DIR" -type d -exec chmod 755 {} +
     find "$WEB_DIR" -type f -exec chmod 644 {} +
     rm -rf "$WEB_TMP"
-    WEB_OK="evet (https://$WEB_DOMAIN, $WEB_TAG)"
+    WEB_OK="evet (https://$WEB_DOMAIN, Tayfa Web $WEB_TAG)"
 fi
 
 # ------------------------------------------------------ 3. Yönetici hesabı

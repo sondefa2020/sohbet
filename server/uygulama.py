@@ -26,7 +26,7 @@ from kayit import ApiError
 
 HUB = arama.CallHub()
 
-WEB_PATHS = ("/bayx/v2/web/redeem", "/bayx/v3/web/start", "/bayx/v3/web/poll")
+WEB_PATHS = ("/bayx/v2/web/redeem", "/bayx/v3/web/start", "/bayx/v3/web/poll", "/bayx/presence")
 
 
 @asynccontextmanager
@@ -52,7 +52,7 @@ def cors_headers(request: Request):
         return {
             "Access-Control-Allow-Origin": kayit.WEB_ORIGIN,
             "Access-Control-Allow-Methods": "POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
             "Vary": "Origin",
         }
     return {}

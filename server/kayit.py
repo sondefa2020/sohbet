@@ -794,6 +794,8 @@ def web_code(headers):
     member_from_token(headers)
     token = headers.get("Authorization", "")[7:].strip()
     status, data = synapse("POST", "/_matrix/client/v1/login/get_token", {}, token=token)
+    if status == 429:
+        raise ApiError(429, "COK_FAZLA_DENEME", "Çok sık denendi. Bir dakika bekleyip tekrar dene.")
     if status != 200 or not data.get("login_token"):
         raise ApiError(502, "WEB_KAPALI", "Web girişi sunucuda açık değil. Sunucu komutunu yeniden çalıştır.")
     code = GIRIS.create_web_code(data["login_token"])
@@ -845,6 +847,8 @@ def web_pair_approve(headers, body):
         raise ApiError(404, "ESLESME_YOK", "Kod geçersiz ya da süresi dolmuş. Web'de yeni kod al.")
     token = headers.get("Authorization", "")[7:].strip()
     status, data = synapse("POST", "/_matrix/client/v1/login/get_token", {}, token=token)
+    if status == 429:
+        raise ApiError(429, "COK_FAZLA_DENEME", "Çok sık denendi. Bir dakika bekleyip tekrar dene.")
     if status != 200 or not data.get("login_token"):
         raise ApiError(502, "WEB_KAPALI", "Web girişi sunucuda açık değil. Sunucu komutunu yeniden çalıştır.")
     if not GIRIS.approve_pairing(raw, data["login_token"]):
@@ -1308,11 +1312,11 @@ class Handler(BaseHTTPRequestHandler):
     def _cors(self):
         origin = self.headers.get("Origin", "")
         path = self.path.split("?", 1)[0].rstrip("/")
-        web_paths = ("/bayx/v2/web/redeem", "/bayx/v3/web/start", "/bayx/v3/web/poll")
+        web_paths = ("/bayx/v2/web/redeem", "/bayx/v3/web/start", "/bayx/v3/web/poll", "/bayx/presence")
         if WEB_ORIGIN and origin == WEB_ORIGIN and path in web_paths:
             self.send_header("Access-Control-Allow-Origin", WEB_ORIGIN)
             self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
-            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
             self.send_header("Vary", "Origin")
 
     def _send(self, status, payload):
