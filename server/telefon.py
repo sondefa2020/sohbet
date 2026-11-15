@@ -15,7 +15,8 @@ import time
 import urllib.parse
 import urllib.request
 
-SMS_URL = os.environ.get("BAYX_SMS_URL", "https://www.oztekbayi.com/panel/smsgonder1Npost.php")
+# Sağlayıcının belgelediği adres (https tarafı farklı bir panele gidiyor ve hesabı tanımıyor).
+SMS_URL = os.environ.get("BAYX_SMS_URL", "http://www.oztekbayi.com/panel/smsgonder1Npost.php")
 SMS_KNO = os.environ.get("BAYX_SMS_KNO", "")
 SMS_USER = os.environ.get("BAYX_SMS_USER", "")
 SMS_PASS = os.environ.get("BAYX_SMS_PASS", "")
@@ -120,8 +121,6 @@ def send_sms(phone, message):
     )
     body = urllib.parse.urlencode({"data": xml}).encode()
     urls = [SMS_URL]
-    if SMS_URL.startswith("https://"):
-        urls.append("http://" + SMS_URL[len("https://"):])  # sağlayıcı https desteklemiyorsa
     last = ""
     for url in urls:
         try:
