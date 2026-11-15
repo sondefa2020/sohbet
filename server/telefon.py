@@ -17,10 +17,10 @@ import urllib.request
 
 # Sağlayıcının belgelediği adres (https tarafı farklı bir panele gidiyor ve hesabı tanımıyor).
 SMS_URL = os.environ.get("BAYX_SMS_URL", "http://www.oztekbayi.com/panel/smsgonder1Npost.php")
-SMS_KNO = os.environ.get("BAYX_SMS_KNO", "")
-SMS_USER = os.environ.get("BAYX_SMS_USER", "")
-SMS_PASS = os.environ.get("BAYX_SMS_PASS", "")
-SMS_SENDER = os.environ.get("BAYX_SMS_SENDER", "")
+SMS_KNO = os.environ.get("BAYX_SMS_KNO", "").strip().strip("'\"")
+SMS_USER = os.environ.get("BAYX_SMS_USER", "").strip().strip("'\"")
+SMS_PASS = os.environ.get("BAYX_SMS_PASS", "").strip().strip("'\"")
+SMS_SENDER = os.environ.get("BAYX_SMS_SENDER", "").strip().strip("'\"")
 DEFAULT_COUNTRY = os.environ.get("BAYX_PHONE_COUNTRY", "90")
 
 CODE_SECONDS = 300  # SMS kodu 5 dakika geçerli

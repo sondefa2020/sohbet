@@ -233,14 +233,15 @@ read -r -s -p "Şifre (ekranda görünmez): " SIF; echo
 read -r -p "Gönderen başlığı (ör. TAYFA): " GON
 for v in "$KNO" "$KUL" "$SIF" "$GON"; do
     [ -n "$v" ] || { echo "Boş bırakılamaz."; exit 1; }
-    case "$v" in *$'\n'*|*'"'*) echo "Geçersiz karakter."; exit 1;; esac
+    case "$v" in *$'\n'*|*"'"*) echo "Geçersiz karakter (tek tırnak kullanılamaz)."; exit 1;; esac
 done
 umask 027
+# Değerler tek tırnak içinde: "H. UYSAL" gibi boşluklu başlıklar ve özel karakterli şifreler bozulmaz.
 cat > /etc/bayx/sms.env <<EOF
-BAYX_SMS_KNO=$KNO
-BAYX_SMS_USER=$KUL
-BAYX_SMS_PASS=$SIF
-BAYX_SMS_SENDER=$GON
+BAYX_SMS_KNO='$KNO'
+BAYX_SMS_USER='$KUL'
+BAYX_SMS_PASS='$SIF'
+BAYX_SMS_SENDER='$GON'
 EOF
 chown root:bayx /etc/bayx/sms.env
 chmod 640 /etc/bayx/sms.env
