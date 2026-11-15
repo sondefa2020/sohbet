@@ -27,6 +27,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bayx.chat.data.Bayx
 import com.bayx.chat.data.GroupRepo
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bayx.chat.data.ContactsRepo
 import kotlinx.coroutines.launch
 
@@ -36,31 +38,18 @@ private val LeaveRed = Color(0xFFB4232A)
 fun GroupInfoScreen(roomId: String, onBack: () -> Unit, onLeft: () -> Unit) {
     val scope = rememberCoroutineScope()
     val toast = rememberToast()
-    var info by remember { mutableStateOf<GroupRepo.GroupInfo?>(null) }
-    var loading by remember { mutableStateOf(true) }
-    var busy by remember { mutableStateOf(false) }
+    val vm = viewModel(key = "grup:$roomId") { com.bayx.chat.ui.GroupInfoViewModel(roomId) }
+    val info by vm.info.collectAsStateWithLifecycle()
+    val loading by vm.loading.collectAsStateWithLifecycle()
+    val busy by vm.busy.collectAsStateWithLifecycle()
+    LaunchedEffect(vm) { vm.messages.collect { toast(it) } }
 
     var renaming by remember { mutableStateOf(false) }
     var adding by remember { mutableStateOf(false) }
     var leaving by remember { mutableStateOf(false) }
     var actionMember by remember { mutableStateOf<GroupRepo.GroupMember?>(null) }
 
-    suspend fun reload() {
-        info = GroupRepo.groupInfo(roomId)
-        loading = false
-    }
-    LaunchedEffect(roomId) { reload() }
 
-    fun act(block: suspend () -> Boolean, fail: String) {
-        if (busy) return
-        busy = true
-        scope.launch {
-            val ok = block()
-            if (!ok) toast(fail)
-            reload()
-            busy = false
-        }
-    }
 
     Column(Modifier.fillMaxSize().background(PageBrush).systemBarsPadding()) {
         Row(
@@ -186,7 +175,7 @@ fun GroupInfoScreen(roomId: String, onBack: () -> Unit, onLeft: () -> Unit) {
                 TextButton(onClick = {
                     val n = name.trim()
                     renaming = false
-                    if (n.isNotEmpty()) act({ GroupRepo.renameGroup(roomId, n) }, t("Ad değiştirilemedi."))
+                    if (n.isNotEmpty()) vm.rename(n, t("Ad değiştirilemedi."))
                 }) { Text("Kaydet") }
             },
             dismissButton = { TextButton(onClick = { renaming = false }) { Text(t("Vazgeç")) } },
@@ -201,7 +190,7 @@ fun GroupInfoScreen(roomId: String, onBack: () -> Unit, onLeft: () -> Unit) {
             onDismiss = { adding = false },
             onAdd = { ids ->
                 adding = false
-                if (ids.isNotEmpty()) act({ GroupRepo.addGroupMembers(roomId, ids) }, t("Üye eklenemedi."))
+                if (ids.isNotEmpty()) vm.addMembers(ids, t("Üye eklenemedi."))
             },
         )
     }
@@ -215,9 +204,7 @@ fun GroupInfoScreen(roomId: String, onBack: () -> Unit, onLeft: () -> Unit) {
             confirmButton = {
                 TextButton(onClick = {
                     leaving = false
-                    scope.launch {
-                        if (GroupRepo.leaveGroup(roomId)) onLeft() else toast(t("Gruptan ayrılınamadı."))
-                    }
+                    vm.leave(t("Gruptan ayrılınamadı."), onLeft)
                 }) { Text(t("Ayrıl"), color = LeaveRed) }
             },
             dismissButton = { TextButton(onClick = { leaving = false }) { Text(t("Vazgeç")) } },
@@ -233,11 +220,11 @@ fun GroupInfoScreen(roomId: String, onBack: () -> Unit, onLeft: () -> Unit) {
             onDismiss = { actionMember = null },
             onToggleAdmin = {
                 actionMember = null
-                act({ GroupRepo.setGroupAdmin(roomId, m.userId, !m.isAdmin) }, t("Yetki değiştirilemedi."))
+                vm.toggleAdmin(m, t("Yetki değiştirilemedi."))
             },
             onRemove = {
                 actionMember = null
-                act({ GroupRepo.removeGroupMember(roomId, m.userId) }, t("Üye çıkarılamadı."))
+                vm.remove(m, t("Üye çıkarılamadı."))
             },
         )
     }

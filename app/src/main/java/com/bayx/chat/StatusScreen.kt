@@ -43,6 +43,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.bayx.chat.data.Bayx
 import com.bayx.chat.data.StatusRepo
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -56,27 +58,28 @@ private fun parseColor(hex: String, fallback: Color): Color = runCatching {
 
 @Composable
 fun StatusScreen(onBack: () -> Unit) {
-    val data by StatusRepo.statuses.collectAsState()
+    val vm = viewModel { com.bayx.chat.ui.StatusViewModel() }
+    val data by vm.statuses.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var composing by remember { mutableStateOf(false) }
     var viewing by remember { mutableStateOf<Api.StatusUser?>(null) }
 
     val context = LocalContext.current
     val toast = rememberToast()
-    var uploading by remember { mutableStateOf(false) }
+    var preparing by remember { mutableStateOf(false) }
+    val sending by vm.uploading.collectAsStateWithLifecycle()
+    val uploading = preparing || sending
+    LaunchedEffect(vm) { vm.messages.collect { toast(t(it)) } }
     val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null && !uploading) {
-            uploading = true
+            preparing = true
             scope.launch {
                 val image = withContext(Dispatchers.IO) { MediaTools.prepareImage(context, uri) }
-                val ok = image != null && StatusRepo.addImageStatus(image.bytes, "")
-                uploading = false
-                if (!ok) toast(StatusRepo.statusError.value?.let { t(it) } ?: t("Fotoğraf yüklenemedi."))
+                preparing = false
+                if (image == null) toast(t("Fotoğraf yüklenemedi.")) else vm.addImage(image.bytes, "Fotoğraf yüklenemedi.")
             }
         }
     }
-
-    LaunchedEffect(Unit) { StatusRepo.refreshStatuses() }
 
     Column(Modifier.fillMaxSize().background(PageBrush).systemBarsPadding()) {
         Row(
@@ -87,7 +90,7 @@ fun StatusScreen(onBack: () -> Unit) {
             Text(t("Durum"), color = Ink, fontSize = 22.sp, fontWeight = FontWeight.Bold)
         }
 
-        val statusError by StatusRepo.statusError.collectAsState()
+        val statusError by vm.error.collectAsStateWithLifecycle()
         statusError?.let { err ->
             Text(
                 t(err),
@@ -178,7 +181,7 @@ fun StatusScreen(onBack: () -> Unit) {
             onDismiss = { composing = false },
             onShare = { text, bg ->
                 composing = false
-                scope.launch { StatusRepo.addTextStatus(text, bg)?.let { toast(t(it)) } }
+                vm.addText(text, bg)
             },
         )
     }
@@ -189,8 +192,8 @@ fun StatusScreen(onBack: () -> Unit) {
             user = user,
             mine = mine,
             onClose = { viewing = null },
-            onSeen = { item -> if (!mine) StatusRepo.markStatusSeen(user.userId, item.id) },
-            onDelete = { item -> scope.launch { StatusRepo.deleteStatus(item.id) }; viewing = null },
+            onSeen = { item -> if (!mine) vm.markSeen(user.userId, item.id) },
+            onDelete = { item -> vm.delete(item.id); viewing = null },
         )
     }
 }

@@ -106,6 +106,8 @@ import com.bayx.chat.data.Api
 import com.bayx.chat.data.ApiException
 import com.bayx.chat.data.AuthState
 import com.bayx.chat.data.Bayx
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bayx.chat.data.RecoveryRepo
 import com.bayx.chat.data.ProfileRepo
 import com.bayx.chat.data.PresenceRepo
@@ -125,18 +127,12 @@ import java.util.Locale
 
 @Composable
 fun ChatScreen(roomId: String, onBack: () -> Unit, onGroupInfo: (String) -> Unit = {}) {
-    var session by remember { mutableStateOf<ChatSession?>(null) }
-    var failed by remember { mutableStateOf(false) }
+    // Sohbet oturumu ViewModel'de: ekran döndürülse ya da tema değişse bile yeniden açılmaz.
+    val vm = viewModel(key = "sohbet:$roomId") { com.bayx.chat.ui.ChatViewModel(roomId) }
+    val state by vm.state.collectAsStateWithLifecycle()
+    val current = (state as? com.bayx.chat.ui.ChatViewModel.State.Ready)?.session
+    val failed = state is com.bayx.chat.ui.ChatViewModel.State.Failed
 
-    LaunchedEffect(roomId) {
-        val opened = runCatching { Bayx.openChat(roomId) }.getOrNull()
-        if (opened == null) failed = true else session = opened
-    }
-    DisposableEffect(roomId) {
-        onDispose { session?.let { Bayx.closeChat(it) } }
-    }
-
-    val current = session
     if (current == null) {
         Column(Modifier.fillMaxSize().background(Bg).systemBarsPadding()) {
             Row(Modifier.fillMaxWidth().padding(4.dp)) {
