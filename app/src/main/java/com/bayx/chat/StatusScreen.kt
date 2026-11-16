@@ -69,7 +69,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.IntOffset
-import com.bayx.chat.data.Bayx
 
 
 // ====================================================================== görünüm
