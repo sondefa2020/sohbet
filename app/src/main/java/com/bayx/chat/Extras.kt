@@ -274,7 +274,7 @@ fun ComfortScreen(onBack: () -> Unit) {
         }
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
             // ---- Kimler ulaşabilir
-            SectionTitle(t("Kimler bana ulaşabilir"))
+            ComfortTitle(t("Kimler bana ulaşabilir"))
             SoftCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) {
                     listOf(
@@ -299,7 +299,7 @@ fun ComfortScreen(onBack: () -> Unit) {
             }
 
             // ---- Sessiz saatler
-            SectionTitle(t("Sessiz saatler"))
+            ComfortTitle(t("Sessiz saatler"))
             SoftCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -322,7 +322,7 @@ fun ComfortScreen(onBack: () -> Unit) {
             }
 
             // ---- Yazı boyutu
-            SectionTitle(t("Yazı boyutu"))
+            ComfortTitle(t("Yazı boyutu"))
             SoftCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) {
                     listOf(1f to t("Normal"), 1.15f to t("Büyük"), 1.3f to t("Çok büyük")).forEach { (value, label) ->
@@ -339,7 +339,7 @@ fun ComfortScreen(onBack: () -> Unit) {
             }
 
             // ---- Hazır cevaplar
-            SectionTitle(t("Hazır cevaplar"))
+            ComfortTitle(t("Hazır cevaplar"))
             SoftCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
                     Text(t("Bildirimin altında tek dokunuşla gönderilir."), color = Muted, fontSize = 13.sp)
@@ -355,7 +355,7 @@ fun ComfortScreen(onBack: () -> Unit) {
             }
 
             // ---- Zamanlanmış mesajlar ve hatırlatmalar
-            SectionTitle(t("Zamanlanmış mesajlar ve hatırlatmalar"))
+            ComfortTitle(t("Zamanlanmış mesajlar ve hatırlatmalar"))
             SoftCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
                     if (jobs.isEmpty()) {
@@ -382,7 +382,7 @@ fun ComfortScreen(onBack: () -> Unit) {
 }
 
 @Composable
-private fun SectionTitle(text: String) {
+private fun ComfortTitle(text: String) {
     Text(text, color = Muted, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 6.dp, top = 18.dp, bottom = 6.dp))
 }
 

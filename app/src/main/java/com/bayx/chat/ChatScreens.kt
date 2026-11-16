@@ -149,6 +149,7 @@ fun ChatScreen(roomId: String, onBack: () -> Unit, onGroupInfo: (String) -> Unit
 }
 
 @Composable
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: (String) -> Unit = {}, onPerson: (String) -> Unit = {}) {
     val messages by session.messages.collectAsState()
     val title by session.title.collectAsState()

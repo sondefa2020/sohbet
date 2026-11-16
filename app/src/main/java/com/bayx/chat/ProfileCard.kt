@@ -83,7 +83,7 @@ fun PersonCardScreen(userId: String, onBack: () -> Unit, onOpenChat: (String) ->
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val toast = rememberToast()
-    var card by remember { mutableStateOf<Api.ProfileCard?>(null) }
+    var card by remember { mutableStateOf<com.bayx.chat.data.ProfileCard?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var confirmBlock by remember { mutableStateOf(false) }
