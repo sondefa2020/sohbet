@@ -41,7 +41,10 @@ jobs:
         run: gradle :app:assembleDebug --stacktrace
       - name: Ekran görüntüleri (tasarım kontrolü)
         continue-on-error: true
-        run: gradle :app:recordRoborazziDebug --stacktrace
+        run: |
+          gradle :app:testDebugUnitTest -Proborazzi.test.record=true --rerun --stacktrace
+          ls app/build/outputs/roborazzi || true
+          grep -ho 'tests="[0-9]*" skipped="[0-9]*" failures="[0-9]*" errors="[0-9]*"' app/build/test-results/testDebugUnitTest/*.xml || true
       - name: Ekran görüntülerini ekranlar dalına koy
         if: github.event_name == 'push'
         continue-on-error: true
