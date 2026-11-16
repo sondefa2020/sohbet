@@ -280,6 +280,7 @@ cat > /usr/local/bin/tayfa-apk-guncelle <<'APKCMD'
 set -euo pipefail
 DIR=/var/lib/tayfa-apk
 BASE="${TAYFA_APK_BASE:-https://github.com/sondefa2020/sohbet/releases/latest/download}"
+mkdir -p "$DIR"; chmod 755 "$DIR"
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 field() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get(sys.argv[2], 0))' "$1" "$2" 2>/dev/null || echo 0; }
 if ! curl -fsSL -m 60 -o "$TMP/surum.json" "$BASE/surum.json"; then
