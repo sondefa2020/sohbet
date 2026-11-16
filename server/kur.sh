@@ -497,6 +497,64 @@ WantedBy=multi-user.target
 EOF
 systemctl daemon-reload
 systemctl enable bayx-kayit >/dev/null 2>&1 || true
+
+# Eski sürümdeki bir hata yüzünden yeniden başlatmalarda kaybolan telefon eşleşmeleri ve kullanıcı
+# adları gece yedeklerinden geri getirilir (yalnızca eksik olanlar eklenir; mevcut hiçbir şey değişmez).
+cat > /usr/local/sbin/tayfa-durum-kurtar <<'KURTAR'
+#!/usr/bin/env python3
+"""Tayfa: kaybolan telefon eşleşmelerini, kullanıcı adlarını ve rehber eşleşmelerini yedeklerden geri getirir."""
+import glob, io, json, os, sys, tarfile
+
+STATE = os.environ.get("TAYFA_DURUM_DOSYA", "/var/lib/bayx/giris.json")
+ROOT = os.environ.get("TAYFA_YEDEK_KOK", "/var/backups/tayfa")
+PAIRS = [("phones", "user_phones"), ("handles", "user_handles")]  # karşılıklı eşleşmeler
+PLAIN = ["phone_hashes", "knows", "reach", "stats"]
+
+try:
+    cur = json.load(open(STATE))
+except (OSError, ValueError):
+    print("Durum dosyası okunamadı; işlem yapılmadı."); sys.exit(0)
+
+added = {}
+for tgz in sorted(glob.glob(os.path.join(ROOT, "gunluk", "*", "tayfa-durum.tar.gz")), reverse=True):
+    try:
+        with tarfile.open(tgz) as tar:
+            member = next((m for m in tar.getmembers() if m.name.endswith("giris.json")), None)
+            if member is None:
+                continue
+            old = json.load(io.TextIOWrapper(tar.extractfile(member), encoding="utf-8"))
+    except Exception:
+        continue
+    for fwd, back in PAIRS:
+        f, b = cur.setdefault(fwd, {}), cur.setdefault(back, {})
+        for key, uid in (old.get(fwd) or {}).items():
+            # Yalnızca iki taraf da boşsa ekle: bu numara/ad ve bu kullanıcı başka birine bağlanmamış olmalı.
+            if key not in f and uid not in b:
+                f[key] = uid
+                b[uid] = key
+                added[fwd] = added.get(fwd, 0) + 1
+    for name in PLAIN:
+        target = cur.setdefault(name, {})
+        for key, value in (old.get(name) or {}).items():
+            if key not in target:
+                target[key] = value
+                added[name] = added.get(name, 0) + 1
+
+if added:
+    tmp = STATE + ".kurtar"
+    with open(tmp, "w") as fh:
+        json.dump(cur, fh)
+    st = os.stat(STATE)
+    os.chown(tmp, st.st_uid, st.st_gid)
+    os.chmod(tmp, st.st_mode & 0o777)
+    os.replace(tmp, STATE)
+    print("Geri getirildi: " + ", ".join("%s %d" % (k, v) for k, v in added.items()))
+else:
+    print("Geri getirilecek kayıt yok.")
+KURTAR
+chmod 700 /usr/local/sbin/tayfa-durum-kurtar
+systemctl stop bayx-kayit 2>/dev/null || true
+DURUM_KURTAR="$(/usr/bin/python3 /usr/local/sbin/tayfa-durum-kurtar 2>&1 | tail -1)"
 systemctl restart bayx-kayit
 KAYIT_UP=0
 for _ in $(seq 1 20); do
@@ -821,7 +879,7 @@ else
 fi
 
 tar czf "$DEST/ayarlar.tar.gz" --ignore-failed-read "$ETC" /etc/bayx /etc/turnserver.conf 2>/dev/null || true
-if [ -d "$STATE" ]; then tar czf "$DEST/tayfa-durum.tar.gz" "$STATE" 2>/dev/null || OK=0; fi
+if [ -d "$STATE" ]; then tar czf "$DEST/tayfa-durum.tar.gz" --exclude="$STATE/whisper" --exclude="$STATE/hf" "$STATE" 2>/dev/null || OK=0; fi
 if [ -d "$MEDIA" ]; then cp -a -u "$MEDIA/." "$ROOT/medya/" 2>/dev/null || OK=0; fi
 
 # 7 günden eski günlük yedekleri sil
@@ -936,6 +994,7 @@ Veritabanı                             : $DB_KIND
 E-posta (doğrulama, şifre sıfırlama)   : $MAIL_OK
 SMS (telefonla kayıt)                  : $SMS_OK
 Uygulama güncellemesi (bu sunucudan)   : $APK_OK
+Kayıp eşleşme kurtarma                 : $DURUM_KURTAR
 Sesli mesajı yazıya çevirme            : $WHISPER_OK
 $FIREWALL_NOTE
 $ADMIN_NOTE

@@ -69,9 +69,14 @@ class Store:
             with open(path) as f:
                 loaded = json.load(f)
             if isinstance(loaded, dict):
-                for key in self.data:
-                    if isinstance(loaded.get(key), dict):
-                        self.data[key] = loaded[key]
+                # Dosyadaki BÜTÜN bölümler yüklenir (telefon eşleşmeleri, kullanıcı adları, rehber,
+                # istatistik...). Eskiden yalnızca yukarıdaki sabit bölümler okunuyordu; diğerleri
+                # her yeniden başlatmada kayboluyordu.
+                for key, value in loaded.items():
+                    if isinstance(value, (dict, list)):
+                        if key in self.data and not isinstance(value, type(self.data[key])):
+                            continue
+                        self.data[key] = value
         except (OSError, ValueError):
             pass
 
