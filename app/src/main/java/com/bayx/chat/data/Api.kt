@@ -155,9 +155,35 @@ private data class PhoneVerifyDto(
     val otp: String = "",
     @SerialName("new") val isNew: Boolean = false,
     val phone: String = "",
+    @SerialName("display_name") val displayName: String = "",
 )
 
-@Serializable private data class PhoneMeDto(val phone: String = "", val masked: String = "")
+@Serializable
+private data class PhoneMeDto(
+    val phone: String = "",
+    val masked: String = "",
+    val username: String = "",
+    @SerialName("custom_username") val custom: Boolean = false,
+)
+
+@Serializable
+private data class UsernameCheckDto(
+    val available: Boolean = false,
+    val message: String = "",
+    val suggestions: List<String> = emptyList(),
+)
+
+@Serializable private data class UsernameSetDto(val username: String = "")
+
+@Serializable
+private data class AppLatestDto(
+    @SerialName("version_code") val versionCode: Int = 0,
+    @SerialName("version_name") val versionName: String = "",
+    val sha256: String = "",
+    val size: Long = 0,
+    val notes: String = "",
+    val url: String = "",
+)
 
 @Serializable
 private data class MatchDto(
@@ -294,7 +320,31 @@ object Api {
 
     data class PhoneStart(val phone: String, val masked: String, val resendSeconds: Int)
     /** Doğrulama sonucu: [username] + tek seferlik [otp] ile giriş yapılır; [isNew] yeni hesap mı. */
-    data class PhoneVerify(val username: String, val otp: String, val isNew: Boolean)
+    data class PhoneVerify(val username: String, val otp: String, val isNew: Boolean, val displayName: String = "")
+    /** Hesabın numarası ve (seçildiyse) kullanıcı adı. */
+    data class AccountInfo(val phone: String, val masked: String, val username: String, val customUsername: Boolean)
+    data class UsernameCheck(val available: Boolean, val message: String, val suggestions: List<String>)
+    /** Sunucudaki en son uygulama sürümü. */
+    data class AppLatest(val versionCode: Int, val versionName: String, val sha256: String, val size: Long, val notes: String, val url: String)
+
+    suspend fun accountInfo(token: String): AccountInfo {
+        val dto = post<PhoneMeDto>("/bayx/v4/phone/me", token = token)
+        return AccountInfo(dto.phone, dto.masked, dto.username, dto.custom)
+    }
+
+    suspend fun usernameCheck(token: String, username: String): UsernameCheck {
+        val dto = post<UsernameCheckDto>("/bayx/v4/username/check", buildJsonObject { put("username", username) }, token)
+        return UsernameCheck(dto.available, dto.message, dto.suggestions)
+    }
+
+    suspend fun usernameSet(token: String, username: String): String =
+        post<UsernameSetDto>("/bayx/v4/username/set", buildJsonObject { put("username", username) }, token).username
+
+    suspend fun appLatest(): AppLatest? {
+        val dto = get<AppLatestDto>("/bayx/app/latest")
+        if (dto.versionCode <= 0 || dto.url.isBlank()) return null
+        return AppLatest(dto.versionCode, dto.versionName, dto.sha256, dto.size, dto.notes, dto.url)
+    }
     data class PhoneMatch(val hash: String, val userId: String, val displayName: String, val avatarUrl: String?, val status: String)
 
     suspend fun phoneStart(phone: String): PhoneStart {
@@ -308,7 +358,7 @@ object Api {
             put("phone", phone)
             put("code", code)
         }, token)
-        return PhoneVerify(dto.username, dto.otp, dto.isNew)
+        return PhoneVerify(dto.username, dto.otp, dto.isNew, dto.displayName)
     }
 
     suspend fun phoneMe(token: String): String = post<PhoneMeDto>("/bayx/v4/phone/me", token = token).phone

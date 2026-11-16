@@ -1,6 +1,8 @@
 package com.bayx.chat
 
+import androidx.compose.material.icons.outlined.AlternateEmail
 import androidx.compose.material.icons.outlined.Backup
+import androidx.compose.material.icons.outlined.Smartphone
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.runtime.mutableStateListOf
 import com.bayx.chat.data.PollInfo
@@ -126,7 +128,7 @@ import java.util.Locale
 // ---------- Sohbet ----------
 
 @Composable
-fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Unit, onWebLink: () -> Unit) {
+fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Unit, onWebLink: () -> Unit, onPhone: () -> Unit = {}) {
     var confirmLogout by remember { mutableStateOf(false) }
     var langPick by remember { mutableStateOf(false) }
     var confirmNewKey by remember { mutableStateOf(false) }
@@ -162,9 +164,18 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
     var working by remember { mutableStateOf(false) }
     var emailState by remember { mutableStateOf<Api.EmailStatus?>(null) }
     var showEmail by remember { mutableStateOf(false) }
-    val username = me.userId.substringBefore(":").removePrefix("@")
+    // Kullanıcının seçtiği ad (seçmediyse sunucudaki adı) ve bağlı telefon numarası.
+    var username by remember { mutableStateOf(me.userId.substringBefore(":").removePrefix("@")) }
+    var customUsername by remember { mutableStateOf(true) }
+    var myPhone by remember { mutableStateOf<String?>(null) }
+    var editUsername by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         val token = Bayx.accessToken ?: return@LaunchedEffect
+        runCatching { Api.accountInfo(token) }.getOrNull()?.let {
+            if (it.username.isNotBlank()) username = it.username
+            customUsername = it.customUsername
+            myPhone = it.masked
+        }
         isAdmin = runCatching { Api.adminMembers(token); true }.getOrDefault(false)
         emailState = runCatching { Api.emailStatus(token) }.getOrNull()
     }
@@ -259,7 +270,12 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.clickable { editStatus = true }.padding(vertical = 3.dp),
                 )
-                Text("@$username", color = SoftBlue, fontSize = 15.sp)
+                Text(
+                    if (customUsername) "@$username" else t("Kullanıcı adı seç…"),
+                    color = if (customUsername) SoftBlue else Blue,
+                    fontSize = 15.sp,
+                    modifier = Modifier.clickable { editUsername = true }.padding(vertical = 2.dp),
+                )
             }
         }
         Spacer(Modifier.height(20.dp))
@@ -284,12 +300,13 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
         Spacer(Modifier.height(14.dp))
         SoftCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(horizontal = 18.dp, vertical = 4.dp)) {
-                SettingRow(Icons.Outlined.Person, t("Hesabım")) {
-                    info = tf(
-                        "Kullanıcı adı: @%s\nSunucu: %s\n\nGiriş için kullanıcı adın ve şifren yeterli. Şifreni unutursan giriş ekranındaki Şifremi unuttum bağlantısıyla e-postana kod gönderilir.",
-                        username, Api.SERVER_NAME,
-                    )
-                }
+                SettingRow(Icons.Outlined.AlternateEmail, t("Kullanıcı adı"), trailing = {
+                    Text(if (customUsername) "@$username" else t("Seç"), color = SoftBlue, fontSize = 15.sp, maxLines = 1)
+                }) { editUsername = true }
+                HorizontalDivider(color = Line)
+                SettingRow(Icons.Outlined.Smartphone, t("Telefon numarası"), trailing = {
+                    Text(myPhone?.ifBlank { t("Ekle") } ?: "…", color = SoftBlue, fontSize = 15.sp, maxLines = 1)
+                }) { onPhone() }
                 HorizontalDivider(color = Line)
                 SettingRow(Icons.Outlined.Lock, t("Gizlilik ve Güvenlik")) {
                     info = t("Mesajların uçtan uca şifrelidir. Bu cihazdaki oturum ve sohbet verileri şifreli saklanır; gelen fotoğraf, video ve sesler galeriye kaydedilmez. Çıkış yaptığında bu cihazdaki her şey silinir.")
@@ -392,6 +409,18 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
             shareMessage = null,
             sensitive = true,
             onDismiss = { shareDialog = null },
+        )
+    }
+    if (editUsername) {
+        UsernameDialog(
+            current = if (customUsername) username else "",
+            onDismiss = { editUsername = false },
+            onSaved = { saved ->
+                username = saved
+                customUsername = saved != me.userId.substringBefore(":").removePrefix("@")
+                editUsername = false
+                toast(tf("Kullanıcı adın artık @%s", saved))
+            },
         )
     }
     if (editName) {
@@ -621,5 +650,94 @@ internal fun EmailDialog(
                 TextButton(onClick = onDismiss) { Text("Kapat") }
             }
         },
+    )
+}
+
+
+/** Kullanıcı adı seçme: yazarken uygun mu diye sunucuya sorulur; alınmışsa öneriler gösterilir. */
+@Composable
+internal fun UsernameDialog(current: String, onDismiss: () -> Unit, onSaved: (String) -> Unit) {
+    val scope = rememberCoroutineScope()
+    var value by remember { mutableStateOf(current) }
+    var checking by remember { mutableStateOf(false) }
+    var result by remember { mutableStateOf<Api.UsernameCheck?>(null) }
+    var saving by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val wellFormed = Regex("^[a-z0-9][a-z0-9._-]{2,19}$").matches(value)
+
+    // Yazmayı bırakınca denetle.
+    LaunchedEffect(value) {
+        result = null
+        error = null
+        if (!wellFormed || value == current) { checking = false; return@LaunchedEffect }
+        checking = true
+        kotlinx.coroutines.delay(450)
+        val token = Bayx.accessToken
+        result = if (token == null) null else runCatching { Api.usernameCheck(token, value) }.getOrNull()
+        checking = false
+    }
+
+    AlertDialog(
+        onDismissRequest = { if (!saving) onDismiss() },
+        title = { Text(t("Kullanıcı adı")) },
+        text = {
+            Column {
+                Text(
+                    t("Arkadaşların seni bu adla bulabilir. Numaranı vermek istemediğin kişilere kullanıcı adını verebilirsin."),
+                    color = Muted, fontSize = 14.sp, lineHeight = 20.sp,
+                )
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = value,
+                    onValueChange = { v -> value = v.lowercase().filter { it in 'a'..'z' || it in '0'..'9' || it in "._-" }.take(20) },
+                    singleLine = true,
+                    prefix = { Text("@") },
+                    placeholder = { Text(t("ornek.ad")) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                val r = result
+                val (label, color) = when {
+                    error != null -> error!! to Color(0xFFB4232A)
+                    value.isEmpty() -> t("3-20 karakter: küçük harf, rakam, nokta, tire, alt çizgi.") to Muted
+                    !wellFormed -> t("En az 3 karakter olmalı ve harf ya da rakamla başlamalı.") to Color(0xFFB4232A)
+                    value == current -> t("Şu anki kullanıcı adın.") to Muted
+                    checking || r == null -> t("Denetleniyor…") to Muted
+                    r.available -> tf("@%s kullanılabilir ✓", value) to Color(0xFF1E8E4E)
+                    else -> t(r.message) to Color(0xFFB4232A)
+                }
+                Text(label, color = color, fontSize = 13.sp, lineHeight = 18.sp)
+                if (r != null && !r.available && r.suggestions.isNotEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(t("Bunlar boşta:"), color = Muted, fontSize = 13.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        r.suggestions.forEach { s ->
+                            TextButton(onClick = { value = s }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp)) {
+                                Text("@$s", fontSize = 13.sp, maxLines = 1)
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = !saving && wellFormed && value != current && result?.available == true,
+                onClick = {
+                    val token = Bayx.accessToken ?: return@TextButton
+                    saving = true
+                    scope.launch {
+                        try {
+                            onSaved(Api.usernameSet(token, value).ifBlank { value })
+                        } catch (e: ApiException) {
+                            error = t(e.message ?: "Kaydedilemedi.")
+                        } finally {
+                            saving = false
+                        }
+                    }
+                },
+            ) { Text(if (saving) t("Bekle…") else t("Kaydet")) }
+        },
+        dismissButton = { TextButton(enabled = !saving, onClick = onDismiss) { Text(t("Vazgeç")) } },
     )
 }

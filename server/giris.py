@@ -25,7 +25,7 @@ LINK_SELF_SECONDS = 5 * 60
 LINK_ADMIN_SECONDS = 24 * 3600
 LINK_LOCAL_SECONDS = 30 * 60
 WEB_CODE_SECONDS = 5 * 60
-WEB_PAIR_SECONDS = 2 * 60
+WEB_PAIR_SECONDS = 5 * 60
 INVITE_DAYS_DEFAULT = 7
 PBKDF2_ROUNDS = 120_000
 
@@ -318,6 +318,9 @@ class Store:
             if not p or p.get("token") or p.get("expires", 0) <= time.time():
                 return False
             p["token"] = login_token
+            # Onaydan sonra web sayfası jetonu almak için birkaç dakika daha bekleyebilir
+            # (telefonda tarayıcı arka plandayken yoklama durur).
+            p["expires"] = time.time() + 4 * 60
             return True
 
     def poll_pairing(self, pairing_id):

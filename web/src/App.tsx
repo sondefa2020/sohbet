@@ -26,6 +26,7 @@ function useDark(): [boolean, (v: boolean) => void] {
 export function App() {
   const [phase, setPhase] = useState<"loading" | "login" | "app">(savedSession() ? "loading" : "login");
   const [dark, setDark] = useDark();
+  const [bootError, setBootError] = useState("");
 
   const boot = useCallback(async () => {
     const saved = savedSession();
@@ -36,8 +37,11 @@ export function App() {
     setPhase("loading");
     try {
       await start(saved);
+      setBootError("");
       setPhase("app");
-    } catch {
+    } catch (e) {
+      // Sessizce giriş ekranına dönme: nedenini göster ki sorun anlaşılsın.
+      setBootError(t("Oturum açılamadı. Sayfayı yenileyip tekrar dene.") + " (" + String((e as Error)?.message ?? e).slice(0, 160) + ")");
       setPhase("login");
     }
   }, []);
@@ -46,7 +50,7 @@ export function App() {
     if (savedSession()) void boot();
   }, [boot]);
 
-  if (phase === "login") return <Login onLoggedIn={() => void boot()} />;
+  if (phase === "login") return <Login onLoggedIn={() => void boot()} notice={bootError} />;
   if (phase === "loading")
     return (
       <div className="center-screen">

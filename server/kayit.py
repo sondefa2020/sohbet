@@ -263,6 +263,8 @@ def validate_profile(body):
         )
     if not isinstance(display_name, str) or not (1 <= len(display_name.strip()) <= 40):
         raise ApiError(400, "GECERSIZ_AD", "Görünen ad 1 ile 40 karakter arasında olmalı.")
+    if username in RESERVED_HANDLES or handle_owner(username):
+        raise ApiError(409, "KULLANICI_ADI_ALINMIS", "Bu kullanıcı adı alınmış, başka bir tane dene.")
     return username, display_name.strip()
 
 
@@ -335,7 +337,8 @@ def profile_brief(uid):
     info = active_user(uid)
     if info is None:
         return None
-    return {"user_id": uid, "username": username_of(uid), "display_name": info.get("displayname") or username_of(uid)}
+    shown = shown_username(uid)
+    return {"user_id": uid, "username": shown, "display_name": info.get("displayname") or shown}
 
 
 # -------------------------------------------------------------- durum / hikâye
@@ -477,6 +480,121 @@ def status_list(headers):
     return {"mine": mine, "friends": friends}
 
 
+# ------------------------------------------------------------ kullanıcı adı (seçilebilir)
+# Telefonla açılan hesapların sunucudaki kimliği rastgeledir ve değişmez. Kullanıcı kendine bir
+# kullanıcı adı seçebilir; başkaları onu bu adla bulur. Ad benzersizdir ve değiştirilebilir.
+RESERVED_HANDLES = {
+    "admin", "administrator", "yonetici", "yonetim", "tayfa", "tayfa-destek", "destek", "support", "root",
+    "system", "sistem", "bayx", "moderator", "mod", "help", "yardim", "resmi", "official", "guvenlik", "security",
+}
+HANDLE_RULE = "Kullanıcı adı 3-20 karakter olmalı; küçük harf, rakam, nokta, tire ve alt çizgi kullanılabilir."
+
+
+def _handles():
+    return GIRIS.data.setdefault("handles", {})  # kullanıcı adı -> kullanıcı
+
+
+def _handle_of_user():
+    return GIRIS.data.setdefault("user_handles", {})  # kullanıcı -> kullanıcı adı
+
+
+def handle_owner(name):
+    with GIRIS.lock:
+        return _handles().get(name)
+
+
+def shown_username(uid):
+    """Kullanıcının seçtiği ad; seçmediyse sunucudaki adı."""
+    with GIRIS.lock:
+        return _handle_of_user().get(uid) or username_of(uid)
+
+
+def resolve_username(raw):
+    """Kullanıcı adından kimliğe: önce seçilmiş adlara, sonra sunucudaki ada bakılır."""
+    return handle_owner(raw) or user_id(raw)
+
+
+def _clean_handle(body):
+    return str(body.get("username") or "").strip().lower().lstrip("@")
+
+
+def _handle_problem(me, name):
+    """Ad kullanılabilir mi? Kullanılamıyorsa (kod, mesaj) döner."""
+    if not USERNAME_RE.match(name):
+        return "GECERSIZ_KULLANICI_ADI", HANDLE_RULE
+    if name in RESERVED_HANDLES or name == BOT_USER:
+        return "KULLANICI_ADI_AYRILMIS", "Bu kullanıcı adı kullanılamıyor. Başka bir tane dene."
+    owner = handle_owner(name)
+    if owner and owner != me:
+        return "KULLANICI_ADI_ALINMIS", "Bu kullanıcı adı başkası tarafından kullanılıyor."
+    real = user_id(name)
+    if real != me:
+        status, _ = synapse("GET", "/_synapse/admin/v2/users/" + quote(real))
+        if status != 404:
+            return "KULLANICI_ADI_ALINMIS", "Bu kullanıcı adı başkası tarafından kullanılıyor."
+    return None
+
+
+def _handle_suggestions(me, name):
+    base = re.sub(r"[^a-z0-9._-]", "", name)[:16] or "tayfa"
+    if not re.match(r"^[a-z0-9]", base):
+        base = "t" + base
+    out = []
+    for tail in (str(secrets.randbelow(90) + 10), "_" + str(secrets.randbelow(900) + 100), str(time.localtime().tm_year % 100), ".tr"):
+        cand = (base + tail)[:20]
+        if cand not in out and USERNAME_RE.match(cand) and _handle_problem(me, cand) is None:
+            out.append(cand)
+        if len(out) == 3:
+            break
+    return out
+
+
+_handle_checks = giris.Attempts(limit=120)
+_handle_changes = giris.Attempts(limit=5)
+
+
+def handle_check(headers, body):
+    """Yazarken uygunluk denetimi."""
+    me = member_from_token(headers)
+    if _handle_checks.blocked(me):
+        raise ApiError(429, "COK_FAZLA_DENEME", "Çok fazla deneme. Biraz sonra tekrar dene.")
+    _handle_checks.fail(me)
+    name = _clean_handle(body)
+    if name == shown_username(me):
+        return {"available": True, "current": True, "username": name}
+    problem = _handle_problem(me, name)
+    if problem:
+        taken = problem[0] == "KULLANICI_ADI_ALINMIS"
+        return {"available": False, "error": problem[0], "message": problem[1],
+                "suggestions": _handle_suggestions(me, name) if taken else []}
+    return {"available": True, "username": name}
+
+
+def handle_set(headers, body):
+    me = member_from_token(headers)
+    name = _clean_handle(body)
+    if name == shown_username(me):
+        return {"ok": True, "username": name}
+    if _handle_changes.blocked(me):
+        raise ApiError(429, "COK_FAZLA_DENEME", "Kullanıcı adını çok sık değiştirdin. Bir saat sonra tekrar dene.")
+    problem = _handle_problem(me, name)
+    if problem:
+        raise ApiError(409 if problem[0] == "KULLANICI_ADI_ALINMIS" else 400, problem[0], problem[1])
+    with GIRIS.lock:
+        owner = _handles().get(name)
+        if owner and owner != me:  # denetimle kayıt arasında başkası aldıysa
+            raise ApiError(409, "KULLANICI_ADI_ALINMIS", "Bu kullanıcı adı başkası tarafından kullanılıyor.")
+        old = _handle_of_user().pop(me, None)
+        if old:
+            _handles().pop(old, None)
+        if name != username_of(me):
+            _handles()[name] = me
+            _handle_of_user()[me] = name
+    GIRIS.save()
+    _handle_changes.fail(me)
+    return {"ok": True, "username": name}
+
+
 def _looks_like_phone(text):
     """'0532 123 45 67', '+90 532...', '5321234567' gibi girişler numara sayılır."""
     t = text.strip()
@@ -504,7 +622,7 @@ def contact_find(headers, body):
             if _looks_like_phone(text):
                 return {"found": False}
             raise ApiError(400, "GECERSIZ_KULLANICI_ADI", "Kullanıcı adını ya da telefon numarasını kontrol et.")
-        uid = user_id(raw)
+        uid = resolve_username(raw)
     if uid is None:
         return {"found": False}
     brief = profile_brief(uid)
@@ -526,8 +644,8 @@ def contact_overview(headers, now):
         pub = public_profile(uid, now)
         friends.append({
             "user_id": uid,
-            "username": username_of(uid),
-            "display_name": info.get("displayname") or username_of(uid),
+            "username": shown_username(uid),
+            "display_name": info.get("displayname") or shown_username(uid),
             "avatar_url": info.get("avatar_url") or "",
             "mode": pub["mode"],
             "status": pub["status"],
@@ -543,7 +661,7 @@ def contact_target(me, body):
     raw = str(raw).strip().lower().lstrip("@").split(":")[0]
     if not USERNAME_RE.match(raw):
         raise ApiError(400, "GECERSIZ_KULLANICI", "Geçersiz kullanıcı.")
-    other = user_id(raw)
+    other = resolve_username(raw)
     if other == me:
         raise ApiError(400, "GECERSIZ_KULLANICI", "Kendine istek gönderemezsin.")
     if active_user(other) is None or other == user_id(BOT_USER):
@@ -1742,15 +1860,31 @@ def phone_verify(headers, body, ip):
 
     if headers.get("Authorization"):
         uid = member_from_token(headers)
-        if owner and owner != uid:
-            raise ApiError(409, "NUMARA_KULLANIMDA", "Bu numara başka bir hesaba bağlı.")
+        if owner and owner != uid and active_user(owner, allow_locked=True) is not None:
+            brief = profile_brief(owner) or {}
+            who = brief.get("display_name") or "başka bir hesap"
+            raise ApiError(
+                409,
+                "NUMARA_KULLANIMDA",
+                "Bu numara zaten \"%s\"%s hesabına kayıtlı. O hesabı kullanmak için çıkış yapıp bu numarayla giriş yap."
+                % (who, " (@%s)" % shown_username(owner) if shown_username(owner) != username_of(owner) else ""),
+            )
+        previous = phone_of(uid)
         _bind_phone(uid, phone)
-        return {"ok": True, "phone": phone}
+        audit(uid, "numara-bagla", telefon.mask(phone))
+        return {"ok": True, "phone": phone, "masked": telefon.mask(phone), "changed": bool(previous and previous != phone)}
 
-    if owner and active_user(owner) is not None:
+    owner_info = active_user(owner, allow_locked=True) if owner else None
+    if owner_info is not None and owner_info.get("locked"):
+        # Kısıtlanan hesap aynı numarayla yeni hesap açarak kısıtlamayı aşamasın.
+        raise ApiError(403, "HESAP_KISITLI", "Bu numaraya bağlı hesap yönetici tarafından kısıtlandı.")
+    if owner_info is not None:
         stat_inc("logins")
         reply = session_reply(owner)
         reply["new"] = False
+        brief = profile_brief(owner) or {}
+        reply["display_name"] = brief.get("display_name", "")
+        reply["handle"] = shown_username(owner)
         return reply
 
     # Yeni hesap: kullanıcı adı rastgele (numara kullanıcı kimliğinde görünmez).
@@ -1762,7 +1896,7 @@ def phone_verify(headers, body, ip):
             username = "t" + secrets.token_hex(5)
             uid = user_id(username)
             status, _ = synapse("GET", "/_synapse/admin/v2/users/" + quote(uid))
-            if status == 404:
+            if status == 404 and not handle_owner(username):
                 break
         status, _ = synapse(
             "PUT",
@@ -1781,7 +1915,8 @@ def phone_verify(headers, body, ip):
 def phone_me(headers):
     uid = member_from_token(headers)
     phone = phone_of(uid)
-    return {"phone": phone or "", "masked": telefon.mask(phone) if phone else ""}
+    return {"phone": phone or "", "masked": telefon.mask(phone) if phone else "",
+            "username": shown_username(uid), "custom_username": shown_username(uid) != username_of(uid)}
 
 
 _match_attempts = giris.Attempts(limit=120)  # kişi başına saatte en fazla 120 rehber eşleştirmesi
@@ -1855,8 +1990,8 @@ def set_admin(who, on=True):
             uid = _phones().get(phone) if phone else None
     if uid is None:
         raw = who.lower().lstrip("@").split(":")[0]
-        if USERNAME_RE.match(raw) and active_user(user_id(raw)) is not None:
-            uid = user_id(raw)
+        if USERNAME_RE.match(raw) and active_user(resolve_username(raw)) is not None:
+            uid = resolve_username(raw)
     if uid is None:
         raise ApiError(404, "KULLANICI_YOK", "Bu numara ya da kullanıcı adıyla kayıtlı hesap yok.")
     status, _ = synapse("PUT", "/_synapse/admin/v2/users/" + quote(uid), {"admin": bool(on)})

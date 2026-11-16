@@ -218,6 +218,8 @@ fun BayxApp() {
             }
         }
     }
+    // Otomatik güncelleme (giriş yapılmamışken de çalışır).
+    if (auth !is AuthState.Loading) UpdatePrompt()
     val locked by Gate.locked.collectAsState()
     if (auth is AuthState.LoggedIn) {
         EffectOverlay()
@@ -374,6 +376,7 @@ private fun MainNav(me: AuthState.LoggedIn) {
                     onBack = { nav.popBackStack() },
                     onAdmin = { nav.navigate("admin") },
                     onWebLink = { nav.navigate("weblink") },
+                    onPhone = { nav.navigate("phonelink") { launchSingleTop = true } },
                 )
             }
         }

@@ -270,6 +270,60 @@ curl -sS -X POST http://127.0.0.1:8010/bayx/local/smstest -H 'Content-Type: appl
 SMSTEST
 chmod 755 /usr/local/bin/tayfa-sms-test
 
+# Uygulama güncellemesi: en son APK bu sunucuya indirilir; telefonlar güncellemeyi buradan alır.
+# 10 dakikada bir denetlenir. Elle çalıştırmak için: sudo tayfa-apk-guncelle
+mkdir -p /var/lib/tayfa-apk
+chmod 755 /var/lib/tayfa-apk
+cat > /usr/local/bin/tayfa-apk-guncelle <<'APKCMD'
+#!/bin/bash
+# Tayfa: en son uygulama sürümünü (APK) bu sunucuya indirir.
+set -euo pipefail
+DIR=/var/lib/tayfa-apk
+BASE="${TAYFA_APK_BASE:-https://github.com/sondefa2020/sohbet/releases/latest/download}"
+TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+field() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get(sys.argv[2], 0))' "$1" "$2" 2>/dev/null || echo 0; }
+if ! curl -fsSL -m 60 -o "$TMP/surum.json" "$BASE/surum.json"; then
+    echo "Sürüm bilgisi alınamadı (internet ya da GitHub erişimi)."; exit 0
+fi
+NEW="$(field "$TMP/surum.json" version_code)"; OLD=0
+[ -f "$DIR/surum.json" ] && [ -f "$DIR/tayfa.apk" ] && OLD="$(field "$DIR/surum.json" version_code)"
+if ! [ "$NEW" -gt "$OLD" ] 2>/dev/null; then echo "Uygulama güncel (sürüm kodu $OLD)."; exit 0; fi
+curl -fsSL -m 1200 -o "$TMP/tayfa.apk" "$BASE/tayfa.apk"
+WANT="$(field "$TMP/surum.json" sha256)"; GOT="$(sha256sum "$TMP/tayfa.apk" | cut -d' ' -f1)"
+if [ "$WANT" != "$GOT" ]; then echo "HATA: indirilen dosya bozuk (özet uyuşmuyor); eski sürüm korunuyor."; exit 1; fi
+chmod 644 "$TMP/tayfa.apk" "$TMP/surum.json"
+mv -f "$TMP/tayfa.apk" "$DIR/tayfa.apk"
+mv -f "$TMP/surum.json" "$DIR/surum.json"
+echo "Yeni sürüm indirildi: $(field "$DIR/surum.json" version_name) (kod $NEW)."
+APKCMD
+chmod 755 /usr/local/bin/tayfa-apk-guncelle
+cat > /etc/systemd/system/tayfa-apk.service <<'EOF'
+[Unit]
+Description=Tayfa uygulama güncellemesini indir
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/tayfa-apk-guncelle
+EOF
+cat > /etc/systemd/system/tayfa-apk.timer <<'EOF'
+[Unit]
+Description=Tayfa uygulama güncellemesi denetimi (10 dakikada bir)
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=10min
+
+[Install]
+WantedBy=timers.target
+EOF
+systemctl daemon-reload
+systemctl enable --now tayfa-apk.timer >/dev/null 2>&1 || true
+APK_OK="henüz indirilmedi (sudo tayfa-apk-guncelle)"
+if /usr/local/bin/tayfa-apk-guncelle >/tmp/tayfa-apk.log 2>&1 && [ -f /var/lib/tayfa-apk/surum.json ]; then
+    APK_OK="evet (sürüm $(python3 -c 'import json; print(json.load(open("/var/lib/tayfa-apk/surum.json")).get("version_name", "?"))' 2>/dev/null || echo '?'); telefonlar buradan güncellenir)"
+fi
+
 # Sunucudan giriş bağlantısı üretme komutu: sudo tayfa-giris <kullanıcı_adı>
 cat > /usr/local/bin/tayfa-giris <<'GIRISCMD'
 #!/bin/bash
@@ -755,6 +809,7 @@ Otomatik yedek                         : $BACKUP_OK
 Veritabanı                             : $DB_KIND
 E-posta (doğrulama, şifre sıfırlama)   : $MAIL_OK
 SMS (telefonla kayıt)                  : $SMS_OK
+Uygulama güncellemesi (bu sunucudan)   : $APK_OK
 $FIREWALL_NOTE
 $ADMIN_NOTE
 =====================================================

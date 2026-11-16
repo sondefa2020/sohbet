@@ -111,13 +111,20 @@ fun PhoneAuthScreen(onUsernameLogin: () -> Unit = {}, linkToken: String? = null,
                 if (linkToken != null) {
                     // Oturum açık: numarayı bu hesaba bağla.
                     Api.phoneVerify(p, code, linkToken)
+                    android.widget.Toast.makeText(context, t("Numaran hesabına bağlandı."), android.widget.Toast.LENGTH_LONG).show()
                     PhonebookRepo.sync(context)
                     onLinked()
                 } else {
                     val r = Api.phoneVerify(p, code)
                     if (r.isNew) NamePrompt.request(context)
                     val error = Bayx.login(r.username, r.otp)
-                    if (error != null) info = t(error)
+                    if (error != null) {
+                        info = t(error)
+                    } else if (!r.isNew) {
+                        // Numara zaten kayıtlı: aynı hesaba girildi.
+                        val who = r.displayName.ifBlank { "Tayfa" }
+                        android.widget.Toast.makeText(context, tf("Tekrar hoş geldin, %s! Bu numaraya kayıtlı hesabına girdin.", who), android.widget.Toast.LENGTH_LONG).show()
+                    }
                 }
             } catch (e: ApiException) {
                 info = t(e.message ?: "Doğrulanamadı.")

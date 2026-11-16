@@ -9,13 +9,14 @@ dosya yazma) iş parçacığı havuzunda, arama sinyalleşmesi ise tamamen asenk
 
 import asyncio
 import json
+import os
 import re
 import time
 from contextlib import asynccontextmanager
 
 import anyio
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 
 import arama
@@ -134,7 +135,7 @@ async def options(request: Request, path: str):
 
 
 # Sunucunun hangi sürümü çalıştırdığını görmek için (https://.../bayx/health).
-SURUM = "2026.11.16-1"
+SURUM = "2026.11.16-2"
 
 
 @app.get("/bayx/health")
@@ -245,6 +246,16 @@ async def phone_verify(request: Request):
 @app.post("/bayx/v4/phone/me")
 async def phone_me(request: Request):
     return reply(request, await sync(kayit.phone_me, request.headers))
+
+
+@app.post("/bayx/v4/username/check")
+async def username_check(request: Request):
+    return reply(request, await sync(kayit.handle_check, request.headers, await body(request)))
+
+
+@app.post("/bayx/v4/username/set")
+async def username_set(request: Request):
+    return reply(request, await sync(kayit.handle_set, request.headers, await body(request)))
 
 
 @app.post("/bayx/v4/contacts/match")
@@ -556,6 +567,52 @@ async def admin_action(request: Request, action: str):
 
 
 # ------------------------------------------------------------------ arama
+
+
+# ------------------------------------------------------------------ uygulama güncellemesi
+# En son APK sunucuda durur (tayfa-apk-guncelle indirir); telefonlar sürümü sorar ve buradan indirir.
+APK_DIR = os.environ.get("BAYX_APK_DIR", "/var/lib/tayfa-apk")
+_apk_info = {"mtime": 0.0, "data": None}
+
+
+def apk_info():
+    path = os.path.join(APK_DIR, "surum.json")
+    try:
+        mtime = os.path.getmtime(path)
+        if mtime != _apk_info["mtime"]:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+            _apk_info.update(mtime=mtime, data={
+                "version_code": int(data.get("version_code", 0)),
+                "version_name": str(data.get("version_name", ""))[:20],
+                "sha256": str(data.get("sha256", ""))[:64],
+                "size": int(data.get("size", 0)),
+                "notes": str(data.get("notes", ""))[:600],
+            })
+        if _apk_info["data"] and os.path.exists(os.path.join(APK_DIR, "tayfa.apk")):
+            return _apk_info["data"]
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+@app.get("/bayx/app/latest")
+async def app_latest(request: Request):
+    info = apk_info()
+    if not info:
+        return reply(request, {"version_code": 0})
+    return reply(request, dict(info, url=kayit.PUBLIC_BASE + "/bayx/app/tayfa.apk"))
+
+
+@app.get("/bayx/app/tayfa.apk")
+async def app_download(request: Request):
+    if not apk_info():
+        raise ApiError(404, "BULUNAMADI", "Güncelleme dosyası henüz sunucuda yok.")
+    return FileResponse(
+        os.path.join(APK_DIR, "tayfa.apk"),
+        media_type="application/vnd.android.package-archive",
+        filename="tayfa.apk",
+    )
 
 
 @app.get("/bayx/turn")

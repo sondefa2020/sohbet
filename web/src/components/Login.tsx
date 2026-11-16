@@ -13,7 +13,7 @@ interface Pairing {
 }
 
 /** WhatsApp Web tarzı giriş: QR ya da 6 haneli kod, telefondan onay. Şifre yok. */
-export function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
+export function Login({ onLoggedIn, notice }: { onLoggedIn: () => void; notice?: string }) {
   const [pairing, setPairing] = useState<Pairing | null>(null);
   const [qrSvg, setQrSvg] = useState("");
   const [error, setError] = useState("");
@@ -30,7 +30,7 @@ export function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
       const r = await fetch(hs + "/bayx/v3/web/start", { method: "POST" });
       if (!r.ok) throw new Error();
       const d = await r.json();
-      setPairing({ pairingId: d.pairing_id, code: d.code, qr: d.qr, expiresAt: Date.now() + (d.expires_in ?? 120) * 1000 });
+      setPairing({ pairingId: d.pairing_id, code: d.code, qr: d.qr, expiresAt: Date.now() + (d.expires_in ?? 300) * 1000 });
       setQrSvg(await QRCode.toString(d.qr, { type: "svg", margin: 1, errorCorrectionLevel: "M", color: { dark: "#1F1B18", light: "#FFFFFF" } }));
     } catch {
       setError(t("Kod alınamadı. İnternet bağlantını kontrol et."));
@@ -41,18 +41,15 @@ export function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
     void start();
   }, [start]);
 
-  // Onay bekleme: iki saniyede bir sor; süre dolunca yeni kod al.
+  // Onay bekleme: iki saniyede bir sor. Telefonda tarayıcı arka plana geçince zamanlayıcı durur;
+  // sayfaya dönülünce hemen sorulur ve süre dolmuş olsa bile önce onay gelmiş mi diye bakılır.
   useEffect(() => {
     if (!pairing) return;
-    const timer = window.setInterval(async () => {
-      setNow(Date.now());
-      if (Date.now() > pairing.expiresAt) {
-        window.clearInterval(timer);
-        void start();
-        return;
-      }
-      if (busy.current) return;
+    let stopped = false;
+    const check = async () => {
+      if (stopped || busy.current) return;
       busy.current = true;
+      setNow(Date.now());
       try {
         const hs = await loadConfig();
         const r = await fetch(hs + "/bayx/v3/web/poll", {
@@ -61,8 +58,9 @@ export function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
           body: JSON.stringify({ pairing_id: pairing.pairingId }),
         });
         const d = await r.json();
+        if (stopped) return;
         if (d.status === "ready" && d.login_token) {
-          window.clearInterval(timer);
+          stopped = true;
           setStatus(t("Onaylandı, giriş yapılıyor…"));
           try {
             await loginWithToken(d.login_token);
@@ -71,8 +69,8 @@ export function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
             setStatus("");
             setError(t("Giriş yapılamadı. Yeni kod al ve tekrar dene."));
           }
-        } else if (d.status === "gone") {
-          window.clearInterval(timer);
+        } else if (d.status === "gone" || Date.now() > pairing.expiresAt) {
+          stopped = true;
           void start();
         }
       } catch {
@@ -80,8 +78,21 @@ export function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
       } finally {
         busy.current = false;
       }
-    }, 2000);
-    return () => window.clearInterval(timer);
+    };
+    const timer = window.setInterval(() => void check(), 2000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void check();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    window.addEventListener("pageshow", onVisible);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+      window.removeEventListener("pageshow", onVisible);
+    };
   }, [pairing, start, onLoggedIn]);
 
   const left = pairing ? Math.max(0, Math.round((pairing.expiresAt - now) / 1000)) : 0;
@@ -128,6 +139,11 @@ export function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
                 <span className="code">{code}</span>
               </div>
             )}
+            {notice ? (
+              <div className="error" role="alert">
+                {notice}
+              </div>
+            ) : null}
             {status ? (
               <div className="wait">{status}</div>
             ) : error ? (

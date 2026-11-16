@@ -1,0 +1,4 @@
+Uygulama artık kendini güncelliyor.
+Kendi kullanıcı adını seçebilirsin (Profil > Kullanıcı adı).
+Giriş daha kolay: numara ve SMS kodu otomatik dolar.
+Web girişi ve kişi listesi düzeltildi.
