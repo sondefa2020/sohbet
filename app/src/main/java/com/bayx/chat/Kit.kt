@@ -75,9 +75,8 @@ import com.google.zxing.qrcode.QRCodeWriter
 // ---------------------------------------------------------------- renkler
 
 /** Sıcak krem zemin üzerinde kum rengi vurgu (gönder düğmesi, ana düğmeler). */
-internal val SandBrush: Brush get() = if (ThemeState.glass) Brush.verticalGradient(listOf(Color(0xFF34D06A), Color(0xFF16A34A)))
-    else Brush.verticalGradient(listOf(Color(0xFFE6C9A6), Color(0xFFC79A6E)))
-internal val SandInk: Color get() = if (ThemeState.glass) Color.White else Color(0xFF2A1C10)
+internal val SandBrush = Brush.verticalGradient(listOf(Color(0xFFE6C9A6), Color(0xFFC79A6E)))
+internal val SandInk = Color(0xFF2A1C10)
 
 /** Buzlu cam yüzeyler: arka planın hafifçe geçtiği yarı saydam beyaz (modern görünüm). */
 internal val GlassBar: Color get() = if (ThemeState.dark) Color(0xFF1C1915).copy(alpha = 0.78f) else Color.White.copy(alpha = 0.66f)
@@ -85,21 +84,12 @@ internal val GlassPill: Color get() = if (ThemeState.dark) Color(0xFF221E19).cop
 
 /** Kendi mesaj balonum: açık şeftali. */
 internal val PeachBrush: Brush
-    get() = if (ThemeState.glass && ThemeState.dark) {
-        Brush.linearGradient(listOf(Color(0xFF1F5A38), Color(0xFF184A2E)))
-    } else if (ThemeState.glass) {
-        Brush.linearGradient(listOf(Color(0xFFDDF8E4), Color(0xFFC9F0D4)))
-    } else if (ThemeState.dark) {
+    get() = if (ThemeState.dark) {
         Brush.linearGradient(listOf(Color(0xFF4A3828), Color(0xFF3B2C20)))
     } else {
         Brush.linearGradient(listOf(Color(0xFFFBEEDF), Color(0xFFF3DDC6)))
     }
-internal val ChipBg: Color get() = when {
-    ThemeState.glass && ThemeState.dark -> Color(0xFF1A2B21)
-    ThemeState.glass -> Color.White.copy(alpha = 0.7f)
-    ThemeState.dark -> Color(0xFF2A2521)
-    else -> Color(0xFFF1ECE6)
-}
+internal val ChipBg: Color get() = if (ThemeState.dark) Color(0xFF2A2521) else Color(0xFFF1ECE6)
 
 /** Saten kartlar: yumuşak, ipeksi degradeler. */
 internal object Satin {

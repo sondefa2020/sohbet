@@ -203,7 +203,7 @@ internal fun MessageRow(
         bottomStart = if (msg.mine) 22.dp else 6.dp,
     )
     val fg = Ink
-    val sub = if (msg.mine) (if (ThemeState.glass) (if (ThemeState.dark) Color(0xFF9FD9B4) else Color(0xFF4F7D5E)) else if (ThemeState.dark) Color(0xFFC2A68C) else Color(0xFF8A7460)) else Muted
+    val sub = if (msg.mine) (if (ThemeState.dark) Color(0xFFC2A68C) else Color(0xFF8A7460)) else Muted
     val visual = msg.kind == MsgKind.IMAGE || msg.kind == MsgKind.VIDEO
     // Sağa kaydırınca yanıtla (WhatsApp gibi).
     val density = androidx.compose.ui.platform.LocalDensity.current
