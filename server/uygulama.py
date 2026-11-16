@@ -138,7 +138,7 @@ async def options(request: Request, path: str):
 
 
 # Sunucunun hangi sürümü çalıştırdığını görmek için (https://.../bayx/health).
-SURUM = "2026.11.16-6"
+SURUM = "2026.11.16-7"
 
 
 @app.get("/bayx/health")
@@ -337,14 +337,49 @@ def transcribe_audio(me, data):
     if not _transcribe_slots.acquire(timeout=60):
         raise ApiError(503, "MESGUL", "Sunucu şu an meşgul. Biraz sonra tekrar dene.")
     try:
-        with tempfile.NamedTemporaryFile(suffix=".ses") as f:
-            f.write(data)
-            f.flush()
-            segments, info = model.transcribe(f.name, beam_size=1, vad_filter=True)
+        try:
+            audio = _decode_16k(data)
+        except Exception as err:
+            print("sesli mesaj çözülemedi: %r" % (err,), flush=True)
+            raise ApiError(400, "SES_OKUNAMADI", "Bu sesli mesaj okunamadı.")
+        if audio.size < 1600:  # 0,1 saniyeden kısa
+            return {"text": "", "language": ""}
+        try:
+            segments, info = model.transcribe(audio, beam_size=1, vad_filter=True)
             text = " ".join(seg.text.strip() for seg in segments).strip()
+            if not text:
+                # Sessiz algılandıysa bir de ses ayıklama olmadan dene (kısık sesler için).
+                segments, info = model.transcribe(audio, beam_size=1, vad_filter=False)
+                text = " ".join(seg.text.strip() for seg in segments).strip()
+        except Exception as err:
+            print("yazıya çevirme hatası: %r" % (err,), flush=True)
+            raise ApiError(500, "CEVIRI_HATASI", "Yazıya çevrilemedi. Biraz sonra tekrar dene.")
         return {"text": text, "language": getattr(info, "language", "")}
     finally:
         _transcribe_slots.release()
+
+
+def _decode_16k(data):
+    """Sesi 16 kHz tek kanal float32 diziye çevirir. faster-whisper'ın kendi okuyucusu yeni PyAV
+    sürümlerinde çalışmıyor (metadata_errors), bu yüzden sesi burada kendimiz çözüyoruz."""
+    import io
+
+    import av
+    import numpy as np
+
+    out = []
+    with av.open(io.BytesIO(data), mode="r") as container:
+        stream = next(st for st in container.streams if st.type == "audio")
+        res = av.audio.resampler.AudioResampler(format="s16", layout="mono", rate=16000)
+        for frame in container.decode(stream):
+            frame.pts = None
+            for f in res.resample(frame) or []:
+                out.append(f.to_ndarray().reshape(-1))
+        for f in res.resample(None) or []:
+            out.append(f.to_ndarray().reshape(-1))
+    if not out:
+        return np.zeros(0, dtype=np.float32)
+    return np.concatenate(out).astype(np.float32) / 32768.0
 
 
 @app.post("/bayx/v4/transcribe")
