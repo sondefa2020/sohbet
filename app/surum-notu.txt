@@ -1,2 +1,1 @@
-Numara ile sohbet: telefonun klavyesi artık uygulamanın tuş takımının üstüne açılmıyor.
-Numara ile arama: kayıtlı kişi bulunamıyorsa sunucu kaydı kendiliğinden onarıyor; bağlantı hatası artık "Tayfa'da değil" diye gösterilmiyor, "Tekrar dene" çıkıyor.
+Yeni yedek tema "Cam Yeşil": yeşil vurgu, beyaz yüzeyler buzlu cam gibi yarı saydam, nane tonlu zemin. Ayarlar → Yedek tema'dan açılıp kapanır; karanlık modla da çalışır. Varsayılan tema değişmedi.

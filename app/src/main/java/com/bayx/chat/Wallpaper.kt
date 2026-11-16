@@ -70,7 +70,14 @@ object Wallpaper {
         selected.value = id
     }
 
-    fun current(id: String): Option = options.firstOrNull { it.id == id } ?: options.first()
+    fun current(id: String): Option {
+        val o = options.firstOrNull { it.id == id } ?: options.first()
+        // Cam Yeşil temada varsayılan krem zemin yerine hafif nane-beyaz zemin.
+        if (o.id == "krem" && ThemeState.glass && !ThemeState.dark) {
+            return o.copy(colors = listOf(Color(0xFFF3FBF5), Color(0xFFE2F3E8)), doodle = true, doodleColor = Color(0x1416A34A))
+        }
+        return o
+    }
 }
 
 /** Sohbet ekranının arkasına çizilen arka plan. */

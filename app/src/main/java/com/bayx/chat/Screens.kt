@@ -94,10 +94,15 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
-internal val BlueBrush = Brush.verticalGradient(listOf(BlueLight, BlueDark))
+internal val BlueBrush: Brush get() = Brush.verticalGradient(listOf(BlueLight, BlueDark))
 internal val SoftShadow = Color(0x26825A32)
 internal val PageBrush: Brush
-    get() = if (ThemeState.dark) {
+    get() = if (ThemeState.glass && ThemeState.dark) {
+        Brush.verticalGradient(listOf(Color(0xFF0F1E15), Color(0xFF0B150F), Color(0xFF08100B)))
+    } else if (ThemeState.glass) {
+        // Buzlu camın altında hafif nane tonu: beyaz kartlar zeminden "cam" gibi ayrılsın.
+        Brush.linearGradient(listOf(Color(0xFFF3FBF5), Color(0xFFE6F5EB), Color(0xFFDDF0E4), Color(0xFFEAF5F0)))
+    } else if (ThemeState.dark) {
         Brush.verticalGradient(listOf(Color(0xFF17130F), Color(0xFF14110F), Color(0xFF100D0B)))
     } else {
         Brush.verticalGradient(listOf(Color(0xFFFCFAF7), Color(0xFFF8F3ED), Color(0xFFF1E9DF)))
@@ -989,7 +994,7 @@ private fun RowScope.NavItem(label: String, icon: ImageVector, selected: Boolean
             .fillMaxHeight()
             .padding(3.dp)
             .clip(RoundedCornerShape(20.dp))
-            .then(if (selected) Modifier.background(if (ThemeState.dark) Color(0xFF3A2E24) else Color(0xFFF5EADD)) else Modifier)
+            .then(if (selected) Modifier.background(SelectedBg) else Modifier)
             .clickable(onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
@@ -1253,7 +1258,7 @@ private fun FilterChipPill(label: String, selected: Boolean, onClick: () -> Unit
     Box(
         Modifier
             .clip(RoundedCornerShape(18.dp))
-            .background(if (selected) (if (ThemeState.dark) Color(0xFF3A2E24) else Color(0xFFF5EADD)) else GlassPill)
+            .background(if (selected) SelectedBg else GlassPill)
             .border(1.dp, if (selected) Blue.copy(alpha = 0.35f) else Line, RoundedCornerShape(18.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp),

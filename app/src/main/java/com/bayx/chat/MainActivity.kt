@@ -65,14 +65,29 @@ import androidx.navigation.compose.rememberNavController
 
 // Tayfa tasarım dili: sıcak krem zemin, kum/karamel vurgu, koyu mürekkep yazı.
 // (Adlar eski sürümden kalma; "Blue" artık karamel vurgu rengidir.)
-val Blue: Color get() = if (ThemeState.dark) Color(0xFFC79A6E) else Color(0xFFB07A4E)
-val BlueLight = Color(0xFFE6C9A6)
-val BlueDark = Color(0xFFC79A6E)
+val Blue: Color get() = when {
+    ThemeState.glass && ThemeState.dark -> Color(0xFF3DDC84)
+    ThemeState.glass -> Color(0xFF1AA34A)
+    ThemeState.dark -> Color(0xFFC79A6E)
+    else -> Color(0xFFB07A4E)
+}
+val BlueLight: Color get() = if (ThemeState.glass) Color(0xFF4ADE80) else Color(0xFFE6C9A6)
+val BlueDark: Color get() = if (ThemeState.glass) Color(0xFF16A34A) else Color(0xFFC79A6E)
 val Ink: Color get() = if (ThemeState.dark) Color(0xFFF2ECE4) else Color(0xFF1F1B18)
 val Muted: Color get() = if (ThemeState.dark) Color(0xFF9A9088) else Color(0xFF6E655C)
 val SoftBlue: Color get() = if (ThemeState.dark) Color(0xFFA09589) else Color(0xFF8C7F72)
-val Bg: Color get() = if (ThemeState.dark) Color(0xFF14110F) else Color(0xFFF8F4EF)
-val Line: Color get() = if (ThemeState.dark) Color(0xFF2C2622) else Color(0xFFECE4DA)
+val Bg: Color get() = when {
+    ThemeState.glass && ThemeState.dark -> Color(0xFF0C140F)
+    ThemeState.glass -> Color(0xFFEEF7F1)
+    ThemeState.dark -> Color(0xFF14110F)
+    else -> Color(0xFFF8F4EF)
+}
+val Line: Color get() = when {
+    ThemeState.glass && ThemeState.dark -> Color(0xFF22352A)
+    ThemeState.glass -> Color.White.copy(alpha = 0.85f)
+    ThemeState.dark -> Color(0xFF2C2622)
+    else -> Color(0xFFECE4DA)
+}
 val Online = Color(0xFF34C759)
 
 class MainActivity : FragmentActivity() {

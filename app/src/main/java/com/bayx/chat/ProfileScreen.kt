@@ -7,6 +7,7 @@ import androidx.compose.material.icons.outlined.PhonelinkSetup
 import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.outlined.Smartphone
 import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.runtime.mutableStateListOf
 import com.bayx.chat.data.PollInfo
 import androidx.compose.material.icons.outlined.Poll
@@ -369,6 +370,11 @@ fun ProfileScreen(
                     Switch(checked = ThemeState.dark, onCheckedChange = { ThemeState.set(it) })
                 }) {
                     ThemeState.toggle()
+                }
+                SettingRow(Icons.Outlined.Palette, t("Yedek tema: Cam Yeşil"), trailing = {
+                    Switch(checked = ThemeState.glass, onCheckedChange = { ThemeState.setGlass(it) })
+                }) {
+                    ThemeState.setGlass(!ThemeState.glass)
                 }
                 val recState by RecoveryRepo.recoveryState.collectAsState()
                 SettingRow(Icons.Outlined.Backup, t("Mesaj yedeği"), trailing = {
