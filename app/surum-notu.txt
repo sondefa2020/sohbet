@@ -1,2 +1,4 @@
-Profil fotoğrafı kırpma ekranı düzeltildi: "Bitti" artık üstte ve altta görünüyor.
-Yeni Durum: hikâye kartları, renk geçişli arka planlar ve yazı stilleri, akıcı ilerleme, basılı tutunca durdurma, aşağı kaydırıp kapatma, emoji tepkileri ve yanıt, fotoğrafa açıklama, durumları sessize alma.
+Durum paylaşırken "Paylaş" tuşu artık üstte de var; klavye açıkken de görünür.
+Arama ekranına modern, hareketli renkli arka plan ve çalarken avatarın etrafında nabız halkaları.
+Kullanıcı adını bir kez seçtiysen artık bir daha "seç" diye sorulmaz.
+Üye sınırı kaldırıldı.

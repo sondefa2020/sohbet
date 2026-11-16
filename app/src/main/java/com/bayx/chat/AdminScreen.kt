@@ -191,14 +191,8 @@ fun AdminScreen(me: AuthState.LoggedIn, onBack: () -> Unit) {
                         Surface(shape = RoundedCornerShape(20.dp), color = Color.White, shadowElevation = 3.dp) {
                             Column(Modifier.fillMaxWidth().padding(16.dp)) {
                                 Text(t("Üye sayısı"), color = Muted, fontSize = 13.sp)
-                                Text(tf("%s / %s kişi", current.count, current.max), color = Ink, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
-                                Spacer(Modifier.height(8.dp))
-                                LinearProgressIndicator(
-                                    progress = { (current.count.toFloat() / current.max.coerceAtLeast(1)).coerceIn(0f, 1f) },
-                                    modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
-                                    color = Blue,
-                                    trackColor = Line,
-                                )
+                                Text(tf("%s kişi", current.count), color = Ink, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
+                                Text(t("Üye sınırı yok"), color = Muted, fontSize = 12.sp)
                                 Spacer(Modifier.height(6.dp))
                                 Text(
                                     t("Yönetici olarak her üyenin şifresini sıfırlayabilir ya da hesabını kapatabilirsin."),

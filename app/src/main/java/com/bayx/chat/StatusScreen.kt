@@ -366,6 +366,15 @@ private fun StatusComposer(onDismiss: () -> Unit, onShare: (String, String) -> U
                     Spacer(Modifier.weight(1f))
                     IconButton(onClick = { font = (font + 1) % StatusFonts.size }) { Icon(Icons.Outlined.TextFields, t("Yazı stili"), tint = Color.White) }
                     IconButton(onClick = { grad = (grad + 1) % StatusGradients.size }) { Icon(Icons.Outlined.Palette, t("Renk"), tint = Color.White) }
+                    Spacer(Modifier.width(6.dp))
+                    // Paylaş (her zaman görünür; klavye açıkken de)
+                    Text(
+                        t("Paylaş"), color = if (text.isBlank()) Color.White.copy(alpha = 0.5f) else StatusGradients[grad][0],
+                        fontSize = 15.sp, fontWeight = FontWeight.Bold,
+                        modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(Color.White.copy(alpha = if (text.isBlank()) 0.25f else 1f))
+                            .clickable(enabled = text.isNotBlank()) { onShare(text.trim(), "g$grad:f$font") }
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                    )
                 }
                 Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     BasicTextField(
@@ -420,7 +429,15 @@ private fun PhotoStatusComposer(bytes: ByteArray, onDismiss: () -> Unit, onShare
         Box(Modifier.fillMaxSize().background(Color.Black)) {
             bmp?.let { Image(it.asImageBitmap(), null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize()) }
             Column(Modifier.fillMaxSize().statusBarsPadding().imePadding().navigationBarsPadding()) {
-                IconButton(onClick = onDismiss, modifier = Modifier.padding(8.dp)) { Icon(Icons.AutoMirrored.Filled.ArrowBack, t("Geri"), tint = Color.White) }
+                Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onDismiss) { Icon(Icons.AutoMirrored.Filled.ArrowBack, t("Geri"), tint = Color.White) }
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        t("Paylaş"), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold,
+                        modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(BlueBrush)
+                            .clickable { onShare(caption.trim()) }.padding(horizontal = 18.dp, vertical = 9.dp),
+                    )
+                }
                 Spacer(Modifier.weight(1f))
                 Row(
                     Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f)))).padding(12.dp),

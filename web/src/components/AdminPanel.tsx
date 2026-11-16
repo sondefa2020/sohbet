@@ -104,7 +104,7 @@ function Overview() {
   if (error) return <p className="error">{error}</p>;
   if (!stats) return <p className="muted">{t("Yükleniyor…")}</p>;
   const cards: [string, string | number, string?][] = [
-    ["Toplam üye", stats.members, tf("sınır %s", stats.max_members)],
+    ["Toplam üye", stats.members, t("sınır yok")],
     ["Şu an çevrimiçi", stats.online],
     ["Bugün aktif", stats.days[stats.days.length - 1]?.active ?? 0],
     ["Son 24 saatte yeni", stats.new_24h],

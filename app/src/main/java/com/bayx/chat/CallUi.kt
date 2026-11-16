@@ -31,6 +31,7 @@ import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -137,6 +138,7 @@ fun CallOverlay() {
     // Arkadaki ekranlara dokunuş geçmesin.
     val blocker = remember { MutableInteractionSource() }
     Box(Modifier.fillMaxSize().background(CallBg).clickable(interactionSource = blocker, indication = null) { }) {
+        if (!(showVideo && remote != null)) ModernCallBackdrop(current.peerName)
         if (showVideo && remote != null) {
             VideoView(remote!!, mirror = false, overlay = false, modifier = Modifier.fillMaxSize())
         }
@@ -146,7 +148,7 @@ fun CallOverlay() {
         ) {
             Spacer(Modifier.height(if (showVideo && remote != null) 8.dp else 72.dp))
             if (!(showVideo && remote != null)) {
-                Avatar(current.peerName, 128.dp)
+                PulsingAvatar(current.peerName, ringing = current.phase != CallPhase.ACTIVE && current.phase != CallPhase.ENDED)
                 Spacer(Modifier.height(20.dp))
             }
             Text(current.peerName, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
@@ -372,6 +374,57 @@ private fun DialpadOverlay(onDismiss: () -> Unit) {
                 Modifier.size(62.dp).clip(CircleShape).background(Color(0x33FFFFFF)).clickable(onClick = onDismiss),
                 contentAlignment = Alignment.Center,
             ) { Icon(Icons.Filled.Close, "Kapat", tint = Color.White, modifier = Modifier.size(28.dp)) }
+        }
+    }
+}
+
+
+// --- Modern arama arka planı: yavaş akan renkli ışıklar + cam efekti ---
+@Composable
+private fun ModernCallBackdrop(name: String) {
+    val palettes = listOf(
+        listOf(Color(0xFF4F46E5), Color(0xFF06B6D4), Color(0xFFEC4899)),
+        listOf(Color(0xFF7C3AED), Color(0xFF2563EB), Color(0xFF10B981)),
+        listOf(Color(0xFFDB2777), Color(0xFFF59E0B), Color(0xFF6366F1)),
+        listOf(Color(0xFF0EA5E9), Color(0xFF8B5CF6), Color(0xFF14B8A6)),
+    )
+    val pal = palettes[(name.hashCode() and 0x7fffffff) % palettes.size]
+    val tr = androidx.compose.animation.core.rememberInfiniteTransition(label = "bg")
+    val p by tr.animateFloat(0f, 1f, androidx.compose.animation.core.infiniteRepeatable(
+        androidx.compose.animation.core.tween(9000, easing = androidx.compose.animation.core.LinearEasing),
+        androidx.compose.animation.core.RepeatMode.Reverse), label = "p")
+    androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+        drawRect(Brush.verticalGradient(listOf(Color(0xFF070B1A), Color(0xFF0B1230), Color(0xFF05070F))))
+        fun blob(c: Color, x: Float, y: Float, r: Float) = drawCircle(
+            Brush.radialGradient(listOf(c.copy(alpha = 0.55f), Color.Transparent), center = androidx.compose.ui.geometry.Offset(x, y), radius = r),
+            radius = r, center = androidx.compose.ui.geometry.Offset(x, y),
+        )
+        val w = size.width; val h = size.height
+        blob(pal[0], w * (0.15f + 0.35f * p), h * (0.18f + 0.10f * p), w * 0.85f)
+        blob(pal[1], w * (0.90f - 0.30f * p), h * (0.55f - 0.12f * p), w * 0.80f)
+        blob(pal[2], w * (0.30f + 0.25f * p), h * (0.92f - 0.08f * p), w * 0.75f)
+        drawRect(Color(0x55050816)) // okunurluk için hafif karartma
+    }
+}
+
+@Composable
+private fun PulsingAvatar(name: String, ringing: Boolean) {
+    val tr = androidx.compose.animation.core.rememberInfiniteTransition(label = "pulse")
+    val k by tr.animateFloat(0f, 1f, androidx.compose.animation.core.infiniteRepeatable(
+        androidx.compose.animation.core.tween(1800, easing = androidx.compose.animation.core.LinearEasing)), label = "k")
+    Box(Modifier.size(190.dp), contentAlignment = Alignment.Center) {
+        if (ringing) {
+            androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+                val base = 64.dp.toPx()
+                for (i in 0 until 3) {
+                    val f = (k + i / 3f) % 1f
+                    drawCircle(Color.White.copy(alpha = 0.28f * (1f - f)), radius = base + (size.minDimension / 2 - base) * f,
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))
+                }
+            }
+        }
+        Box(Modifier.size(138.dp).clip(CircleShape).background(Color(0x33FFFFFF)), contentAlignment = Alignment.Center) {
+            Avatar(name, 128.dp)
         }
     }
 }

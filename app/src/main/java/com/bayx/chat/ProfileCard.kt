@@ -595,7 +595,12 @@ internal object AccountCache {
         val a = runCatching { Api.accountInfo(token) }.getOrNull() ?: return null
         val own = Bayx.myLocalpart()
         // Sunucudaki gerçek ad dışında bir ad görünüyorsa kullanıcı kendi adını seçmiş demektir.
-        val info = Info(a.username, a.customUsername || (a.username.isNotBlank() && a.username != own), a.masked)
+        // Telefonla açılan hesapların sunucu adı "t" + 10 rastgele harftir; başka bir ad görünüyorsa seçilmiştir.
+        val auto = Regex("^t[0-9a-f]{10}$").matches(a.username)
+        val before = load(context)
+        // Bir kez "ayarlandı" olduysa aynı ad için bir daha "seç" denmez.
+        val sticky = before.customUsername && before.username == a.username
+        val info = Info(a.username, sticky || a.customUsername || (a.username.isNotBlank() && !auto) || (a.username.isNotBlank() && a.username != own), a.masked)
         save(context, info)
         return info
     }

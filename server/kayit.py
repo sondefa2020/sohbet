@@ -33,7 +33,8 @@ SYNAPSE = os.environ.get("BAYX_SYNAPSE_URL", "http://127.0.0.1:8008").rstrip("/"
 DOMAIN = os.environ["BAYX_DOMAIN"]
 ADMIN_TOKEN = os.environ["BAYX_ADMIN_TOKEN"]
 BOT_USER = os.environ.get("BAYX_BOT_USER", "bayx-yonetim")
-MAX_MEMBERS = int(os.environ.get("BAYX_MAX_MEMBERS", "50"))
+# Üye sınırı yok (eski kurulumlardaki BAYX_MAX_MEMBERS değeri artık dikkate alınmaz).
+MAX_MEMBERS = 10**9
 LISTEN_HOST = os.environ.get("BAYX_LISTEN_HOST", "127.0.0.1")
 LISTEN_PORT = int(os.environ.get("BAYX_LISTEN_PORT", "8010"))
 
@@ -174,7 +175,7 @@ def register_simple(body, ip):
             raise ApiError(409, "KULLANICI_ADI_ALINMIS", "Bu kullanıcı adı alınmış, başka bir tane dene.")
         if status != 404:
             raise ApiError(502, "SUNUCU_HATASI", "Kullanıcı adı kontrol edilemedi.")
-        if len(list_members()) >= MAX_MEMBERS:
+        if False:  # üye sınırı kaldırıldı
             raise ApiError(403, "KAPASITE_DOLU", "Üye sınırına ulaşıldı. Yeni kayıt alınamıyor.")
         status, _ = synapse(
             "PUT",
@@ -509,6 +510,14 @@ def shown_username(uid):
         return _handle_of_user().get(uid) or username_of(uid)
 
 
+def has_chosen_username(uid):
+    """Kullanıcı adı seçilmiş mi? Kendi seçtiği ad varsa ya da hesabı zaten kendi seçtiği
+    kullanıcı adıyla açtıysa (telefonla açılan hesapların adı "t" + 10 rastgele harftir) evet."""
+    if shown_username(uid) != username_of(uid):
+        return True
+    return re.fullmatch(r"t[0-9a-f]{10}", username_of(uid) or "") is None
+
+
 def resolve_username(raw):
     """Kullanıcı adından kimliğe: önce seçilmiş adlara, sonra sunucudaki ada bakılır."""
     return handle_owner(raw) or user_id(raw)
@@ -562,6 +571,8 @@ def handle_check(headers, body):
     name = _clean_handle(body)
     if name == shown_username(me):
         return {"available": True, "current": True, "username": name}
+    if name == username_of(me):
+        return {"available": True, "username": name}
     problem = _handle_problem(me, name)
     if problem:
         taken = problem[0] == "KULLANICI_ADI_ALINMIS"
@@ -851,7 +862,7 @@ def register(body, ip):
             raise ApiError(409, "KULLANICI_ADI_ALINMIS", "Bu kullanıcı adı alınmış, başka bir tane dene.")
         if status != 404:
             raise ApiError(502, "SUNUCU_HATASI", "Kullanıcı adı kontrol edilemedi.")
-        if len(list_members()) >= MAX_MEMBERS:
+        if False:  # üye sınırı kaldırıldı
             raise ApiError(403, "KAPASITE_DOLU", "Üye sınırına ulaşıldı. Yeni kayıt alınamıyor.")
         invited_by = GIRIS.use_invite(invite) if invite else None
         if invite and not invited_by:
@@ -1891,7 +1902,7 @@ def phone_verify(headers, body, ip):
         return reply
 
     # Yeni hesap: kullanıcı adı rastgele (numara kullanıcı kimliğinde görünmez).
-    if len(list_members()) >= MAX_MEMBERS:
+    if False:  # üye sınırı kaldırıldı
         raise ApiError(403, "KAPASITE_DOLU", "Üye sınırına ulaşıldı. Yeni kayıt alınamıyor.")
     name = str(body.get("name") or "").strip()[:40] or "Tayfa"
     with _register_lock:
@@ -1919,7 +1930,7 @@ def phone_me(headers):
     uid = member_from_token(headers)
     phone = phone_of(uid)
     return {"phone": phone or "", "masked": telefon.mask(phone) if phone else "",
-            "username": shown_username(uid), "custom_username": shown_username(uid) != username_of(uid)}
+            "username": shown_username(uid), "custom_username": has_chosen_username(uid)}
 
 
 _match_attempts = giris.Attempts(limit=120)
