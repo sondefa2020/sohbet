@@ -137,7 +137,7 @@ async def options(request: Request, path: str):
 
 
 # Sunucunun hangi sürümü çalıştırdığını görmek için (https://.../bayx/health).
-SURUM = "2026.11.16-2"
+SURUM = "2026.11.16-3"
 
 
 @app.get("/bayx/health")
@@ -258,6 +258,11 @@ async def username_check(request: Request):
 @app.post("/bayx/v4/username/set")
 async def username_set(request: Request):
     return reply(request, await sync(kayit.handle_set, request.headers, await body(request)))
+
+
+@app.post("/bayx/v4/profile/card")
+async def profile_card(request: Request):
+    return reply(request, await sync(kayit.profile_card, request.headers, await body(request)))
 
 
 @app.get("/bayx/v4/privacy")

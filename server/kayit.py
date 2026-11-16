@@ -2234,3 +2234,40 @@ def invite_card(name):
     if info is None:
         return None
     return {"username": shown_username(uid), "display_name": info.get("displayname") or shown_username(uid)}
+
+
+
+# ====================================================================== kişi kartı
+def profile_card(headers, body):
+    """Bir kişinin profil kartı (WhatsApp'taki kişi bilgisi). Numara yalnızca zaten rehberinde
+    kayıtlıysa gösterilir; böylece kart, bilmediğin bir numarayı asla açığa çıkarmaz."""
+    me = member_from_token(headers)
+    uid = str(body.get("user_id") or "").strip()
+    if not uid.startswith("@") or ":" not in uid:
+        raise ApiError(400, "GECERSIZ_KULLANICI", "Geçersiz kullanıcı.")
+    info = active_user(uid)
+    if info is None:
+        raise ApiError(404, "KULLANICI_YOK", "Bu hesap artık kullanılmıyor.")
+    shown = shown_username(uid)
+    card = {
+        "user_id": uid,
+        "display_name": info.get("displayname") or shown,
+        "username": shown,
+        "avatar_url": info.get("avatar_url") or "",
+        "about": "",
+        "mode": "offline",
+        "phone": "",
+        "relation": contact_relation(me, uid) if uid != me else "self",
+        "blocked_me": False,
+    }
+    if has_blocked(uid, me):
+        # Seni engelleyen kişinin hakkında yazısı ve çevrimiçi durumu görünmez.
+        card["blocked_me"] = True
+        return card
+    pub = public_profile(uid, time.time())
+    card["about"] = pub["status"]
+    card["mode"] = pub["mode"]
+    if uid == me or knows_number(me, uid):
+        phone = phone_of(uid)
+        card["phone"] = phone or ""
+    return card
