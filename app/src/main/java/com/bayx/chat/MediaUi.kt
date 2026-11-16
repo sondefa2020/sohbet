@@ -234,6 +234,8 @@ internal fun MediaContent(msg: ChatMessage, tint: Color, onOpen: (ChatMessage) -
                         color = tint.copy(alpha = 0.7f),
                         fontSize = 12.sp,
                     )
+                    // Sesli mesajı yazıya çevir (yalnızca sesli mesajlarda, müzikte değil).
+                    if (title == null) TranscribeLine(msg.key, media, tint)
                 }
                 Spacer(Modifier.width(8.dp))
             }

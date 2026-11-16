@@ -12,6 +12,7 @@ import kotlinx.serialization.serializer
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -174,6 +175,32 @@ private data class UsernameCheckDto(
 )
 
 @Serializable private data class UsernameSetDto(val username: String = "")
+
+@Serializable private data class ReachDto(val reach: String = "herkes", val allowed: List<String> = emptyList())
+
+@Serializable private data class TransferStartDto(val id: String = "", @SerialName("expires_in") val expiresIn: Int = 300)
+
+@Serializable private data class TransferInfoDto(@SerialName("public_key") val publicKey: String = "")
+
+@Serializable
+data class TransferPayload(val pub: String = "", val iv: String = "", val data: String = "")
+
+@Serializable private data class TransferPollDto(val status: String = "", val payload: TransferPayload? = null)
+
+@Serializable private data class TranscribeDto(val text: String = "", val language: String = "")
+
+@Serializable
+data class ProfileCard(
+    @SerialName("user_id") val userId: String = "",
+    @SerialName("display_name") val displayName: String = "",
+    val username: String = "",
+    @SerialName("avatar_url") val avatarUrl: String = "",
+    val about: String = "",
+    val mode: String = "offline",
+    val phone: String = "",
+    val relation: String = "none",
+    @SerialName("blocked_me") val blockedMe: Boolean = false,
+)
 
 @Serializable
 private data class AppLatestDto(
@@ -339,6 +366,65 @@ object Api {
 
     suspend fun usernameSet(token: String, username: String): String =
         post<UsernameSetDto>("/bayx/v4/username/set", buildJsonObject { put("username", username) }, token).username
+
+    /** Kişi kartı: ad, kullanıcı adı, hakkında, durum; numara yalnızca rehberinde kayıtlıysa. */
+    suspend fun profileCard(token: String, userId: String): ProfileCard =
+        post("/bayx/v4/profile/card", buildJsonObject { put("user_id", userId) }, token)
+
+    suspend fun reachAllowed(token: String): Pair<String, List<String>> {
+        val dto = get<ReachDto>("/bayx/v4/privacy/allowed", token)
+        return dto.reach to dto.allowed
+    }
+
+    suspend fun setReach(token: String, reach: String) {
+        postUnit("/bayx/v4/privacy", buildJsonObject { put("reach", reach) }, token)
+    }
+
+    /** Yeni telefon: aktarım kodu al (açık anahtar QR'da gösterilir). */
+    suspend fun transferStart(token: String, publicKey: String): String =
+        post<TransferStartDto>("/bayx/v4/transfer/start", buildJsonObject { put("public_key", publicKey) }, token).id
+
+    /** Eski telefon: okutulan kodun yeni telefondaki açık anahtarı (aynı hesap olmalı). */
+    suspend fun transferInfo(token: String, id: String): String =
+        post<TransferInfoDto>("/bayx/v4/transfer/info", buildJsonObject { put("id", id) }, token).publicKey
+
+    suspend fun transferSend(token: String, id: String, payload: TransferPayload) {
+        postUnit(
+            "/bayx/v4/transfer/send",
+            buildJsonObject {
+                put("id", id)
+                put("payload", buildJsonObject { put("pub", payload.pub); put("iv", payload.iv); put("data", payload.data) })
+            },
+            token,
+        )
+    }
+
+    /** "pending", "ready" (payload ile) ya da "gone". */
+    suspend fun transferPoll(token: String, id: String): Pair<String, TransferPayload?> {
+        val dto = post<TransferPollDto>("/bayx/v4/transfer/poll", buildJsonObject { put("id", id) }, token)
+        return dto.status to dto.payload
+    }
+
+    /** Sesli mesajı yazıya çevirir (ses yalnızca Tayfa sunucusunda işlenir, saklanmaz). */
+    suspend fun transcribe(token: String, audio: ByteArray, mime: String): String {
+        val builder = Request.Builder().url(HOMESERVER + "/bayx/v4/transcribe")
+            .header("Accept", "application/json")
+            .header("Authorization", "Bearer $token")
+            .post(audio.toRequestBody(mime.ifBlank { "application/octet-stream" }.toMediaTypeOrNull()))
+        val response = try {
+            longPoll.newBuilder().readTimeout(150, TimeUnit.SECONDS).build().newCall(builder.build()).await()
+        } catch (e: IOException) {
+            throw ApiException("BAGLANTI", "Sunucuya bağlanılamadı. İnternet bağlantını kontrol et.")
+        }
+        response.use { r ->
+            val text = r.body?.string().orEmpty()
+            if (!r.isSuccessful) {
+                val err = runCatching { json.decodeFromString<ErrorDto>(text) }.getOrDefault(ErrorDto())
+                throw ApiException(err.error.ifEmpty { "HTTP_${r.code}" }, err.message.ifEmpty { "Yazıya çevrilemedi." })
+            }
+            return json.decodeFromString<TranscribeDto>(text).text
+        }
+    }
 
     suspend fun appLatest(): AppLatest? {
         val dto = get<AppLatestDto>("/bayx/app/latest")

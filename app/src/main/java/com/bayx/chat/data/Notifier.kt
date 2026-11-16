@@ -189,18 +189,27 @@ object Notifier {
     fun showMessage(context: Context, roomId: String, roomName: String?, unread: Int) {
         if (!canNotify(context)) return
         if (ChatPrefs.isMuted(roomId)) return
+        if (Bayx.isRequest(roomId)) return // tanımadığın kişiden gelen mesaj isteği: sessizce bekler
         val id = roomId.hashCode()
-        val text = if (unread > 1) com.bayx.chat.tf("%s yeni mesaj", unread) else com.bayx.chat.t("Yeni mesajın var")
+        val locked = ChatPrefs.isLocked(roomId)
+        // Sessiz saatlerde bildirim sessiz gelir; sabitlediğin (favori) sohbetler yine sesli bildirir.
+        val hushed = Comfort.inQuietHours() && !ChatPrefs.isPinned(roomId)
+        val text = when {
+            locked -> com.bayx.chat.t("Kilitli sohbette yeni mesaj")
+            unread > 1 -> com.bayx.chat.tf("%s yeni mesaj", unread)
+            else -> com.bayx.chat.t("Yeni mesajın var")
+        }
         val now = System.currentTimeMillis()
         val quiet = synchronized(lastAlert) {
             val recent = now - (lastAlert[roomId] ?: 0L) < 4_000
             if (!recent) lastAlert[roomId] = now
             recent
         }
-        val notification = NotificationCompat.Builder(context, CH_MESSAGES)
+        val builder = NotificationCompat.Builder(context, CH_MESSAGES)
             .setOnlyAlertOnce(quiet)
+            .setSilent(hushed)
             .setSmallIcon(R.drawable.ic_stat_tayfa)
-            .setContentTitle(roomName ?: "Tayfa")
+            .setContentTitle(if (locked) "Tayfa" else roomName ?: "Tayfa")
             .setContentText(text)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -214,16 +223,52 @@ object Notifier {
             )
             .setAutoCancel(true)
             .setContentIntent(openIntent(context, roomId, id))
-            .addAction(replyAction(context, roomId, id))
-            .addAction(readAction(context, roomId, id))
+        // Kilitli sohbete bildirimden yanıt verilemez (önce kilit açılmalı).
+        if (!locked) builder.addAction(replyAction(context, roomId, id))
+        val notification = builder.addAction(readAction(context, roomId, id)).build()
+        runCatching { NotificationManagerCompat.from(context).notify(id, notification) }
+    }
+
+    /** "Mesajı hatırlat": zamanı gelince mesajı gösterir; dokununca sohbet açılır. */
+    fun showReminder(context: Context, roomId: String, roomName: String, text: String, jobId: Long) {
+        if (!canNotify(context)) return
+        val id = (jobId % Int.MAX_VALUE).toInt()
+        val locked = ChatPrefs.isLocked(roomId)
+        val body = if (locked) com.bayx.chat.t("Kilitli sohbetteki bir mesaj") else text.ifBlank { com.bayx.chat.t("Mesaj") }
+        val notification = NotificationCompat.Builder(context, CH_MESSAGES)
+            .setSmallIcon(R.drawable.ic_stat_tayfa)
+            .setContentTitle(com.bayx.chat.tf("Hatırlatma · %s", if (locked) "Tayfa" else roomName.ifBlank { "Tayfa" }))
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setAutoCancel(true)
+            .setContentIntent(openIntent(context, roomId, id))
+            .build()
+        runCatching { NotificationManagerCompat.from(context).notify(id, notification) }
+    }
+
+    fun showScheduledFailed(context: Context, roomId: String, roomName: String) {
+        if (!canNotify(context)) return
+        val id = roomId.hashCode() + 7
+        val notification = NotificationCompat.Builder(context, CH_MESSAGES)
+            .setSmallIcon(R.drawable.ic_stat_tayfa)
+            .setContentTitle("Tayfa")
+            .setContentText(com.bayx.chat.tf("%s için zamanlanmış mesaj gönderilemedi. Dokun, tekrar dene.", roomName.ifBlank { "Sohbet" }))
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setAutoCancel(true)
+            .setContentIntent(openIntent(context, roomId, id))
             .build()
         runCatching { NotificationManagerCompat.from(context).notify(id, notification) }
     }
 
     /** Bildirimden uygulamayı açmadan yanıt. */
     private fun replyAction(context: Context, roomId: String, id: Int): NotificationCompat.Action {
+        // Hazır cevaplar: bildirimin altında tek dokunuşla gönderilir (Ayarlar > Kolaylıklar'dan değiştirilebilir).
         val input = androidx.core.app.RemoteInput.Builder(ReplyReceiver.KEY_TEXT)
             .setLabel(com.bayx.chat.t("Yanıtla"))
+            .setChoices(Comfort.quickReplies.value.toTypedArray<CharSequence>())
             .build()
         val intent = android.content.Intent(context, ReplyReceiver::class.java)
             .setAction(ReplyReceiver.ACTION_REPLY)

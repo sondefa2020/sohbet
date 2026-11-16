@@ -9,6 +9,8 @@ data class ChatFlags(
     val pinned: Boolean = false,
     val muted: Boolean = false,
     val archived: Boolean = false,
+    /** Açarken parmak izi / ekran kilidi ister; bildirimde içerik gösterilmez. */
+    val locked: Boolean = false,
 )
 
 object ChatPrefs {
@@ -30,6 +32,9 @@ object ChatPrefs {
 
     fun togglePin(roomId: String) = update(roomId) { it.copy(pinned = !it.pinned) }
     fun toggleMute(roomId: String) = update(roomId) { it.copy(muted = !it.muted) }
+    fun toggleLock(roomId: String) = update(roomId) { it.copy(locked = !it.locked) }
+    fun isLocked(roomId: String): Boolean = flags(roomId).locked
+    fun isPinned(roomId: String): Boolean = flags(roomId).pinned
 
     /** Arşivle/çıkar. Arşivlenince sabitleme kaldırılır (ikisi birlikte anlamsız). */
     fun toggleArchive(roomId: String) = update(roomId) {
@@ -55,7 +60,7 @@ object ChatPrefs {
         val map = mutableMapOf<String, ChatFlags>()
         o.keys().forEach { k ->
             val f = o.getJSONObject(k)
-            map[k] = ChatFlags(f.optBoolean("p"), f.optBoolean("m"), f.optBoolean("a"))
+            map[k] = ChatFlags(f.optBoolean("p"), f.optBoolean("m"), f.optBoolean("a"), f.optBoolean("l"))
         }
         map
     }.getOrDefault(emptyMap())
@@ -63,7 +68,7 @@ object ChatPrefs {
     private fun save(map: Map<String, ChatFlags>) {
         val o = JSONObject()
         map.forEach { (k, f) ->
-            o.put(k, JSONObject().put("p", f.pinned).put("m", f.muted).put("a", f.archived))
+            o.put(k, JSONObject().put("p", f.pinned).put("m", f.muted).put("a", f.archived).put("l", f.locked))
         }
         prefs().edit().putString(KEY, o.toString()).apply()
     }

@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.ui.graphics.Brush
 import com.bayx.chat.data.Gate
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Alarm
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.runtime.LaunchedEffect
@@ -374,6 +375,7 @@ internal fun MessageActionSheet(
     onDelete: () -> Unit,
     onDismiss: () -> Unit,
     onReact: (String) -> Unit = {},
+    onRemind: (() -> Unit)? = null,
 ) {
     androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss, containerColor = CardBg) {
         Column(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
@@ -397,6 +399,7 @@ internal fun MessageActionSheet(
             }
             ActionRow(Icons.AutoMirrored.Outlined.Reply, t("Yanıtla"), onReply)
             if (msg.kind == MsgKind.TEXT) ActionRow(Icons.AutoMirrored.Outlined.Send, t("İlet"), onForward)
+            if (onRemind != null) ActionRow(Icons.Outlined.Alarm, t("Hatırlat"), onRemind)
             if (canEdit) ActionRow(Icons.Outlined.Edit, t("Düzenle"), onEdit)
             if (canDelete) ActionRow(Icons.Outlined.Delete, "Sil", onDelete, tint = Color(0xFFB4232A))
         }

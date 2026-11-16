@@ -146,6 +146,8 @@ object Bayx {
     /** Bildirime dokunularak açılması istenen sohbet. */
     val pendingRoom = MutableStateFlow<String?>(null)
     val pendingOpen = MutableStateFlow<String?>(null)
+    /** Davet linkinden ya da QR'dan gelen kullanıcı adı. */
+    val pendingInvite = MutableStateFlow<String?>(null)
 
     /** Oturum kendiliğinden kapandıysa giriş ekranında gösterilecek açıklama. */
     val logoutNotice = MutableStateFlow<String?>(null)
@@ -364,6 +366,11 @@ object Bayx {
         runCatching { roomListResult?.entriesStream()?.cancel() }
         runCatching { delegateHandle?.cancel() }
         RecoveryRepo.reset()
+        // Hesaba özel yerel bilgiler: kullanıcı adı kopyası, not odası, zamanlı işler.
+        for (name in listOf("tayfa_hesap", "tayfa_notlar", "tayfa_ulasim")) {
+            runCatching { appContext.getSharedPreferences(name, android.content.Context.MODE_PRIVATE).edit().clear().apply() }
+        }
+        runCatching { Timed.jobs.value.forEach { Timed.cancel(it.id) } }
         runCatching { syncService?.close() }
         runCatching { client?.close() }
         roomListResult = null
@@ -520,9 +527,17 @@ object Bayx {
 
     private suspend fun summarize(room: Room): ChatSummary {
         val info = room.roomInfo()
+        var request = false
+        var inviter: String? = null
         if (info.membership == Membership.INVITED) {
-            // Özel bir arkadaş çevresi: davetler otomatik kabul edilir.
-            scope.launch { runCatching { room.join() } }
+            inviter = runCatching { room.inviter()?.userId }.getOrNull()
+            if (ReachRepo.accepts(inviter)) {
+                // Kişilerinden (ya da "herkes" seçiliyse herkesten) gelen davet otomatik kabul edilir.
+                scope.launch { runCatching { room.join() } }
+            } else {
+                // Tanımadığın biri: "Mesaj istekleri"nde bekler, bildirim çalmaz.
+                request = true
+            }
         }
         var text = ""
         var time = 0L
@@ -561,7 +576,9 @@ object Bayx {
             lastFromMe = fromMe,
             secret = secretLifetime(info.topic) != null,
             avatarUrl = info.avatarUrl ?: if (info.isDirect || secretLifetime(info.topic) != null) heroAvatar(room) else null,
-            dmUserId = partner,
+            dmUserId = partner ?: inviter,
+            request = request,
+            inviter = inviter,
         )
     }
 
@@ -1004,6 +1021,53 @@ object Bayx {
         if (ok && text != NUDGE_BODY && !text.startsWith(EFFECT_MARK)) Sounds.play(Sounds.Kind.OUTGOING)
         ok
     }
+
+    /** Kendi sunucu kullanıcı adım (ör. @t252cddb103:alan -> t252cddb103). */
+    fun myLocalpart(): String = (auth.value as? AuthState.LoggedIn)?.userId?.substringBefore(":")?.removePrefix("@").orEmpty()
+
+    /** Bu sohbet henüz kabul edilmemiş bir mesaj isteği mi? */
+    fun isRequest(roomId: String): Boolean = rooms.value.firstOrNull { it.id == roomId }?.request == true
+
+    /** Mesaj isteğini kabul eder (sohbete katılır). */
+    suspend fun acceptRequest(roomId: String): Boolean = withContext(Dispatchers.IO) {
+        val c = client ?: return@withContext false
+        runCatching { c.getRoom(roomId)?.join() }.isSuccess
+    }
+
+    /** Mesaj isteğini reddeder (davetten çıkar). */
+    suspend fun declineRequest(roomId: String): Boolean = withContext(Dispatchers.IO) {
+        val c = client ?: return@withContext false
+        runCatching { c.getRoom(roomId)?.leave() }.isSuccess
+    }
+
+    /**
+     * "Kendime not": yalnızca senin olduğun şifreli bir sohbet. Not, bağlantı, fotoğraf saklamak için.
+     * Odanın kimliği cihazda tutulur; yeni cihazda adıyla yeniden bulunur.
+     */
+    suspend fun noteToSelf(): String? = withContext(Dispatchers.IO) {
+        val c = client ?: return@withContext null
+        val prefs = appContext.getSharedPreferences("tayfa_notlar", android.content.Context.MODE_PRIVATE)
+        prefs.getString("oda", null)?.let { id ->
+            if (runCatching { c.getRoom(id)?.roomInfo()?.membership == Membership.JOINED }.getOrDefault(false)) return@withContext id
+        }
+        val existing = rooms.value.firstOrNull { !it.isDirect && it.name == NOTES_NAME }?.id
+        val id = existing ?: runCatching {
+            c.createRoom(
+                CreateRoomParameters(
+                    name = NOTES_NAME,
+                    isEncrypted = true,
+                    isDirect = false,
+                    visibility = RoomVisibility.Private,
+                    preset = RoomPreset.PRIVATE_CHAT,
+                    invite = emptyList(),
+                ),
+            )
+        }.getOrNull()
+        if (id != null) prefs.edit().putString("oda", id).apply()
+        id
+    }
+
+    const val NOTES_NAME = "📝 Notlarım"
 
     /** Kişiyle birebir sohbeti bulur ya da uçtan uca şifreli yeni bir sohbet açar; oda kimliğini döndürür. */
     suspend fun startDirectChat(userId: String): String? = withContext(Dispatchers.IO) {

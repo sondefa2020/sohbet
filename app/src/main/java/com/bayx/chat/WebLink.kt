@@ -193,7 +193,7 @@ fun WebLinkScreen(onBack: () -> Unit) {
 
 /** CameraX + zxing ile QR okuyucu; "tayfaweb:<id>" yüklü QR'ı yakalayınca onResult çağrılır. */
 @Composable
-private fun QrScanner(onResult: (String) -> Unit, onCancel: () -> Unit) {
+internal fun QrScanner(onResult: (String) -> Unit, onCancel: () -> Unit) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val executor = remember { Executors.newSingleThreadExecutor() }

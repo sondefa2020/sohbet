@@ -45,6 +45,12 @@ object PhonebookRepo {
     /** Rehberdeki adı (yoksa null): sohbet listesinde ve sohbet başlığında kullanılır. */
     fun nameFor(userId: String?): String? = userId?.let { synchronized(byUser) { byUser[it]?.name } }
 
+    /** E.164 rakamlarını okunur yazar: 905441234567 -> +90 544 123 45 67 */
+    fun pretty(digits: String): String = runCatching {
+        val util = com.google.i18n.phonenumbers.PhoneNumberUtil.getInstance()
+        util.format(util.parse("+" + digits.trimStart('+'), "TR"), com.google.i18n.phonenumbers.PhoneNumberUtil.PhoneNumberFormat.INTERNATIONAL)
+    }.getOrDefault("+" + digits.trimStart('+'))
+
     /** Bu kişinin numarası rehberimde kayıtlı mı (arama/mesaj izni). */
     fun isContact(userId: String?): Boolean = userId != null && synchronized(byUser) { byUser.containsKey(userId) }
 

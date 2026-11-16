@@ -17,6 +17,8 @@
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <!-- Otomatik güncelleme: indirilen yeni sürümü kurmak için -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Zamanlanmış mesajın tam zamanında gitmesi için (izin verilmezse birkaç dakika sapabilir) -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
@@ -57,6 +59,14 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="tayfa" android:host="davet" />
                 <data android:scheme="tayfa" android:host="giris" />
+                <data android:scheme="tayfa" android:host="t" />
+            </intent-filter>
+            <!-- Kişi davet linki: https://sohbet.acioglu.tr/t/kullaniciadi -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="sohbet.acioglu.tr" android:pathPrefix="/t/" />
             </intent-filter>
         </activity>
         <service
@@ -81,6 +91,15 @@
         <receiver
             android:name=".data.ReplyReceiver"
             android:exported="false" />
+        <!-- Zamanlanmış mesaj ve hatırlatmalar; telefon yeniden başlayınca yeniden kurulur -->
+        <receiver
+            android:name=".data.TimedReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
         <receiver
             android:name=".data.BootReceiver"
             android:exported="false">

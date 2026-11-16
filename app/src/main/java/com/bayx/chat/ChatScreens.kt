@@ -38,6 +38,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.outlined.EmojiEmotions
@@ -126,7 +127,7 @@ import java.util.Locale
 // ---------- Sohbet ----------
 
 @Composable
-fun ChatScreen(roomId: String, onBack: () -> Unit, onGroupInfo: (String) -> Unit = {}) {
+fun ChatScreen(roomId: String, onBack: () -> Unit, onGroupInfo: (String) -> Unit = {}, onPerson: (String) -> Unit = {}) {
     // Sohbet oturumu ViewModel'de: ekran döndürülse ya da tema değişse bile yeniden açılmaz.
     val vm = viewModel(key = "sohbet:$roomId") { com.bayx.chat.ui.ChatViewModel(roomId) }
     val state by vm.state.collectAsStateWithLifecycle()
@@ -143,12 +144,12 @@ fun ChatScreen(roomId: String, onBack: () -> Unit, onGroupInfo: (String) -> Unit
             }
         }
     } else {
-        ChatContent(current, onBack, onGroupInfo)
+        ChatContent(current, onBack, onGroupInfo, onPerson)
     }
 }
 
 @Composable
-internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: (String) -> Unit = {}) {
+internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: (String) -> Unit = {}, onPerson: (String) -> Unit = {}) {
     val messages by session.messages.collectAsState()
     val title by session.title.collectAsState()
     val partner by session.dmUserId.collectAsState()
@@ -341,6 +342,12 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
     var showPoll by remember { mutableStateOf(false) }
     var showDisappear by remember { mutableStateOf(false) }
     val disappearing by session.disappearing.collectAsState()
+    val allFlags by com.bayx.chat.data.ChatPrefs.state.collectAsState()
+    val chatLocked = allFlags[session.roomId]?.locked == true
+    val timedJobs by com.bayx.chat.data.Timed.jobs.collectAsState()
+    val scheduled = timedJobs.filter { it.roomId == session.roomId && it.kind == com.bayx.chat.data.Timed.SEND }
+    var scheduleText by remember { mutableStateOf<String?>(null) }
+    var remindMsg by remember { mutableStateOf<ChatMessage?>(null) }
     Box(Modifier.fillMaxSize()) {
       ChatBackground(wallpaper)
       Column(Modifier.fillMaxSize().systemBarsPadding().imePadding()) {
@@ -354,7 +361,12 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
             Spacer(Modifier.width(12.dp))
             Column(
                 Modifier.weight(1f).then(
-                    if (isGroup) Modifier.clickable { onGroupInfo(session.roomId) } else Modifier,
+                    when {
+                        isGroup -> Modifier.clickable { onGroupInfo(session.roomId) }
+                        // Birebir sohbette başlığa dokununca kişi kartı açılır (WhatsApp gibi).
+                        partner != null && !session.secret -> Modifier.clickable { partner?.let(onPerson) }
+                        else -> Modifier
+                    },
                 ),
             ) {
                 Text(
@@ -405,6 +417,19 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
             Box {
                 IconButton(onClick = { menuOpen = true }) { Icon(Icons.Filled.MoreVert, t("Diğer"), tint = Ink) }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text(if (chatLocked) t("Sohbet kilidini kaldır") else t("Sohbeti kilitle")) },
+                        leadingIcon = { Icon(if (chatLocked) Icons.Outlined.LockOpen else Icons.Outlined.Lock, contentDescription = null) },
+                        onClick = {
+                            menuOpen = false
+                            if (!chatLocked && !com.bayx.chat.data.Gate.lockAvailable()) {
+                                toast(t("Önce telefonuna parmak izi ya da ekran kilidi ekle."))
+                            } else {
+                                com.bayx.chat.data.ChatPrefs.toggleLock(session.roomId)
+                                toast(if (chatLocked) t("Sohbet kilidi kaldırıldı.") else t("Sohbet kilitlendi. Açarken parmak izin sorulacak."))
+                            }
+                        },
+                    )
                     DropdownMenuItem(
                         text = { Text(t("Mesajlarda ara")) },
                         leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
@@ -536,6 +561,11 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
                 },
             )
         } else {
+            if (scheduled.isNotEmpty()) {
+                Column(Modifier.fillMaxWidth().background(GlassBar).padding(horizontal = 12.dp)) {
+                    scheduled.sortedBy { it.at }.forEach { job -> TimedRow(job) { com.bayx.chat.data.Timed.cancel(job.id) } }
+                }
+            }
             val banner = editTarget?.let { t("Düzenleniyor") to it } ?: replyTarget?.let { (if (it.mine) "Sen" else it.sender) to it }
             banner?.let { (who, msg) ->
                 Row(
@@ -596,7 +626,14 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
                         .shadow(8.dp, CircleShape, ambientColor = Blue, spotColor = Blue)
                         .clip(CircleShape)
                         .background(BlueBrush)
-                        .clickable {
+                        .combinedClickable(
+                            onLongClick = {
+                                // Basılı tut: mesajı ileri bir zamana planla.
+                                val text = draft.trim()
+                                if (text.isNotEmpty() && editTarget == null) scheduleText = text
+                                else if (text.isEmpty()) toast(t("Zamanlamak için önce mesajı yaz, sonra gönder düğmesine basılı tut."))
+                            },
+                        ) {
                             val text = draft.trim()
                             if (text.isNotEmpty()) {
                                 val edit = editTarget
@@ -678,6 +715,23 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
     viewer?.let { msg -> MediaViewerDialog(msg) { viewer = null } }
     if (showGallery) MediaGalleryDialog(session) { showGallery = false }
     if (showWallpaper) WallpaperPicker(context, wallpaper) { showWallpaper = false }
+    scheduleText?.let { text ->
+        WhenPicker(title = t("Ne zaman gönderilsin?"), onDismiss = { scheduleText = null }) { at ->
+            com.bayx.chat.data.Timed.add(com.bayx.chat.data.Timed.SEND, session.roomId, title, text, at)
+            scheduleText = null
+            draft = ""
+            replyTarget = null
+            toast(tf("Mesaj %s gönderilecek.", whenLabel(at)))
+        }
+    }
+    remindMsg?.let { msg ->
+        WhenPicker(title = t("Ne zaman hatırlatayım?"), onDismiss = { remindMsg = null }) { at ->
+            val label = msg.text.ifBlank { t("Medya") }
+            com.bayx.chat.data.Timed.add(com.bayx.chat.data.Timed.REMIND, session.roomId, title, (if (msg.mine) "" else msg.sender + ": ") + label, at)
+            remindMsg = null
+            toast(tf("%s hatırlatacağım.", whenLabel(at)))
+        }
+    }
     actionMsg?.let { msg ->
         MessageActionSheet(
             msg = msg,
@@ -689,6 +743,7 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
             onDelete = { deleteTarget = msg; actionMsg = null },
             onDismiss = { actionMsg = null },
             onReact = { key -> actionMsg = null; scope.launch { Bayx.toggleReaction(session, msg, key) } },
+            onRemind = { remindMsg = msg; actionMsg = null },
         )
     }
     forwardMsg?.let { msg ->

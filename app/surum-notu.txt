@@ -1,4 +1,6 @@
-Uygulama artık kendini güncelliyor.
-Kendi kullanıcı adını seçebilirsin (Profil > Kullanıcı adı).
-Giriş daha kolay: numara ve SMS kodu otomatik dolar.
-Web girişi ve kişi listesi düzeltildi.
+Kişi kartları: bir kişiye dokununca profili, hakkında yazısı ve işlemleri açılır.
+Profili düzenle: fotoğraf, ad, hakkında, kullanıcı adı ve telefon tek ekranda.
+QR kodum ve davet linki; QR okutarak kişi ekleme.
+Yeni telefona QR ile aktarma: eski mesajlar anahtar yazmadan gelir.
+Sesli mesajı yazıya çevirme, hazır cevaplar, zamanlanmış mesaj, mesaj hatırlatma, Kendime not.
+Sessiz saatler, "Kimler bana ulaşabilir", sohbet kilidi, büyük yazı.

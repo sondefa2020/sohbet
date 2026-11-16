@@ -79,10 +79,18 @@ fun RecoveryDialogs() {
         var busy by remember { mutableStateOf(false) }
         var error by remember { mutableStateOf<String?>(null) }
         var noKey by remember { mutableStateOf(false) }
+        var fromOldPhone by remember { mutableStateOf(false) }
         fun close() {
             dismissed = true
             prefs.edit().putBoolean("sorma", true).apply()
             RecoveryRepo.recoveryPrompt.value = false
+        }
+        if (fromOldPhone) {
+            TransferReceiveDialog { ok ->
+                fromOldPhone = false
+                if (ok) close()
+            }
+            return
         }
         if (noKey) {
             AlertDialog(
@@ -130,6 +138,10 @@ fun RecoveryDialogs() {
                         Text(it, color = androidx.compose.ui.graphics.Color(0xFFB4232A), fontSize = 13.sp)
                     }
                     Spacer(Modifier.height(4.dp))
+                    // En kolayı: eski telefon hâlâ elindeyse QR ile aktar, anahtar yazmaya gerek yok.
+                    TextButton(enabled = !busy, onClick = { fromOldPhone = true }) {
+                        Text(t("Eski telefonumdan aktar (QR)"), color = Blue, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                    }
                     TextButton(enabled = !busy, onClick = { noKey = true }) {
                         Text(t("Anahtarım yok, yeni yedek başlat"), color = Blue)
                     }

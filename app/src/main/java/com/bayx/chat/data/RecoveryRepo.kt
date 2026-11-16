@@ -51,7 +51,7 @@ object RecoveryRepo {
             val hasBackup = runCatching { c.encryption().backupExistsOnServer() }.getOrDefault(true)
             if (hasBackup) return@launch
             runCatching { c.encryption().enableRecovery(false, null, noProgress) }
-                .onSuccess { newRecoveryKey.value = it }
+                .onSuccess { newRecoveryKey.value = it; rememberKey(it) }
         }
     }
 
@@ -59,7 +59,7 @@ object RecoveryRepo {
     suspend fun recoverWithKey(key: String): String? = withContext(Dispatchers.IO) {
         val c = Bayx.client ?: return@withContext "Oturum yok."
         runCatching { c.encryption().recover(key.trim()) }
-            .fold({ null }, { "Anahtar doğru değil. Boşlukları dahil, kaydettiğin gibi yaz." })
+            .fold({ rememberKey(key.trim()); null }, { "Anahtar doğru değil. Boşlukları dahil, kaydettiğin gibi yaz." })
     }
 
     /** Yedeği açar ya da yeni anahtar üretir (eski anahtar geçersiz olur). */
@@ -70,11 +70,32 @@ object RecoveryRepo {
                 c.encryption().disableRecovery()
             }
             c.encryption().enableRecovery(false, null, noProgress)
-        }.fold({ newRecoveryKey.value = it; null }, { "Yedek anahtarı oluşturulamadı. İnternet bağlantını kontrol et." })
+        }.fold({ newRecoveryKey.value = it; rememberKey(it); null }, { "Yedek anahtarı oluşturulamadı. İnternet bağlantını kontrol et." })
     }
+
+    // Yedek anahtarı bu cihazda (Android Keystore ile şifreli) saklanır: yeni telefona QR ile
+    // taşırken kullanıcının anahtarı yeniden yazması gerekmez. Çıkışta silinir.
+    private fun keyStore() = SecureStore(Bayx.appContext, "yedek-anahtari.bin")
+
+    private fun rememberKey(key: String) {
+        runCatching { keyStore().save(key) }
+    }
+
+    /**
+     * Yeni telefona aktarılacak anahtar. Bu cihazda saklı değilse (eski sürümden kalma) yeni bir
+     * anahtar üretilir: o zaman kâğıda yazılmış eski anahtar geçersiz olur ([created] = true).
+     */
+    suspend fun keyForTransfer(): Pair<String?, Boolean> = withContext(Dispatchers.IO) {
+        runCatching { keyStore().load() }.getOrNull()?.takeIf { it.isNotBlank() }?.let { return@withContext it to false }
+        val error = createRecoveryKey()
+        if (error != null) null to false else newRecoveryKey.value to true
+    }
+
+    fun hasRememberedKey(): Boolean = runCatching { keyStore().exists() }.getOrDefault(false)
 
     /** Oturum kapanınca. */
     internal fun reset() {
+        runCatching { keyStore().deleteFile() }
         runCatching { recoveryHandle?.cancel() }
         recoveryHandle = null
         recoveryState.value = RecoveryState.UNKNOWN

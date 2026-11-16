@@ -14,8 +14,8 @@ import javax.crypto.spec.GCMParameterSpec
  * Oturum bilgisini (erişim anahtarı, veritabanı parolası) Android Keystore'daki bir AES-GCM
  * anahtarıyla şifreleyip uygulamanın özel alanında saklar. Çıkışta hem dosya hem anahtar silinir.
  */
-class SecureStore(context: Context) {
-    private val file = File(context.filesDir, "oturum.bin")
+class SecureStore(context: Context, name: String = "oturum.bin") {
+    private val file = File(context.filesDir, name)
 
     private fun keyStore(): KeyStore = KeyStore.getInstance(PROVIDER).apply { load(null) }
 
@@ -59,6 +59,11 @@ class SecureStore(context: Context) {
     fun clear() {
         file.delete()
         runCatching { keyStore().deleteEntry(ALIAS) }
+    }
+
+    /** Yalnızca bu dosyayı siler (anahtar diğer dosyalar için kalır). */
+    fun deleteFile() {
+        file.delete()
     }
 
     private companion object {

@@ -101,6 +101,18 @@ class MainActivity : FragmentActivity() {
             com.bayx.chat.data.Calls.autoAcceptCallId = it
             com.bayx.chat.data.Notifier.cancelCall(this)
         }
+        // Kişi davet linki: tayfa://t/ad ya da https://sohbet.acioglu.tr/t/ad
+        intent?.data?.let { uri ->
+            val name = when {
+                uri.scheme == "tayfa" && uri.host == "t" -> uri.pathSegments.firstOrNull()
+                uri.scheme == "https" && uri.pathSegments.firstOrNull() == "t" -> uri.pathSegments.getOrNull(1)
+                else -> null
+            }
+            if (!name.isNullOrBlank()) {
+                Bayx.pendingInvite.value = name
+                intent.data = null
+            }
+        }
         val roomId = intent?.getStringExtra(Notifier.EXTRA_ROOM_ID) ?: return
         intent.removeExtra(Notifier.EXTRA_ROOM_ID)
         Bayx.pendingRoom.value = roomId
@@ -154,7 +166,14 @@ fun BayxTheme(content: @Composable () -> Unit) {
     MaterialTheme(colorScheme = scheme) {
         // Arapça seçilince sağdan sola, diğer dillerde soldan sağa çizilir.
         val dir = if (L.rtl) LayoutDirection.Rtl else LayoutDirection.Ltr
-        CompositionLocalProvider(LocalLayoutDirection provides dir, content = content)
+        // Büyük yazı (Ayarlar > Kolaylıklar): telefonun yazı boyutunun üstüne ek büyütme.
+        val scale by com.bayx.chat.data.Comfort.textScale.collectAsState()
+        val density = androidx.compose.ui.platform.LocalDensity.current
+        CompositionLocalProvider(
+            LocalLayoutDirection provides dir,
+            androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density, density.fontScale * scale),
+            content = content,
+        )
     }
 }
 
@@ -250,6 +269,19 @@ private fun MainNav(me: AuthState.LoggedIn) {
         Bayx.pendingRoom.value = null
         nav.navigate("chat/" + Uri.encode(roomId)) { launchSingleTop = true }
     }
+    // Davet linki ya da QR ile gelen kişi: kim olduğunu göster, tek dokunuşla sohbet aç.
+    val pendingInvite by Bayx.pendingInvite.collectAsState()
+    pendingInvite?.let { name ->
+        InviteOpenDialog(
+            name = name,
+            onDismiss = { Bayx.pendingInvite.value = null },
+            onOpen = { roomId ->
+                Bayx.pendingInvite.value = null
+                nav.navigate("chat/" + Uri.encode(roomId)) { launchSingleTop = true }
+            },
+        )
+    }
+    LaunchedEffect(Unit) { com.bayx.chat.data.ReachRepo.refresh(force = true) }
     val pendingOpen by Bayx.pendingOpen.collectAsState()
     LaunchedEffect(pendingOpen) {
         if (pendingOpen == "requests") {
@@ -326,6 +358,21 @@ private fun MainNav(me: AuthState.LoggedIn) {
                 onRequests = { nav.navigate("requests") },
                 onCalls = { nav.navigate("calls") },
                 onStatus = { nav.navigate("status") },
+                onPerson = { uid -> nav.navigate("person/" + Uri.encode(uid)) },
+            )
+        }
+        composable("person/{id}") { entry ->
+            PersonCardScreen(
+                userId = entry.arguments?.getString("id").orEmpty(),
+                onBack = { nav.popBackStack() },
+                onOpenChat = { roomId -> nav.navigate("chat/" + Uri.encode(roomId)) },
+            )
+        }
+        composable("editprofile") {
+            EditProfileScreen(
+                me = me,
+                onBack = { nav.popBackStack() },
+                onPhone = { nav.navigate("phonelink") { launchSingleTop = true } },
             )
         }
         composable("requests") {
@@ -356,11 +403,19 @@ private fun MainNav(me: AuthState.LoggedIn) {
             TabPage(AppTab.STATUS, nav) { StatusScreen(onBack = { nav.popBackStack() }) }
         }
         composable("chat/{id}") { entry ->
-            ChatScreen(
-                roomId = entry.arguments?.getString("id").orEmpty(),
-                onBack = { nav.popBackStack() },
-                onGroupInfo = { roomId -> nav.navigate("group/" + Uri.encode(roomId)) },
-            )
+            val roomId = entry.arguments?.getString("id").orEmpty()
+            // Kilitli sohbet: açmadan önce parmak izi / ekran kilidi sorulur.
+            ChatLockGate(roomId = roomId, onCancel = { nav.popBackStack() }) {
+                ChatScreen(
+                    roomId = roomId,
+                    onBack = { nav.popBackStack() },
+                    onGroupInfo = { id -> nav.navigate("group/" + Uri.encode(id)) },
+                    onPerson = { uid -> nav.navigate("person/" + Uri.encode(uid)) },
+                )
+            }
+        }
+        composable("comfort") {
+            ComfortScreen(onBack = { nav.popBackStack() })
         }
         composable("group/{id}") { entry ->
             GroupInfoScreen(
@@ -377,6 +432,8 @@ private fun MainNav(me: AuthState.LoggedIn) {
                     onAdmin = { nav.navigate("admin") },
                     onWebLink = { nav.navigate("weblink") },
                     onPhone = { nav.navigate("phonelink") { launchSingleTop = true } },
+                    onComfort = { nav.navigate("comfort") },
+                    onEditProfile = { nav.navigate("editprofile") },
                 )
             }
         }
@@ -388,26 +445,6 @@ private fun MainNav(me: AuthState.LoggedIn) {
         }
     }
 
-    config?.let { cfg ->
-        if (!updateDismissed && cfg.latestVersion > myVersion && cfg.apkUrl.isNotBlank()) {
-            AlertDialog(
-                onDismissRequest = { updateDismissed = true },
-                title = { Text(t("Yeni sürüm var")) },
-                text = { Text(t("Tayfa'nın yeni bir sürümü yayınlandı. Güncellemek için indir ve kur.")) },
-                confirmButton = {
-                    TextButton(onClick = {
-                        updateDismissed = true
-                        runCatching {
-                            context.startActivity(
-                                Intent(Intent.ACTION_VIEW, Uri.parse(cfg.apkUrl)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                            )
-                        }
-                    }) { Text(t("Güncelle")) }
-                },
-                dismissButton = { TextButton(onClick = { updateDismissed = true }) { Text("Sonra") } },
-            )
-        }
-    }
     announcement?.let { text ->
         AlertDialog(
             onDismissRequest = { announcement = null },

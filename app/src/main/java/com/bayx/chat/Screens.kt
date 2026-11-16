@@ -77,6 +77,10 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.outlined.Archive
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.LockOpen
+import androidx.compose.material.icons.outlined.EditNote
+import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.RadioButtonChecked
@@ -337,6 +341,7 @@ fun ChatListScreen(
     onRequests: () -> Unit = {},
     onCalls: () -> Unit = {},
     onStatus: () -> Unit = {},
+    onPerson: (String) -> Unit = {},
 ) {
     var tab by remember { mutableIntStateOf(0) }
     val allRooms by Bayx.rooms.collectAsState()
@@ -344,7 +349,10 @@ fun ChatListScreen(
     val presences by PresenceRepo.presences.collectAsState()
     var query by remember { mutableStateOf("") }
     var searching by remember { mutableStateOf(false) }
-    val rooms = allRooms.filter { !it.secret }.filter {
+    var scanQr by remember { mutableStateOf(false) }
+    // Mesaj istekleri (tanımadığın kişilerden) listede değil, ayrı bir şeritte durur.
+    val requests = allRooms.filter { it.request }
+    val rooms = allRooms.filter { !it.secret && !it.request }.filter {
         query.isBlank() || it.name.contains(query, ignoreCase = true) || it.lastMessage.contains(query, ignoreCase = true)
     }
     val contacts by ContactsRepo.contacts.collectAsState()
@@ -539,6 +547,9 @@ fun ChatListScreen(
                                 }
                             }
                         }
+                        if (query.isBlank() && requests.isNotEmpty()) {
+                            item(key = "istekler") { MessageRequestsBar(requests) { id -> onOpenChat(id) } }
+                        }
                         val active = rooms.filter { !chatFlags(it.id).archived }
                             .sortedByDescending { chatFlags(it.id).pinned }
                         val archivedCount = allRooms.count { !it.secret && chatFlags(it.id).archived }
@@ -583,6 +594,26 @@ fun ChatListScreen(
                         val book = phonebook.filter { query.isBlank() || it.name.contains(query, true) || it.phone.contains(query.filter { c -> c.isDigit() }) }
                         LazyColumn {
                             globalHit?.let { hit -> item(key = "bul") { FoundUserRow(hit, globalByPhone, onMessage = { openDirectId(hit.userId); query = ""; searching = false }, onRequest = { sendRequest(hit.username); globalHit = null }) } }
+                            if (query.isBlank()) {
+                                item(key = "hizli") {
+                                    Row(
+                                        Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 8.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    ) {
+                                        QuickCard(t("QR okut"), t("Kişi ekle"), Icons.Outlined.QrCodeScanner, Satin.Steel, Modifier.weight(1f)) { scanQr = true }
+                                        QuickCard(t("Kendime not"), t("Not ve dosya"), Icons.Outlined.EditNote, Satin.Sand, Modifier.weight(1f)) {
+                                            scope.launch {
+                                                val id = Bayx.noteToSelf()
+                                                if (id != null) onOpenChat(id) else toast(t("Not sohbeti açılamadı. Tekrar dene."))
+                                            }
+                                        }
+                                        QuickCard(t("Davet et"), t("Link paylaş"), Icons.Outlined.PersonAddAlt, Satin.Lavender, Modifier.weight(1f)) {
+                                            val handle = AccountCache.load(context).username.ifBlank { me.userId.substringBefore(":").removePrefix("@") }
+                                            shareText(context, tf("Tayfa'da benimle konuş: %s", inviteLink(handle)))
+                                        }
+                                    }
+                                }
+                            }
                             if (!contactsAllowed) {
                                 item {
                                     Column(
@@ -629,6 +660,7 @@ fun ChatListScreen(
                                         (p?.status ?: entry.status).ifBlank { "+" + entry.phone },
                                         mode = p?.mode,
                                         url = entry.avatarUrl,
+                                        onAvatar = { onPerson(entry.userId) },
                                     ) { openDirectId(entry.userId) }
                                 }
                                 item {
@@ -636,7 +668,10 @@ fun ChatListScreen(
                                         onClick = {
                                             val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
                                                 type = "text/plain"
-                                                putExtra(android.content.Intent.EXTRA_TEXT, t("Tayfa'da benimle uçtan uca şifreli sohbet et: https://sohbet.acioglu.tr"))
+                                                putExtra(
+                                                    android.content.Intent.EXTRA_TEXT,
+                                                    tf("Tayfa'da benimle konuş: %s", inviteLink(AccountCache.load(context).username.ifBlank { me.userId.substringBefore(":").removePrefix("@") })),
+                                                )
                                             }
                                             context.startActivity(android.content.Intent.createChooser(send, t("Arkadaşlarını davet et")))
                                         },
@@ -660,6 +695,7 @@ fun ChatListScreen(
                                         (p?.status ?: m.status).ifBlank { "@" + m.userId.substringBefore(":").removePrefix("@") },
                                         mode = p?.mode,
                                         url = m.avatarUrl,
+                                        onAvatar = { onPerson(m.userId) },
                                     ) { openDirectId(m.userId) }
                                 }
                             }
@@ -731,6 +767,13 @@ fun ChatListScreen(
         )
     }
 
+    if (scanQr) {
+        ScanQrDialog(onDismiss = { scanQr = false }) { text ->
+            scanQr = false
+            if (!handleScannedText(text)) toast(t("Bu bir Tayfa kişi kodu değil."))
+        }
+    }
+
     actionRoom?.let { chat ->
         val f = chatFlags(chat.id)
         ChatActionSheet(
@@ -740,6 +783,12 @@ fun ChatListScreen(
             onPin = { ChatPrefs.togglePin(chat.id); actionRoom = null },
             onMute = { ChatPrefs.toggleMute(chat.id); actionRoom = null },
             onArchive = { ChatPrefs.toggleArchive(chat.id); actionRoom = null },
+            onLock = {
+                if (!f.locked && !com.bayx.chat.data.Gate.lockAvailable()) toast(t("Önce telefonuna parmak izi ya da ekran kilidi ekle."))
+                else ChatPrefs.toggleLock(chat.id)
+                actionRoom = null
+            },
+            onInfo = chat.dmUserId?.takeIf { chat.isDirect }?.let { uid -> { actionRoom = null; onPerson(uid) } },
         )
     }
 
@@ -765,6 +814,8 @@ private fun ChatActionSheet(
     onPin: () -> Unit,
     onMute: () -> Unit,
     onArchive: () -> Unit,
+    onLock: () -> Unit = {},
+    onInfo: (() -> Unit)? = null,
 ) {
     androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss, containerColor = CardBg) {
         Column(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
@@ -786,6 +837,11 @@ private fun ChatActionSheet(
                 Icons.Outlined.Archive,
                 if (flags.archived) t("Arşivden çıkar") else t("Arşivle"), onArchive,
             )
+            SheetAction(
+                if (flags.locked) Icons.Outlined.LockOpen else Icons.Outlined.Lock,
+                if (flags.locked) t("Sohbet kilidini kaldır") else t("Sohbeti kilitle"), onLock,
+            )
+            if (onInfo != null) SheetAction(Icons.Outlined.Info, t("Kişi bilgisi"), onInfo)
         }
     }
 }
@@ -1117,12 +1173,14 @@ private fun FoundUserRow(hit: Api.ContactFind, byPhone: Boolean, onMessage: () -
 }
 
 @Composable
-private fun PersonRow(name: String, handle: String, mode: String? = null, url: String? = null, onClick: () -> Unit) {
+private fun PersonRow(name: String, handle: String, mode: String? = null, url: String? = null, onAvatar: (() -> Unit)? = null, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Avatar(name, 56.dp, url = url, mode = mode)
+        Box(Modifier.clip(CircleShape).then(if (onAvatar != null) Modifier.clickable(onClick = onAvatar) else Modifier)) {
+            Avatar(name, 56.dp, url = url, mode = mode)
+        }
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
             Text(name, color = Ink, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)

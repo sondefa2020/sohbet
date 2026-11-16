@@ -1,6 +1,8 @@
 package com.bayx.chat
 
 import androidx.compose.material.icons.outlined.AlternateEmail
+import androidx.compose.material.icons.outlined.Accessibility
+import androidx.compose.material.icons.outlined.PhonelinkSetup
 import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.outlined.Smartphone
 import androidx.compose.material.icons.outlined.DarkMode
@@ -16,7 +18,6 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.automirrored.outlined.Reply
 import androidx.compose.material.icons.outlined.Wallpaper
-import androidx.compose.material.icons.outlined.AlternateEmail
 import androidx.compose.material.icons.outlined.PersonAdd
 import androidx.compose.material.icons.outlined.GroupAdd
 import androidx.compose.material.icons.outlined.QrCode2
@@ -128,7 +129,15 @@ import java.util.Locale
 // ---------- Sohbet ----------
 
 @Composable
-fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Unit, onWebLink: () -> Unit, onPhone: () -> Unit = {}) {
+fun ProfileScreen(
+    me: AuthState.LoggedIn,
+    onBack: () -> Unit,
+    onAdmin: () -> Unit,
+    onWebLink: () -> Unit,
+    onPhone: () -> Unit = {},
+    onComfort: () -> Unit = {},
+    onEditProfile: () -> Unit = {},
+) {
     var confirmLogout by remember { mutableStateOf(false) }
     var langPick by remember { mutableStateOf(false) }
     var confirmNewKey by remember { mutableStateOf(false) }
@@ -165,13 +174,18 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
     var emailState by remember { mutableStateOf<Api.EmailStatus?>(null) }
     var showEmail by remember { mutableStateOf(false) }
     // Kullanıcının seçtiği ad (seçmediyse sunucudaki adı) ve bağlı telefon numarası.
-    var username by remember { mutableStateOf(me.userId.substringBefore(":").removePrefix("@")) }
-    var customUsername by remember { mutableStateOf(true) }
-    var myPhone by remember { mutableStateOf<String?>(null) }
+    // Cihazdaki kopya hemen gösterilir (bir kez seçilen kullanıcı adı bir daha "Seç" olarak çıkmaz),
+    // sonra sunucudan tazelenir.
+    val cached = remember { AccountCache.load(context) }
+    var username by remember { mutableStateOf(cached.username.ifBlank { me.userId.substringBefore(":").removePrefix("@") }) }
+    var customUsername by remember { mutableStateOf(cached.customUsername) }
+    var myPhone by remember { mutableStateOf<String?>(cached.masked.ifBlank { null }) }
     var editUsername by remember { mutableStateOf(false) }
+    var showMyQr by remember { mutableStateOf(false) }
+    var showTransfer by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         val token = Bayx.accessToken ?: return@LaunchedEffect
-        runCatching { Api.accountInfo(token) }.getOrNull()?.let {
+        AccountCache.refresh(context)?.let {
             if (it.username.isNotBlank()) username = it.username
             customUsername = it.customUsername
             myPhone = it.masked
@@ -262,7 +276,7 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
                     }
                 }
                 Text(
-                    myStatus.ifBlank { t("Durum mesajı ekle…") },
+                    myStatus.ifBlank { t("Hakkında ekle…") },
                     color = if (myStatus.isBlank()) SoftBlue else Muted,
                     fontSize = 16.sp,
                     fontStyle = if (myStatus.isBlank()) FontStyle.Italic else FontStyle.Normal,
@@ -300,13 +314,21 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
         Spacer(Modifier.height(14.dp))
         SoftCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(horizontal = 18.dp, vertical = 4.dp)) {
+                SettingRow(Icons.Outlined.Edit, t("Profili düzenle"), onClick = onEditProfile)
+                HorizontalDivider(color = Line)
                 SettingRow(Icons.Outlined.AlternateEmail, t("Kullanıcı adı"), trailing = {
-                    Text(if (customUsername) "@$username" else t("Seç"), color = SoftBlue, fontSize = 15.sp, maxLines = 1)
+                    Text(if (customUsername) "@$username ✓" else t("Seç"), color = if (customUsername) Color(0xFF1E8E4E) else SoftBlue, fontSize = 15.sp, maxLines = 1)
                 }) { editUsername = true }
                 HorizontalDivider(color = Line)
                 SettingRow(Icons.Outlined.Smartphone, t("Telefon numarası"), trailing = {
-                    Text(myPhone?.ifBlank { t("Ekle") } ?: "…", color = SoftBlue, fontSize = 15.sp, maxLines = 1)
+                    Text(myPhone?.let { if (it.isBlank()) t("Ekle") else "$it ✓" } ?: "…", color = if (!myPhone.isNullOrBlank()) Color(0xFF1E8E4E) else SoftBlue, fontSize = 15.sp, maxLines = 1)
                 }) { onPhone() }
+                HorizontalDivider(color = Line)
+                SettingRow(Icons.Outlined.QrCode2, t("QR kodum ve davet linkim")) { showMyQr = true }
+                HorizontalDivider(color = Line)
+                SettingRow(Icons.Outlined.PhonelinkSetup, t("Yeni telefona aktar")) { showTransfer = true }
+                HorizontalDivider(color = Line)
+                SettingRow(Icons.Outlined.Accessibility, t("Kolaylıklar")) { onComfort() }
                 HorizontalDivider(color = Line)
                 SettingRow(Icons.Outlined.Lock, t("Gizlilik ve Güvenlik")) {
                     info = t("Mesajların uçtan uca şifrelidir. Bu cihazdaki oturum ve sohbet verileri şifreli saklanır; gelen fotoğraf, video ve sesler galeriye kaydedilmez. Çıkış yaptığında bu cihazdaki her şey silinir.")
@@ -411,13 +433,20 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
             onDismiss = { shareDialog = null },
         )
     }
+    if (showMyQr) {
+        MyQrDialog(username = username, customUsername = customUsername, name = name, onChooseUsername = { showMyQr = false; editUsername = true }) { showMyQr = false }
+    }
+    if (showTransfer) {
+        TransferSendDialog { showTransfer = false }
+    }
     if (editUsername) {
         UsernameDialog(
             current = if (customUsername) username else "",
             onDismiss = { editUsername = false },
             onSaved = { saved ->
                 username = saved
-                customUsername = saved != me.userId.substringBefore(":").removePrefix("@")
+                customUsername = true
+                AccountCache.save(context, AccountCache.Info(saved, true, myPhone.orEmpty()))
                 editUsername = false
                 toast(tf("Kullanıcı adın artık @%s", saved))
             },
@@ -438,7 +467,7 @@ fun ProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onAdmin: () -> Uni
     }
     if (editStatus) {
         TextInputDialog(
-            title = t("Durum mesajı"),
+            title = t("Hakkında"),
             initial = myStatus,
             maxLength = 80,
             onDismiss = { editStatus = false },

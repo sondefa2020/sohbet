@@ -29,6 +29,9 @@ data class ChatSummary(
     val lastFromMe: Boolean = false,
     val secret: Boolean = false,
     val avatarUrl: String? = null,
+    /** Tanımadığın birinden gelen ve henüz kabul edilmemiş sohbet daveti (Mesaj istekleri). */
+    val request: Boolean = false,
+    val inviter: String? = null,
 )
 
 enum class MsgKind { TEXT, DATE, IMAGE, VIDEO, VOICE, LOCATION, NUDGE, EFFECT, FILE, POLL }
