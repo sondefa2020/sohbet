@@ -25,7 +25,7 @@ object ThemeState {
         glass = prefs()?.getBoolean("cam", false) ?: false
     }
 
-    fun setGlass(value: Boolean) {
+    fun useGlass(value: Boolean) {
         glass = value
         prefs()?.edit()?.putBoolean("cam", value)?.apply()
     }

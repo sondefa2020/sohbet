@@ -372,9 +372,9 @@ fun ProfileScreen(
                     ThemeState.toggle()
                 }
                 SettingRow(Icons.Outlined.Palette, t("Yedek tema: Cam Yeşil"), trailing = {
-                    Switch(checked = ThemeState.glass, onCheckedChange = { ThemeState.setGlass(it) })
+                    Switch(checked = ThemeState.glass, onCheckedChange = { ThemeState.useGlass(it) })
                 }) {
-                    ThemeState.setGlass(!ThemeState.glass)
+                    ThemeState.useGlass(!ThemeState.glass)
                 }
                 val recState by RecoveryRepo.recoveryState.collectAsState()
                 SettingRow(Icons.Outlined.Backup, t("Mesaj yedeği"), trailing = {
