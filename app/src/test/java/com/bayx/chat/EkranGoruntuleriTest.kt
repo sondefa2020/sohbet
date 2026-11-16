@@ -91,4 +91,57 @@ class EkranGoruntuleriTest {
         compose.setContent { BayxTheme { ProfileScreen(me, onBack = {}, onAdmin = {}, onWebLink = {}) } }
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/4-profil.png")
     }
+
+    private fun call(phase: com.bayx.chat.data.CallPhase, video: Boolean = false, quality: Int = 3) =
+        com.bayx.chat.data.CallState(
+            callId = "c1", peerId = "@ayse:x", peerName = "Ayşe Yılmaz", video = video, phase = phase,
+            startedAt = now - 125_000, fromMe = true, ringing = true, quality = quality,
+        )
+
+    @Test
+    fun aramaSuruyor() {
+        com.bayx.chat.data.Calls.state.value = call(com.bayx.chat.data.CallPhase.ACTIVE, quality = 2)
+        compose.mainClock.autoAdvance = false
+        compose.setContent { BayxTheme { CallOverlay() } }
+        compose.mainClock.advanceTimeBy(1_500)
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/5-arama-suruyor.png")
+        com.bayx.chat.data.Calls.state.value = null
+    }
+
+    @Test
+    fun aramaGeliyor() {
+        com.bayx.chat.data.Calls.state.value = call(com.bayx.chat.data.CallPhase.INCOMING).copy(fromMe = false)
+        compose.mainClock.autoAdvance = false
+        compose.setContent { BayxTheme { CallOverlay() } }
+        compose.mainClock.advanceTimeBy(1_500)
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/6-arama-geliyor.png")
+        com.bayx.chat.data.Calls.state.value = null
+    }
+
+    @Test
+    fun aramaKucuk() {
+        com.bayx.chat.data.Calls.state.value = call(com.bayx.chat.data.CallPhase.ACTIVE)
+        CallUiState.minimized = true
+        compose.mainClock.autoAdvance = false
+        compose.setContent { BayxTheme { androidx.compose.foundation.layout.Box { ChatListScreen(me, onOpenChat = {}, onProfile = {}); CallOverlay() } } }
+        compose.mainClock.advanceTimeBy(1_500)
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/7-arama-kucuk.png")
+        CallUiState.minimized = false
+        com.bayx.chat.data.Calls.state.value = null
+    }
+
+    @Test
+    fun aramalar() {
+        val h = 3_600_000L
+        com.bayx.chat.data.CallLog.entries.value = listOf(
+            com.bayx.chat.data.CallEntry("@ayse:x", "Ayşe Yılmaz", true, true, false, now - 600_000, 754),
+            com.bayx.chat.data.CallEntry("@can:x", "Can Demir", false, false, false, now - 2 * h),
+            com.bayx.chat.data.CallEntry("@can:x", "Can Demir", false, false, false, now - 2 * h - 60_000),
+            com.bayx.chat.data.CallEntry("@elif:x", "Elif", false, true, true, now - 26 * h, 3_900),
+            com.bayx.chat.data.CallEntry("@ayse:x", "Ayşe Yılmaz", false, true, false, now - 50 * h, 42),
+            com.bayx.chat.data.CallEntry("@mert:x", "Mert", true, false, true, now - 80 * h),
+        )
+        compose.setContent { BayxTheme { CallsScreen(onBack = {}, onOpenChat = {}) } }
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/8-aramalar.png")
+    }
 }
