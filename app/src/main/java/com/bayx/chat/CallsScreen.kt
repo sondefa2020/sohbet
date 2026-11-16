@@ -225,13 +225,16 @@ fun CallsScreen(
                 }
             }
             item {
-                Row(
-                    Modifier.fillMaxWidth().padding(top = 18.dp),
-                    horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
+                Column(
+                    Modifier.fillMaxWidth().padding(top = 18.dp, start = 32.dp, end = 32.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Icon(Icons.Outlined.Lock, null, tint = Muted, modifier = Modifier.size(13.dp))
-                    Spacer(Modifier.width(5.dp))
-                    Text(t("Aramalar uçtan uca şifrelidir. Geçmiş yalnızca bu telefonda tutulur."), color = Muted, fontSize = 12.sp)
+                    Icon(Icons.Outlined.Lock, null, tint = Muted, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        t("Aramalar uçtan uca şifrelidir. Geçmiş yalnızca bu telefonda tutulur."),
+                        color = Muted, fontSize = 12.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    )
                 }
             }
         }
@@ -297,11 +300,11 @@ private fun CallRow(g: CallGroup, onAudio: () -> Unit, onVideo: () -> Unit, onCl
         e.outgoing -> Icons.AutoMirrored.Filled.CallMade
         else -> Icons.AutoMirrored.Filled.CallReceived
     }
-    val kind = if (e.video) t("Görüntülü") else t("Sesli")
+    // Arama türü küçük simgeyle gösterilir; yazı kısa kalır, saat kesilmez.
     val label = when {
-        missed -> tf("%s · cevapsız", kind)
-        e.outgoing && !e.answered -> tf("%s · ulaşılamadı", kind)
-        else -> listOf(kind, durationText(e.duration)).filter { it.isNotEmpty() }.joinToString(" · ")
+        missed -> t("Cevapsız")
+        e.outgoing && !e.answered -> t("Ulaşılamadı")
+        else -> durationText(e.duration).ifEmpty { if (e.outgoing) t("Giden") else t("Gelen") }
     }
     Row(
         Modifier.fillMaxWidth().clickable(onClick = onClick).padding(start = 14.dp, end = 6.dp, top = 10.dp, bottom = 10.dp),
@@ -320,6 +323,12 @@ private fun CallRow(g: CallGroup, onAudio: () -> Unit, onVideo: () -> Unit, onCl
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(arrow, null, tint = if (missed) MissedRed else if (e.outgoing) Color(0xFF1E8E4E) else SoftBlue, modifier = Modifier.size(15.dp))
                 Spacer(Modifier.width(5.dp))
+                Icon(
+                    if (e.video) Icons.Outlined.Videocam else Icons.Outlined.Call,
+                    if (e.video) t("Görüntülü") else t("Sesli"),
+                    tint = if (missed) MissedRed else SoftBlue, modifier = Modifier.size(14.dp),
+                )
+                Spacer(Modifier.width(4.dp))
                 Text(
                     "$label · ${formatTime(e.time)}",
                     color = if (missed) MissedRed else SoftBlue, fontSize = 13.sp,
