@@ -99,7 +99,29 @@ export async function loginWithToken(loginToken: string): Promise<void> {
     initial_device_display_name: "Tayfa Web",
   });
   const saved: Saved = { homeserver: hs, userId: res.user_id, deviceId: res.device_id, accessToken: res.access_token };
+  // Her yeni girişte yeni bir cihaz oluşur: önceki hesabın ya da cihazın şifreleme deposu
+  // kalırsa "account in the store doesn't match" hatası verir. Bu yüzden eski depo silinir.
+  await deleteCryptoStores();
   localStorage.setItem(SESSION_KEY, JSON.stringify(saved));
+}
+
+const CRYPTO_PREFIX = "tayfa-web";
+
+/** Tarayıcıdaki şifreleme depolarını siler (yalnızca bu uygulamanınkileri). */
+async function deleteCryptoStores(): Promise<void> {
+  const del = (name: string) =>
+    new Promise<void>((resolve) => {
+      const req = indexedDB.deleteDatabase(name);
+      req.onsuccess = req.onerror = req.onblocked = () => resolve();
+    });
+  let names: string[] = [];
+  try {
+    names = ((await indexedDB.databases?.()) ?? []).map((d) => d.name ?? "").filter((n) => n.startsWith(CRYPTO_PREFIX));
+  } catch {
+    /* eski tarayıcı: bilinen adlarla dene */
+  }
+  if (!names.length) names = [CRYPTO_PREFIX + "::matrix-sdk-crypto", CRYPTO_PREFIX + "::matrix-sdk-crypto-meta"];
+  await Promise.all(names.map(del));
 }
 
 let starting: Promise<MatrixClient> | null = null;
@@ -133,7 +155,14 @@ async function doStart(saved: Saved): Promise<MatrixClient> {
   });
   client = c;
   loggedOut = false;
-  await c.initRustCrypto({ cryptoDatabasePrefix: "tayfa-web" });
+  try {
+    await c.initRustCrypto({ cryptoDatabasePrefix: CRYPTO_PREFIX });
+  } catch (e) {
+    // Depo başka bir hesaba ya da cihaza aitse temizleyip bir kez daha dene.
+    if (!/doesn't match|does not match/i.test(String((e as Error)?.message ?? e))) throw e;
+    await deleteCryptoStores();
+    await c.initRustCrypto({ cryptoDatabasePrefix: CRYPTO_PREFIX });
+  }
 
   c.on(ClientEvent.Sync, (state) => {
     syncState = state;
