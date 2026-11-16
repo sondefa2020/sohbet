@@ -609,6 +609,9 @@ denied-peer-ip=169.254.0.0-169.254.255.255
 denied-peer-ip=172.16.0.0-172.31.255.255
 denied-peer-ip=192.168.0.0-192.168.255.255
 denied-peer-ip=::1
+# Aktarma sunucusu bu makinenin kendi adreslerine de bağlanamasın (paneldeki diğer servisler korunur)
+denied-peer-ip=$PUBLIC_IP
+${LOCAL_IP:+denied-peer-ip=$LOCAL_IP}
 TURNCONF
 umask 022
 chown root:turnserver /etc/turnserver.conf 2>/dev/null || true
@@ -803,6 +806,10 @@ location = /bayx/app/tayfa.apk {
     alias /var/lib/tayfa-apk/tayfa.apk;
     default_type application/vnd.android.package-archive;
     add_header Cache-Control "no-cache";
+}
+location ^~ /bayx/local/ {
+    # Yalnızca sunucunun kendi komutları içindir; dışarıdan asla erişilmez.
+    return 404;
 }
 location ^~ /t/ {
     # Davet linki sayfası

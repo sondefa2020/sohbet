@@ -79,7 +79,12 @@ data class ChatMessage(
     val eventId: EventOrTransactionId? = null,
     val reactions: List<MsgReaction> = emptyList(),
     val poll: PollInfo? = null,
+    /** Bu mesaj bir yanıtsa, yanıtlanan mesajın kısa bilgisi (alıntı olarak gösterilir). */
+    val replyTo: ReplyRef? = null,
 )
+
+/** Yanıtlanan mesaj: kimden, ne yazmıştı. */
+data class ReplyRef(val eventId: String, val sender: String, val text: String, val mine: Boolean, val ready: Boolean)
 
 /** Açık bir sohbetin canlı durumu. */
 class ChatSession internal constructor(val roomId: String) {
@@ -98,6 +103,8 @@ class ChatSession internal constructor(val roomId: String) {
     val disappearing = MutableStateFlow(0L)
     internal var room: Room? = null
     internal var typingHandle: TaskHandle? = null
+    /** Ayrıntısı sunucudan istenmiş yanıt alıntıları (bir kez istenir). */
+    internal val replyFetched = java.util.Collections.synchronizedSet(HashSet<String>())
     internal var expiryJob: Job? = null
     internal var timeline: Timeline? = null
     internal var handle: TaskHandle? = null

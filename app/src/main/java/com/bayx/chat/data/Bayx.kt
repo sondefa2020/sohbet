@@ -53,6 +53,8 @@ import org.matrix.rustcomponents.sdk.PusherKind
 import org.matrix.rustcomponents.sdk.ReceiptType
 import org.matrix.rustcomponents.sdk.Room
 import org.matrix.rustcomponents.sdk.RoomInfo
+import org.matrix.rustcomponents.sdk.EventTimelineItem
+import org.matrix.rustcomponents.sdk.EmbeddedEventDetails
 import org.matrix.rustcomponents.sdk.RoomListEntriesDynamicFilterKind
 import org.matrix.rustcomponents.sdk.RoomListEntriesListener
 import org.matrix.rustcomponents.sdk.RoomListEntriesUpdate
@@ -788,6 +790,30 @@ object Bayx {
         )
     }
 
+    /** Yanıt alıntısı: yanıtlanan mesajın göndereni ve kısa metni. Henüz yüklenmemişse bir kez istenir. */
+    private fun replyOf(session: ChatSession, event: EventTimelineItem, me: String?): ReplyRef? {
+        val content = event.content as? TimelineItemContent.MsgLike ?: return null
+        val details = content.content.inReplyTo ?: return null
+        val id = details.eventId()
+        return when (val e = details.event()) {
+            is EmbeddedEventDetails.Ready -> {
+                val p = e.senderProfile
+                val name = if (p is ProfileDetails.Ready) p.displayName ?: e.sender else e.sender
+                val shown = PhonebookRepo.nameFor(e.sender) ?: name
+                ReplyRef(id, shown, describe(e.content)?.takeIf { it.isNotBlank() } ?: "Mesaj", e.sender == me, true)
+            }
+            else -> {
+                // Eski mesaj yüklü değil: bir kez sunucudan iste, gelince ekran kendiliğinden güncellenir.
+                val own = (event.eventOrTransactionId as? EventOrTransactionId.EventId)?.eventId
+                val timeline = session.timeline
+                if (own != null && timeline != null && session.replyFetched.add(own)) {
+                    scope.launch { runCatching { timeline.fetchDetailsForEvent(own) } }
+                }
+                ReplyRef(id, "", "…", false, false)
+            }
+        }
+    }
+
     private fun pollOf(content: TimelineItemContent, id: EventOrTransactionId, me: String?): PollInfo? {
         if (content !is TimelineItemContent.MsgLike) return null
         val p = content.content.kind as? MsgLikeKind.Poll ?: return null
@@ -1171,6 +1197,9 @@ object Bayx {
             val event = runCatching { item.asEvent() }.getOrNull()
             if (event != null && event.readReceipts.keys.any { it != me }) readSeen = true
             var msg = runCatching { toMessage(item) }.getOrNull() ?: continue
+            if (event != null) {
+                replyOf(session, event, me)?.let { msg = msg.copy(replyTo = it) }
+            }
             if (session.lifetimeMs > 0 && msg.kind != MsgKind.DATE && now - msg.time > session.lifetimeMs) continue
             if (msg.mine && readSeen && msg.state == MsgState.SENT) msg = msg.copy(state = MsgState.READ)
             out.add(msg)

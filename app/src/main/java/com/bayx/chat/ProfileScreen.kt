@@ -157,12 +157,22 @@ fun ProfileScreen(
     var pickMode by remember { mutableStateOf(false) }
     var uploading by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { ProfileRepo.refreshMyAvatar() }
+    // Fotoğraf seçilince önce kırpma ekranı açılır (yakınlaştır, ortala, döndür).
+    var cropSource by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) {
+            scope.launch {
+                val bmp = withContext(Dispatchers.IO) { loadForCrop(context, uri) }
+                if (bmp != null) cropSource = bmp else toast(t("Fotoğraf açılamadı."))
+            }
+        }
+    }
+    cropSource?.let { src ->
+        AvatarCropDialog(src, onCancel = { cropSource = null }) { jpeg ->
+            cropSource = null
             uploading = true
             scope.launch {
-                val jpeg = withContext(Dispatchers.IO) { avatarJpeg(context, uri) }
-                val ok = jpeg != null && ProfileRepo.setAvatar(jpeg)
+                val ok = ProfileRepo.setAvatar(jpeg)
                 uploading = false
                 toast(if (ok) t("Profil fotoğrafı güncellendi.") else t("Fotoğraf yüklenemedi."))
             }

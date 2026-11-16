@@ -99,7 +99,8 @@ def client_ip(request: Request):
 def local_only(request: Request):
     """Yalnızca sunucunun kendisinden (komut satırı araçları, Synapse) gelen istekler."""
     host = request.client.host if request.client else ""
-    if host != "127.0.0.1" or request.headers.get("x-real-ip"):
+    proxied = request.headers.get("x-real-ip") or request.headers.get("x-forwarded-for") or request.headers.get("forwarded")
+    if host != "127.0.0.1" or proxied:
         raise ApiError(404, "BULUNAMADI", "Bulunamadı.")
 
 
@@ -137,7 +138,7 @@ async def options(request: Request, path: str):
 
 
 # Sunucunun hangi sürümü çalıştırdığını görmek için (https://.../bayx/health).
-SURUM = "2026.11.16-5"
+SURUM = "2026.11.16-6"
 
 
 @app.get("/bayx/health")

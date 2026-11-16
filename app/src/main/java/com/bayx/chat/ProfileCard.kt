@@ -8,6 +8,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -89,6 +91,11 @@ fun PersonCardScreen(userId: String, onBack: () -> Unit, onOpenChat: (String) ->
     var busy by remember { mutableStateOf(false) }
     var confirmBlock by remember { mutableStateOf(false) }
     var editNote by remember { mutableStateOf(false) }
+    var photoOpen by remember { mutableStateOf(false) }
+    var galleryOpen by remember { mutableStateOf(false) }
+    val starredAll by com.bayx.chat.data.Starred.items.collectAsState()
+    // Birebir sohbet varsa kart açıkken mesajları okunur (medya ve özet için), kapanınca bırakılır.
+    var chatSession by remember { mutableStateOf<com.bayx.chat.data.ChatSession?>(null) }
     val flags by ChatPrefs.state.collectAsState()
     val presences by PresenceRepo.presences.collectAsState()
     val askCallPermissions = rememberCallPermissions { toast(t("Arama için mikrofon (ve görüntülü aramada kamera) izni gerekli.")) }
@@ -130,7 +137,10 @@ fun PersonCardScreen(userId: String, onBack: () -> Unit, onOpenChat: (String) ->
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Spacer(Modifier.height(8.dp))
-            Avatar(name, 132.dp, url = c?.avatarUrl?.ifBlank { null }, mode = mode)
+            // Fotoğrafa dokununca tam ekran açılır.
+            Box(Modifier.clip(CircleShape).clickable(enabled = !c?.avatarUrl.isNullOrBlank()) { photoOpen = true }) {
+                Avatar(name, 132.dp, url = c?.avatarUrl?.ifBlank { null }, mode = mode)
+            }
             Spacer(Modifier.height(14.dp))
             Text(name, color = Ink, fontSize = 26.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
             if (c != null) {
@@ -191,6 +201,45 @@ fun PersonCardScreen(userId: String, onBack: () -> Unit, onOpenChat: (String) ->
                 }
             }
 
+            // Medya, bağlantılar ve sohbet özeti (birebir sohbetten)
+            val chatMessages = chatSession?.messages?.collectAsState()?.value.orEmpty()
+            if (chatSession != null) {
+                val media = chatMessages.filter { it.kind == com.bayx.chat.data.MsgKind.IMAGE || it.kind == com.bayx.chat.data.MsgKind.VIDEO }.reversed()
+                val voices = chatMessages.count { it.kind == com.bayx.chat.data.MsgKind.VOICE }
+                val links = chatMessages.count { it.kind == com.bayx.chat.data.MsgKind.TEXT && Regex("https?://|www\\.").containsMatchIn(it.text) }
+                val starredHere = starredAll.count { it.roomId == roomId }
+                val disappearing by chatSession!!.disappearing.collectAsState()
+                Spacer(Modifier.height(12.dp))
+                SoftCard(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(t("Medya, bağlantılar ve sesli mesajlar"), color = Muted, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                            if (media.isNotEmpty()) Text(tf("Tümü (%s)", media.size), color = Blue, fontSize = 13.sp, modifier = Modifier.clickable { galleryOpen = true })
+                        }
+                        if (media.isNotEmpty()) {
+                            Spacer(Modifier.height(8.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                media.take(4).forEach { m ->
+                                    MediaThumb(m, Modifier.weight(1f).aspectRatio(1f).clip(RoundedCornerShape(10.dp)).clickable { galleryOpen = true })
+                                }
+                                repeat(4 - media.take(4).size) { Spacer(Modifier.weight(1f)) }
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            tf("%s fotoğraf/video · %s sesli mesaj · %s bağlantı", media.size, voices, links),
+                            color = Ink, fontSize = 14.sp,
+                        )
+                        if (starredHere > 0) Text(tf("%s yıldızlı mesaj", starredHere), color = Ink, fontSize = 14.sp, modifier = Modifier.padding(top = 4.dp))
+                        Text(
+                            if (disappearing > 0) t("Kaybolan mesajlar açık") else t("Kaybolan mesajlar kapalı"),
+                            color = Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp),
+                        )
+                        Text(t("Son yüklenen mesajlara göre."), color = Muted, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
+                    }
+                }
+            }
+
             // Kişiye özel not: yalnızca sen görürsün.
             val notes by com.bayx.chat.data.ContactNotes.map.collectAsState()
             val note = notes[userId].orEmpty()
@@ -246,6 +295,31 @@ fun PersonCardScreen(userId: String, onBack: () -> Unit, onOpenChat: (String) ->
         }
     }
 
+    val dmRoom = remember(userId) { Bayx.rooms.value.firstOrNull { it.dmUserId == userId && it.isDirect }?.id }
+    LaunchedEffect(dmRoom) {
+        if (dmRoom != null) chatSession = Bayx.openChat(dmRoom)
+    }
+    androidx.compose.runtime.DisposableEffect(dmRoom) {
+        onDispose { chatSession?.let { s -> kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch { Bayx.closeChat(s) } } }
+    }
+    if (galleryOpen) chatSession?.let { MediaGalleryDialog(it) { galleryOpen = false } }
+    if (photoOpen) {
+        val url = card?.avatarUrl
+        val big by androidx.compose.runtime.produceState<android.graphics.Bitmap?>(null, url) {
+            value = url?.takeIf { it.isNotBlank() }?.let { com.bayx.chat.data.ProfileRepo.loadAvatar(it) }
+        }
+        androidx.compose.ui.window.Dialog(onDismissRequest = { photoOpen = false }, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+            Box(Modifier.fillMaxSize().background(Color.Black).clickable { photoOpen = false }, contentAlignment = Alignment.Center) {
+                big?.let {
+                    androidx.compose.foundation.Image(
+                        it.asImageBitmap(), contentDescription = null,
+                        modifier = Modifier.fillMaxWidth().aspectRatio(1f),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                    )
+                } ?: CircularProgressIndicator(color = Color.White)
+            }
+        }
+    }
     if (editNote) {
         TextInputDialog(
             title = t("Kişiye özel not"),
@@ -337,12 +411,22 @@ fun EditProfileScreen(me: AuthState.LoggedIn, onBack: () -> Unit, onPhone: () ->
         ProfileRepo.refreshMyAvatar()
         AccountCache.refresh(context)?.let { account = it }
     }
+    // Fotoğraf seçilince önce kırpma ekranı açılır (yakınlaştır, ortala, döndür).
+    var cropSource by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) {
+            scope.launch {
+                val bmp = withContext(Dispatchers.IO) { loadForCrop(context, uri) }
+                if (bmp != null) cropSource = bmp else toast(t("Fotoğraf açılamadı."))
+            }
+        }
+    }
+    cropSource?.let { src ->
+        AvatarCropDialog(src, onCancel = { cropSource = null }) { jpeg ->
+            cropSource = null
             uploading = true
             scope.launch {
-                val jpeg = withContext(Dispatchers.IO) { avatarJpeg(context, uri) }
-                val ok = jpeg != null && ProfileRepo.setAvatar(jpeg)
+                val ok = ProfileRepo.setAvatar(jpeg)
                 uploading = false
                 toast(if (ok) t("Profil fotoğrafı güncellendi.") else t("Fotoğraf yüklenemedi."))
             }

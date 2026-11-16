@@ -1922,7 +1922,10 @@ def phone_me(headers):
             "username": shown_username(uid), "custom_username": shown_username(uid) != username_of(uid)}
 
 
-_match_attempts = giris.Attempts(limit=120)  # kişi başına saatte en fazla 120 rehber eşleştirmesi
+_match_attempts = giris.Attempts(limit=120)
+MATCH_DAILY = 15000
+_match_budget = {}
+_match_budget_lock = threading.Lock()  # kişi başına saatte en fazla 120 rehber eşleştirmesi
 
 
 def contacts_match(headers, body):
@@ -1939,6 +1942,17 @@ def contacts_match(headers, body):
         raise ApiError(429, "COK_FAZLA_DENEME", "Rehber çok sık eşleştirildi. Biraz sonra tekrar dene.")
     _match_attempts.fail(uid)
     wanted = {h for h in hashes if isinstance(h, str) and re.match(r"^[0-9a-f]{64}$", h)}
+    # Numara taraması önlemi: bir hesap günde en fazla MATCH_DAILY farklı numara sorgulayabilir
+    # (gerçek bir rehber bunun çok altındadır; aynı rehberin tekrar eşleştirilmesi sayılmaz).
+    day = time.strftime("%Y-%m-%d")
+    with _match_budget_lock:
+        rec = _match_budget.get(uid)
+        if rec is None or rec[0] != day:
+            rec = (day, set())
+            _match_budget[uid] = rec
+        if len(rec[1] | wanted) > MATCH_DAILY:
+            raise ApiError(429, "COK_FAZLA_DENEME", "Bugün çok fazla numara eşleştirildi. Yarın tekrar dene.")
+        rec[1].update(wanted)
     found = []
     changed = False
     with GIRIS.lock:

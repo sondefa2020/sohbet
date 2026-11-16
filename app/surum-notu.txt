@@ -1,3 +1,4 @@
-Telefon numarası ve kullanıcı adı artık güncellemelerden sonra kaybolmuyor.
-WhatsApp özellikleri: kaydırarak yanıtla, çift dokununca kalp, yıldızlı mesajlar, mesaj sabitleme, mesaj bilgisi, kopyala, taslaklar, okunmadı olarak işaretle, sohbeti sil, sohbeti dışa aktar, okundu bilgisini kapatma, sesli mesajı 1.5x/2x dinleme, tıklanabilir bağlantı ve numaralar.
-Ek olarak: gönderimi geri al, kişiye özel not, tanımadığın kişiler için güvenlik uyarısı.
+Yanıtlarda alıntı: yanıt verilen mesaj artık balonun üstünde görünür; dokununca o mesaja gider.
+Profil fotoğrafı kırpma: yakınlaştır, ortala, döndür. Fotoğraflar artık yan dönmüyor.
+Kişi kartı: fotoğrafa dokununca tam ekran; ortak medya, sesli mesaj ve bağlantı özeti; yıldızlı mesaj sayısı.
+Güvenlik iyileştirmeleri.

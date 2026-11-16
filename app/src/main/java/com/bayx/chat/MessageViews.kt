@@ -143,6 +143,7 @@ internal fun MessageRow(
     onReact: (ChatMessage, String) -> Unit = { _, _ -> },
     onVote: (PollInfo, String) -> Unit = { _, _ -> },
     onSwipeReply: (ChatMessage) -> Unit = {},
+    onQuote: (String) -> Unit = {},
 ) {
     if (msg.kind == MsgKind.EFFECT) {
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -262,6 +263,30 @@ internal fun MessageRow(
                         modifier = Modifier.padding(horizontal = if (visual) 8.dp else 0.dp),
                     )
                     Spacer(Modifier.height(2.dp))
+                }
+                // Yanıtlanan mesajın alıntısı (WhatsApp gibi): dokununca o mesaja gider.
+                msg.replyTo?.let { r ->
+                    Row(
+                        Modifier
+                            .padding(horizontal = if (visual) 2.dp else 0.dp)
+                            .padding(bottom = 6.dp)
+                            .widthIn(min = 120.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (msg.mine) Color.Black.copy(alpha = 0.06f) else Blue.copy(alpha = 0.08f))
+                            .clickable(enabled = r.ready) { onQuote(r.eventId) }
+                            .height(androidx.compose.foundation.layout.IntrinsicSize.Min),
+                    ) {
+                        Box(Modifier.width(4.dp).fillMaxHeight().background(if (r.mine) Color(0xFF1E8E4E) else Blue))
+                        Column(Modifier.padding(horizontal = 9.dp, vertical = 6.dp)) {
+                            if (r.ready) {
+                                Text(
+                                    if (r.mine) t("Sen") else r.sender, color = if (r.mine) Color(0xFF1E8E4E) else Blue,
+                                    fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            Text(r.text, color = sub, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
                 }
                 val poll = msg.poll
                 if (msg.kind == MsgKind.POLL && poll != null) {
