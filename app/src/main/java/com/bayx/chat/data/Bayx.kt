@@ -52,6 +52,7 @@ import org.matrix.rustcomponents.sdk.PusherIdentifiers
 import org.matrix.rustcomponents.sdk.PusherKind
 import org.matrix.rustcomponents.sdk.ReceiptType
 import org.matrix.rustcomponents.sdk.Room
+import org.matrix.rustcomponents.sdk.RoomInfo
 import org.matrix.rustcomponents.sdk.RoomListEntriesDynamicFilterKind
 import org.matrix.rustcomponents.sdk.RoomListEntriesListener
 import org.matrix.rustcomponents.sdk.RoomListEntriesUpdate
@@ -564,7 +565,8 @@ object Bayx {
             }
             else -> Unit
         }
-        val partner = if (info.isDirect) dmPartner(room) else null
+        val direct = looksDirect(info)
+        val partner = if (direct) dmPartner(room) else null
         return ChatSummary(
             id = info.id,
             // WhatsApp gibi: birebir sohbette kişi rehberdeki adıyla görünür.
@@ -572,10 +574,10 @@ object Bayx {
             lastMessage = text,
             time = time,
             unread = info.numUnreadMessages.toInt(),
-            isDirect = info.isDirect,
+            isDirect = direct,
             lastFromMe = fromMe,
             secret = secretLifetime(info.topic) != null,
-            avatarUrl = info.avatarUrl ?: if (info.isDirect || secretLifetime(info.topic) != null) heroAvatar(room) else null,
+            avatarUrl = info.avatarUrl ?: if (direct || secretLifetime(info.topic) != null) heroAvatar(room) else null,
             dmUserId = partner ?: inviter,
             request = request,
             inviter = inviter,
@@ -585,6 +587,16 @@ object Bayx {
     private const val NUDGE_LABEL = "Titreşim gönderdi"
 
     /** Birebir sohbetteki karşı tarafın kullanıcı kimliği. */
+    /**
+     * Birebir sohbet mi? Sunucudaki "doğrudan sohbet" işareti davet edilen tarafta her zaman
+     * gelmeyebilir; WhatsApp mantığıyla adı olmayan, en fazla iki kişilik oda birebir sohbettir.
+     */
+    private fun looksDirect(info: RoomInfo): Boolean {
+        if (info.isDirect) return true
+        if (secretLifetime(info.topic) != null) return false
+        return info.rawName.isNullOrBlank() && info.activeMembersCount <= 2uL
+    }
+
     private suspend fun dmPartner(room: Room): String? {
         val me = (auth.value as? AuthState.LoggedIn)?.userId
         return runCatching { room.heroes().map { it.userId }.firstOrNull { it != me } }.getOrNull()
@@ -628,13 +640,13 @@ object Bayx {
         runCatching {
             val info = room.roomInfo()
             session.title.value = info.displayName.orEmpty()
-            session.isDirect = info.isDirect
+            session.isDirect = looksDirect(info)
             val lifetime = secretLifetime(info.topic)
             if (lifetime != null) {
                 session.secret = true
                 session.lifetimeMs = lifetime
                 session.dmUserId.value = dmPartner(room)
-            } else if (info.isDirect) {
+            } else if (session.isDirect) {
                 session.dmUserId.value = dmPartner(room)
             }
         }

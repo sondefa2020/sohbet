@@ -66,8 +66,18 @@ fi
 if ! unit_exists coturn.service; then
     port_in_use 3478 && fail "3478 portu (arama aktarma) başka bir program tarafından kullanılıyor."
 fi
-PUBLIC_IP="${BAYX_PUBLIC_IP:-$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p')}"
+LOCAL_IP="$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p')"
+# Sunucu NAT arkasındaysa (bulutlarda sık) makinenin kendi adresi iç adrestir; aramalar için
+# dışarıdan görünen adres gerekir. Önce internetten sorulur, olmazsa makinenin adresi kullanılır.
+DETECTED_IP="$(curl -4 -fsS -m 8 https://api.ipify.org 2>/dev/null || curl -4 -fsS -m 8 https://ifconfig.me 2>/dev/null || true)"
+echo "$DETECTED_IP" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' || DETECTED_IP=""
+PUBLIC_IP="${BAYX_PUBLIC_IP:-${DETECTED_IP:-$LOCAL_IP}}"
 [ -n "$PUBLIC_IP" ] || fail "Sunucunun IPv4 adresi bulunamadı (BAYX_PUBLIC_IP ile verilebilir)."
+# coturn: dış adres farklıysa "dış/iç" biçiminde yazılır.
+TURN_EXTERNAL="$PUBLIC_IP"
+if [ -n "$LOCAL_IP" ] && [ "$LOCAL_IP" != "$PUBLIC_IP" ]; then
+    TURN_EXTERNAL="$PUBLIC_IP/$LOCAL_IP"
+fi
 
 # ---------------------------------------------------------------- 1. Synapse
 say "Sohbet sunucusu (Matrix Synapse) kuruluyor"
@@ -518,7 +528,7 @@ umask 077
 cat > /etc/turnserver.conf <<TURNCONF
 # Bayx/Tayfa arama aktarma ayarları (kur.sh tarafından yazılır)
 listening-port=3478
-external-ip=$PUBLIC_IP
+external-ip=$TURN_EXTERNAL
 realm=$DOMAIN
 use-auth-secret
 static-auth-secret=$TURN_SECRET
@@ -536,7 +546,6 @@ syslog
 # Aktarma sunucusu iç ağlara erişemesin
 denied-peer-ip=0.0.0.0-0.255.255.255
 denied-peer-ip=10.0.0.0-10.255.255.255
-denied-peer-ip=100.64.0.0-100.127.255.255
 denied-peer-ip=127.0.0.0-127.255.255.255
 denied-peer-ip=169.254.0.0-169.254.255.255
 denied-peer-ip=172.16.0.0-172.31.255.255
@@ -551,6 +560,80 @@ if [ -f /etc/default/coturn ]; then
 fi
 systemctl enable coturn >/dev/null 2>&1 || true
 systemctl restart coturn
+
+# Arama portlarını güvenlik duvarında aç (açık değilse aramalar "bağlanıyor"da kalır).
+# ufw / firewalld varsa onlara, yoksa doğrudan iptables'a eklenir; açılışta yeniden uygulanır.
+cat > /usr/local/sbin/tayfa-port-ac <<'PORTS'
+#!/bin/bash
+# Tayfa: sesli/görüntülü arama portlarını açar (3478 TCP+UDP, 49160-49200 UDP).
+if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
+    ufw allow 3478/tcp >/dev/null; ufw allow 3478/udp >/dev/null; ufw allow 49160:49200/udp >/dev/null
+fi
+if command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>&1; then
+    firewall-cmd -q --permanent --add-port=3478/tcp --add-port=3478/udp --add-port=49160-49200/udp 2>/dev/null
+    firewall-cmd -q --reload 2>/dev/null
+fi
+if command -v iptables >/dev/null 2>&1; then
+    for r in "-p tcp --dport 3478" "-p udp --dport 3478" "-p udp --dport 49160:49200"; do
+        iptables -C INPUT $r -j ACCEPT 2>/dev/null || iptables -I INPUT $r -j ACCEPT 2>/dev/null
+    done
+fi
+if command -v ip6tables >/dev/null 2>&1; then
+    for r in "-p tcp --dport 3478" "-p udp --dport 3478" "-p udp --dport 49160:49200"; do
+        ip6tables -C INPUT $r -j ACCEPT 2>/dev/null || ip6tables -I INPUT $r -j ACCEPT 2>/dev/null
+    done
+fi
+exit 0
+PORTS
+chmod 755 /usr/local/sbin/tayfa-port-ac
+cat > /etc/systemd/system/tayfa-port.service <<'EOF'
+[Unit]
+Description=Tayfa arama portlarını aç
+After=network-online.target ufw.service firewalld.service nftables.service netfilter-persistent.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/tayfa-port-ac
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl daemon-reload
+systemctl enable tayfa-port.service >/dev/null 2>&1 || true
+/usr/local/sbin/tayfa-port-ac || true
+
+# Arama tanılama komutu: sudo tayfa-arama-test
+cat > /usr/local/bin/tayfa-arama-test <<'ARAMATEST'
+#!/bin/bash
+# Tayfa: arama aktarma sunucusunu (coturn) denetler.
+CONF=/etc/turnserver.conf
+ok() { echo "  ✓ $*"; }
+no() { echo "  ✗ $*"; }
+echo "Tayfa arama testi"
+systemctl is-active --quiet coturn && ok "coturn çalışıyor" || no "coturn çalışmıyor (sudo systemctl restart coturn)"
+ss -lnu 2>/dev/null | grep -q ":3478 " && ok "3478/UDP dinleniyor" || no "3478/UDP dinlenmiyor"
+ss -lnt 2>/dev/null | grep -q ":3478 " && ok "3478/TCP dinleniyor" || no "3478/TCP dinlenmiyor"
+EXT="$(sed -n 's/^external-ip=//p' "$CONF" 2>/dev/null | head -1 | cut -d/ -f1)"
+REAL="$(curl -4 -fsS -m 8 https://api.ipify.org 2>/dev/null || true)"
+echo "  · ayardaki dış IP: ${EXT:-yok} · sunucunun gerçek dış IP'si: ${REAL:-bilinmiyor}"
+if [ -n "$REAL" ] && [ -n "$EXT" ] && [ "$REAL" != "$EXT" ]; then
+    no "dış IP uyuşmuyor: sudo BAYX_PUBLIC_IP=$REAL bash kur.sh ile yeniden kur"
+fi
+SECRET="$(sed -n 's/^static-auth-secret=//p' "$CONF" 2>/dev/null | head -1)"
+if command -v turnutils_uclient >/dev/null 2>&1 && [ -n "$SECRET" ]; then
+    if timeout 20 turnutils_uclient -y -c -n 1 -W "$SECRET" -u test 127.0.0.1 >/tmp/tayfa-turn.log 2>&1; then
+        ok "aktarma (TURN) sunucu içinde çalışıyor"
+    else
+        no "aktarma (TURN) yanıt vermedi (ayrıntı: /tmp/tayfa-turn.log)"
+    fi
+fi
+echo
+echo "Telefonda da deneyin: Tayfa > Ayarlar > Kolaylıklar > Arama bağlantı testi."
+echo "Orada 'Aktarma sunucusuna ulaşılamadı' çıkarsa, sunucu sağlayıcınızın ya da"
+echo "panelinizin güvenlik duvarında şu portları açın: 3478 TCP+UDP, 49160-49200 UDP."
+ARAMATEST
+chmod 755 /usr/local/bin/tayfa-arama-test
 systemctl restart matrix-synapse
 for _ in $(seq 1 60); do
     if curl -fsS -o /dev/null "$SYNAPSE_URL/health" 2>/dev/null; then break; fi

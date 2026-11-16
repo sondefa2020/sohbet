@@ -137,7 +137,7 @@ async def options(request: Request, path: str):
 
 
 # Sunucunun hangi sürümü çalıştırdığını görmek için (https://.../bayx/health).
-SURUM = "2026.11.16-3"
+SURUM = "2026.11.16-4"
 
 
 @app.get("/bayx/health")

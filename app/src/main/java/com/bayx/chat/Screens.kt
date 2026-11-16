@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -342,8 +343,12 @@ fun ChatListScreen(
     onCalls: () -> Unit = {},
     onStatus: () -> Unit = {},
     onPerson: (String) -> Unit = {},
+    onNewChat: () -> Unit = {},
 ) {
     var tab by remember { mutableIntStateOf(0) }
+    var unreadOnly by remember { mutableStateOf(false) }
+    // Küçük ekranlar (ör. 360dp altı): daha sıkı yerleşim.
+    val narrow = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 380
     val allRooms by Bayx.rooms.collectAsState()
     val onlineUsers by PresenceRepo.online.collectAsState()
     val presences by PresenceRepo.presences.collectAsState()
@@ -458,58 +463,33 @@ fun ChatListScreen(
     Box(Modifier.fillMaxSize().background(PageBrush)) {
         Column(Modifier.fillMaxSize().systemBarsPadding()) {
             Row(
-                Modifier.fillMaxWidth().padding(start = 18.dp, end = 16.dp, top = 12.dp),
+                Modifier.fillMaxWidth().padding(start = 16.dp, end = 12.dp, top = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                LogoMark(48.dp)
-                Spacer(Modifier.width(12.dp))
+                LogoMark(if (narrow) 38.dp else 46.dp)
+                Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("Tayfa", color = Ink, fontSize = 25.sp, fontWeight = FontWeight.ExtraBold)
+                    Text("Tayfa", color = Ink, fontSize = if (narrow) 21.sp else 25.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
                     Text(me.displayName.ifEmpty { "Sohbet" }, color = Muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                Box {
-                    ChipIcon(Icons.Outlined.PersonAddAlt, t("Arkadaş istekleri"), size = 44.dp, onClick = onRequests)
-                    if (contacts.incoming.isNotEmpty()) {
-                        Box(
-                            Modifier.align(Alignment.TopEnd).size(18.dp).clip(CircleShape).background(Color(0xFFE5484D)),
-                            contentAlignment = Alignment.Center,
-                        ) { Text("${contacts.incoming.size}", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
-                    }
-                }
-                Spacer(Modifier.width(10.dp))
-                ChipIcon(Icons.Outlined.Search, t("Ara"), size = 44.dp) { searching = !searching; if (!searching) query = "" }
-                Spacer(Modifier.width(10.dp))
-                ChipIcon(Icons.Outlined.Settings, "Profil ve ayarlar", size = 44.dp, onClick = onProfile)
+                val chip = if (narrow) 38.dp else 44.dp
+                ChipIcon(Icons.Outlined.QrCodeScanner, t("QR okut"), size = chip) { scanQr = true }
+                Spacer(Modifier.width(8.dp))
+                ChipIcon(Icons.Outlined.Search, t("Ara"), size = chip) { searching = !searching; if (!searching) query = "" }
+                Spacer(Modifier.width(8.dp))
+                ChipIcon(Icons.Outlined.Settings, t("Ayarlar"), size = chip, onClick = onProfile)
             }
-            Spacer(Modifier.height(18.dp))
-            Surface(
-                modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth().height(52.dp),
-                shape = RoundedCornerShape(26.dp),
-                color = GlassPill,
-                shadowElevation = 2.dp,
+            Spacer(Modifier.height(12.dp))
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Row(Modifier.padding(4.dp)) {
-                    tabs.forEachIndexed { index, (label, icon) ->
-                        val selected = index == tab
-                        val tint = if (selected) Ink else Muted
-                        Box(
-                            Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                                .then(if (selected) Modifier.shadow(3.dp, RoundedCornerShape(22.dp)) else Modifier)
-                                .clip(RoundedCornerShape(22.dp))
-                                .then(if (selected) Modifier.background(CardBg) else Modifier)
-                                .clickable { tab = index },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text(label, color = tint, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                            }
-                        }
-                    }
-                }
+                val unreadCount = rooms.count { it.unread > 0 }
+                FilterChipPill(t("Tümü"), tab == 0 && !unreadOnly) { tab = 0; unreadOnly = false }
+                FilterChipPill(if (unreadCount > 0) tf("Okunmamış %s", unreadCount) else t("Okunmamış"), tab == 0 && unreadOnly) { tab = 0; unreadOnly = true }
+                FilterChipPill(t("Kişiler"), tab == 1) { tab = 1; unreadOnly = false }
+                FilterChipPill(t("Gruplar"), tab == 2) { tab = 2; unreadOnly = false }
+                FilterChipPill(t("Gizli Oda"), false, onClick = onSecret)
             }
             if (searching) {
                 OutlinedTextField(
@@ -535,22 +515,10 @@ fun ChatListScreen(
                 when (tab) {
                     0 -> LazyColumn {
                         globalHit?.let { hit -> item(key = "bul") { FoundUserRow(hit, globalByPhone, onMessage = { openDirectId(hit.userId); query = ""; searching = false }, onRequest = { sendRequest(hit.username); globalHit = null }) } }
-                        if (query.isBlank()) {
-                            item {
-                                Row(
-                                    Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 10.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                ) {
-                                    QuickCard(t("Gruplar"), t("Ekip sohbetleri"), Icons.Outlined.Groups, Satin.Steel, Modifier.weight(1f)) { tab = 2 }
-                                    QuickCard(t("Gizli Oda"), t("Kaybolan mesajlar"), Icons.Outlined.Lock, Satin.Lavender, Modifier.weight(1f), onClick = onSecret)
-                                    QuickCard(t("Medya"), t("Foto ve video"), Icons.Outlined.PermMedia, Satin.Sand, Modifier.weight(1f), onClick = onMedia)
-                                }
-                            }
-                        }
                         if (query.isBlank() && requests.isNotEmpty()) {
                             item(key = "istekler") { MessageRequestsBar(requests) { id -> onOpenChat(id) } }
                         }
-                        val active = rooms.filter { !chatFlags(it.id).archived }
+                        val active = rooms.filter { !chatFlags(it.id).archived && (!unreadOnly || it.unread > 0) }
                             .sortedByDescending { chatFlags(it.id).pinned }
                         val archivedCount = allRooms.count { !it.secret && chatFlags(it.id).archived }
                         if (archivedCount > 0 && query.isBlank()) {
@@ -570,7 +538,7 @@ fun ChatListScreen(
                         if (active.isEmpty()) {
                             item {
                                 Text(
-                                    if (query.isNotBlank()) "Aramaya uyan sohbet yok." else "Henüz sohbet yok.\nKişiler sekmesinden birini seçerek başla.",
+                                    if (query.isNotBlank()) t("Aramaya uyan sohbet yok.") else if (unreadOnly) t("Okunmamış mesajın yok.") else t("Henüz sohbet yok.\nSağ alttaki düğmeye dokunarak birine yaz."),
                                     color = Muted,
                                     textAlign = TextAlign.Center,
                                     lineHeight = 22.sp,
@@ -594,26 +562,6 @@ fun ChatListScreen(
                         val book = phonebook.filter { query.isBlank() || it.name.contains(query, true) || it.phone.contains(query.filter { c -> c.isDigit() }) }
                         LazyColumn {
                             globalHit?.let { hit -> item(key = "bul") { FoundUserRow(hit, globalByPhone, onMessage = { openDirectId(hit.userId); query = ""; searching = false }, onRequest = { sendRequest(hit.username); globalHit = null }) } }
-                            if (query.isBlank()) {
-                                item(key = "hizli") {
-                                    Row(
-                                        Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 8.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                    ) {
-                                        QuickCard(t("QR okut"), t("Kişi ekle"), Icons.Outlined.QrCodeScanner, Satin.Steel, Modifier.weight(1f)) { scanQr = true }
-                                        QuickCard(t("Kendime not"), t("Not ve dosya"), Icons.Outlined.EditNote, Satin.Sand, Modifier.weight(1f)) {
-                                            scope.launch {
-                                                val id = Bayx.noteToSelf()
-                                                if (id != null) onOpenChat(id) else toast(t("Not sohbeti açılamadı. Tekrar dene."))
-                                            }
-                                        }
-                                        QuickCard(t("Davet et"), t("Link paylaş"), Icons.Outlined.PersonAddAlt, Satin.Lavender, Modifier.weight(1f)) {
-                                            val handle = AccountCache.load(context).username.ifBlank { me.userId.substringBefore(":").removePrefix("@") }
-                                            shareText(context, tf("Tayfa'da benimle konuş: %s", inviteLink(handle)))
-                                        }
-                                    }
-                                }
-                            }
                             if (!contactsAllowed) {
                                 item {
                                     Column(
@@ -699,14 +647,6 @@ fun ChatListScreen(
                                     ) { openDirectId(m.userId) }
                                 }
                             }
-                            if (contacts.incoming.isNotEmpty()) {
-                                item { SectionLabel("Gelen istekler (${contacts.incoming.size})") }
-                                items(contacts.incoming, key = { "in-" + it.userId }) { m ->
-                                    RequestRow(m, incoming = true,
-                                        onAccept = { scope.launch { if (ContactsRepo.acceptContact(m.userId.substringBefore(":").removePrefix("@"))) toast(tf("%s artık kişilerinde.", m.displayName)) } },
-                                        onReject = { scope.launch { ContactsRepo.rejectContact(m.userId.substringBefore(":").removePrefix("@")) } })
-                                }
-                            }
                         }
                     }
                     else -> {
@@ -741,21 +681,21 @@ fun ChatListScreen(
             Modifier
                 .align(Alignment.BottomEnd)
                 .navigationBarsPadding()
-                .padding(end = 22.dp, bottom = 108.dp)
-                .size(64.dp)
+                .padding(end = 20.dp, bottom = if (narrow) 92.dp else 104.dp)
+                .size(if (narrow) 56.dp else 62.dp)
                 .shadow(10.dp, CircleShape, ambientColor = Blue, spotColor = Blue)
                 .clip(CircleShape)
                 .background(BlueBrush)
-                .clickable { tab = 1 },
+                .clickable(onClick = onNewChat),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.Edit, contentDescription = "Yeni sohbet", tint = Color.White, modifier = Modifier.size(28.dp))
+            Icon(Icons.Filled.Edit, contentDescription = t("Yeni sohbet"), tint = Color.White, modifier = Modifier.size(28.dp))
         }
     }
 
     if (showNewGroup) {
         NewGroupDialog(
-            members = members,
+            members = groupCandidates(phonebook, members),
             onDismiss = { showNewGroup = false },
             onCreate = { name, ids ->
                 showNewGroup = false
@@ -897,7 +837,7 @@ private fun ArchivedScreen(
 }
 
 @Composable
-private fun NewGroupDialog(members: List<Member>, onDismiss: () -> Unit, onCreate: (String, List<String>) -> Unit) {
+internal fun NewGroupDialog(members: List<Member>, onDismiss: () -> Unit, onCreate: (String, List<String>) -> Unit) {
     var name by remember { mutableStateOf("") }
     val selected = remember { mutableStateListOf<String>() }
     AlertDialog(
@@ -958,8 +898,9 @@ enum class AppTab { CHATS, CALLS, STATUS, MEDIA, SETTINGS }
 
 @Composable
 internal fun BottomNav(current: AppTab, onSelect: (AppTab) -> Unit) {
+    val narrow = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 380
     Surface(
-        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp).fillMaxWidth().height(74.dp),
+        modifier = Modifier.padding(start = 10.dp, end = 10.dp, bottom = 10.dp).fillMaxWidth().height(if (narrow) 62.dp else 70.dp),
         shape = RoundedCornerShape(28.dp),
         color = GlassPill,
         shadowElevation = 6.dp,
@@ -1016,15 +957,21 @@ private fun RowScope.NavItem(label: String, icon: ImageVector, selected: Boolean
         Modifier
             .weight(1f)
             .fillMaxHeight()
-            .clip(RoundedCornerShape(22.dp))
+            .padding(3.dp)
+            .clip(RoundedCornerShape(20.dp))
             .then(if (selected) Modifier.background(if (ThemeState.dark) Color(0xFF3A2E24) else Color(0xFFF5EADD)) else Modifier)
             .clickable(onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(26.dp))
-        Spacer(Modifier.height(4.dp))
-        Text(label, color = tint, fontSize = 13.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium)
+        val narrow = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 380
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(if (narrow) 22.dp else 25.dp))
+        Spacer(Modifier.height(3.dp))
+        Text(
+            label, color = tint, fontSize = if (narrow) 10.sp else 12.sp,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+            maxLines = 1, softWrap = false, overflow = TextOverflow.Clip,
+        )
     }
 }
 
@@ -1050,11 +997,8 @@ private fun FindResultCard(r: Api.ContactFind, onRequest: () -> Unit, onOpen: (S
                 Text("@${r.username}", color = Muted, fontSize = 13.sp)
             }
             when (r.relation) {
-                "friend" -> Button(onClick = { onOpen(r.userId) }, modifier = Modifier.height(40.dp)) { Text("Sohbet") }
-                "outgoing" -> Text(t("İstek gönderildi"), color = Muted, fontSize = 13.sp)
-                "incoming" -> Button(onClick = onRequest, modifier = Modifier.height(40.dp)) { Text("Kabul et") }
-                "self" -> Text("Bu sensin", color = Muted, fontSize = 13.sp)
-                else -> Button(onClick = onRequest, modifier = Modifier.height(40.dp)) { Text(t("İstek gönder")) }
+                "self" -> Text(t("Bu sensin"), color = Muted, fontSize = 13.sp)
+                else -> Button(onClick = { onOpen(r.userId) }, modifier = Modifier.height(40.dp)) { Text(t("Mesaj")) }
             }
         }
     }
@@ -1162,11 +1106,9 @@ private fun FoundUserRow(hit: Api.ContactFind, byPhone: Boolean, onMessage: () -
                 Text(hit.displayName, color = Ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
                 Text("@" + hit.username, color = Muted, fontSize = 13.sp, maxLines = 1)
             }
-            when {
-                hit.relation == "friend" || byPhone -> TextButton(onClick = onMessage) { Text(t("Mesaj"), fontWeight = FontWeight.SemiBold) }
-                hit.relation == "outgoing" -> Text(t("İstek gönderildi"), color = Muted, fontSize = 13.sp)
-                hit.relation == "blocked" -> Text(t("Engelli"), color = Muted, fontSize = 13.sp)
-                else -> TextButton(onClick = onRequest) { Text(t("İstek gönder"), fontWeight = FontWeight.SemiBold) }
+            when (hit.relation) {
+                "blocked" -> Text(t("Engelli"), color = Muted, fontSize = 13.sp)
+                else -> TextButton(onClick = onMessage) { Text(t("Mesaj"), fontWeight = FontWeight.SemiBold) }
             }
         }
     }
@@ -1255,4 +1197,31 @@ private fun ChatRow(
             }
         }
     }
+}
+
+
+/** Filtre çipi (Tümü / Okunmamış / Kişiler / Gruplar): kaydırılabilir, küçük ekranda taşmaz. */
+@Composable
+private fun FilterChipPill(label: String, selected: Boolean, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .clip(RoundedCornerShape(18.dp))
+            .background(if (selected) (if (ThemeState.dark) Color(0xFF3A2E24) else Color(0xFFF5EADD)) else GlassPill)
+            .border(1.dp, if (selected) Blue.copy(alpha = 0.35f) else Line, RoundedCornerShape(18.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+    ) {
+        Text(
+            label, color = if (selected) Blue else Ink, fontSize = 14.sp,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium, maxLines = 1, softWrap = false,
+        )
+    }
+}
+
+/** Grup için seçilebilecek kişiler: rehberindeki Tayfa kullanıcıları ve konuştuğun kişiler. */
+internal fun groupCandidates(book: List<PhonebookRepo.Entry>, others: List<Member>): List<Member> {
+    val out = LinkedHashMap<String, Member>()
+    book.forEach { e -> out[e.userId] = Member(userId = e.userId, displayName = e.name, admin = false, pending = false, avatarUrl = e.avatarUrl) }
+    others.forEach { m -> if (m.userId !in out) out[m.userId] = m }
+    return out.values.sortedBy { it.displayName.lowercase() }
 }

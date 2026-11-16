@@ -116,8 +116,7 @@ fun InviteOpenDialog(name: String, onDismiss: () -> Unit, onOpen: (String) -> Un
                 TextButton(enabled = !busy, onClick = {
                     busy = true
                     scope.launch {
-                        // Davet linkiyle gelen kişi birbirini tanıyordur: istek de gönderilir, sohbet açılır.
-                        if (h.relation == "none") ContactsRepo.sendContactRequest(h.username)
+                        // WhatsApp gibi: istek yok, sohbet doğrudan açılır.
                         val roomId = Bayx.startDirectChat(h.userId)
                         busy = false
                         if (roomId != null) onOpen(roomId) else onDismiss()
@@ -261,6 +260,8 @@ fun ComfortScreen(onBack: () -> Unit) {
     val replies by Comfort.quickReplies.collectAsState()
     val jobs by Timed.jobs.collectAsState()
     var editReply by remember { mutableStateOf<Int?>(null) }
+    var callReport by remember { mutableStateOf<String?>(null) }
+    var callTesting by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { ReachRepo.refresh(force = true) }
 
     fun pickTime(initial: Int, onPick: (Int) -> Unit) {
@@ -273,6 +274,26 @@ fun ComfortScreen(onBack: () -> Unit) {
             Text(t("Kolaylıklar"), color = Ink, fontSize = 20.sp, fontWeight = FontWeight.Bold)
         }
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
+            // ---- Arama bağlantı testi
+            ComfortTitle(t("Arama bağlantı testi"))
+            SoftCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                    Text(
+                        t("Aramalar bağlanmıyorsa bu testi çalıştır: telefonun arama sunucusuna ulaşabiliyor mu, hemen görürsün."),
+                        color = Muted, fontSize = 13.sp, lineHeight = 18.sp,
+                    )
+                    callReport?.let { Text(it, color = Ink, fontSize = 14.sp, lineHeight = 21.sp, modifier = Modifier.padding(top = 10.dp)) }
+                    TextButton(enabled = !callTesting, onClick = {
+                        callTesting = true
+                        callReport = null
+                        scope.launch {
+                            callReport = com.bayx.chat.data.Calls.connectivityTest()
+                            callTesting = false
+                        }
+                    }) { Text(if (callTesting) t("Test ediliyor…") else t("Testi başlat")) }
+                }
+            }
+
             // ---- Kimler ulaşabilir
             ComfortTitle(t("Kimler bana ulaşabilir"))
             SoftCard(Modifier.fillMaxWidth()) {

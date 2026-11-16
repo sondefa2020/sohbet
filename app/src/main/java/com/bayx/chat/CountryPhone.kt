@@ -137,15 +137,15 @@ fun CountryPhoneField(
                 .background(CardBg)
                 .border(1.dp, Line, shape)
                 .clickable { picking = true }
-                .padding(horizontal = 12.dp, vertical = 16.dp),
+                .padding(horizontal = 10.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(country.flag, fontSize = 22.sp)
-            Spacer(Modifier.width(6.dp))
+            Text(country.flag, fontSize = 20.sp)
+            Spacer(Modifier.width(4.dp))
             Text("+${country.code}", color = Ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
             Icon(Icons.Filled.ArrowDropDown, contentDescription = t("Ülke seç"), tint = Muted)
         }
-        Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.width(6.dp))
         OutlinedTextField(
             // Alanda yalnızca rakamlar tutulur; boşluklar sadece görünümde eklenir.
             // Böylece yazarken imleç kaymaz.
@@ -166,7 +166,8 @@ fun CountryPhoneField(
                 onDigits(clean)
             },
             singleLine = true,
-            placeholder = { Text(Phones.example(region), color = Muted) },
+            placeholder = { Text(Phones.example(region), color = Muted, maxLines = 1, softWrap = false, overflow = androidx.compose.ui.text.style.TextOverflow.Clip) },
+            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 17.sp, color = Ink),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
             shape = shape,
             colors = OutlinedTextFieldDefaults.colors(

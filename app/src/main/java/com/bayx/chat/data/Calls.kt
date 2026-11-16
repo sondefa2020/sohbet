@@ -642,7 +642,71 @@ object Calls {
             }
         }
         servers.add(PeerConnection.IceServer.builder("stun:${Api.SERVER_NAME}:3478").createIceServer())
+        // Yedek: kendi sunucumuzun 3478 portu kapalıysa da dış adres öğrenilebilsin.
+        servers.add(PeerConnection.IceServer.builder(listOf("stun:stun.l.google.com:19302", "stun:stun.cloudflare.com:3478")).createIceServer())
         return servers
+    }
+
+    /**
+     * Arama bağlantı testi (Ayarlar > Arama bağlantı testi): bu telefondan aktarma sunucusuna
+     * (TURN) ve dış adres sunucusuna (STUN) ulaşılabiliyor mu? Sonuç Türkçe bir rapordur.
+     */
+    suspend fun connectivityTest(): String = withContext(Dispatchers.Default) {
+        val token = Bayx.accessToken ?: return@withContext com.bayx.chat.t("Önce giriş yap.")
+        val turn = runCatching { Api.turn(token) }.getOrNull()
+        val turnCount = turn?.optJSONArray("uris")?.length() ?: 0
+        val f = runCatching { ensureFactory() }.getOrNull() ?: return@withContext com.bayx.chat.t("Arama altyapısı başlatılamadı.")
+        val config = PeerConnection.RTCConfiguration(iceServers()).apply {
+            sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
+        }
+        val found = java.util.Collections.synchronizedList(ArrayList<String>())
+        val done = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val peer = f.createPeerConnection(config, object : PeerConnection.Observer {
+            override fun onIceCandidate(candidate: IceCandidate?) { candidate?.sdp?.let { found.add(it) } }
+            override fun onIceGatheringChange(state: PeerConnection.IceGatheringState?) {
+                if (state == PeerConnection.IceGatheringState.COMPLETE) done.complete(Unit)
+            }
+            override fun onSignalingChange(state: PeerConnection.SignalingState?) = Unit
+            override fun onIceConnectionChange(state: PeerConnection.IceConnectionState?) = Unit
+            override fun onIceConnectionReceivingChange(receiving: Boolean) = Unit
+            override fun onIceCandidatesRemoved(candidates: Array<out IceCandidate>?) = Unit
+            override fun onAddStream(stream: MediaStream?) = Unit
+            override fun onRemoveStream(stream: MediaStream?) = Unit
+            override fun onDataChannel(channel: DataChannel?) = Unit
+            override fun onRenegotiationNeeded() = Unit
+        }) ?: return@withContext com.bayx.chat.t("Arama altyapısı başlatılamadı.")
+        try {
+            peer.createDataChannel("deneme", DataChannel.Init())
+            val offer = kotlinx.coroutines.CompletableDeferred<SessionDescription?>()
+            peer.createOffer(createObserver { offer.complete(it.getOrNull()) }, MediaConstraints())
+            val sdp = offer.await() ?: return@withContext com.bayx.chat.t("Test başlatılamadı.")
+            peer.setLocalDescription(setObserver { }, sdp)
+            kotlinx.coroutines.withTimeoutOrNull(12_000) { done.await() }
+        } finally {
+            runCatching { peer.dispose() }
+        }
+        val relayUdp = found.any { it.contains(" typ relay") && it.contains(" udp ", ignoreCase = true) }
+        val relayAny = found.any { it.contains(" typ relay") }
+        val srflx = found.any { it.contains(" typ srflx") }
+        buildString {
+            appendLine(if (turnCount > 0) "✓ " + com.bayx.chat.t("Aktarma sunucusu bilgisi alındı") else "✗ " + com.bayx.chat.t("Aktarma sunucusu bilgisi alınamadı (sunucu ayarı)"))
+            appendLine(if (srflx) "✓ " + com.bayx.chat.t("İnternet adresi öğrenildi (STUN)") else "✗ " + com.bayx.chat.t("İnternet adresi öğrenilemedi (STUN)"))
+            appendLine(
+                when {
+                    relayUdp -> "✓ " + com.bayx.chat.t("Aktarma sunucusuna ulaşıldı (TURN)")
+                    relayAny -> "✓ " + com.bayx.chat.t("Aktarma sunucusuna yalnızca TCP ile ulaşıldı (TURN)")
+                    else -> "✗ " + com.bayx.chat.t("Aktarma sunucusuna ulaşılamadı (TURN)")
+                },
+            )
+            appendLine()
+            append(
+                when {
+                    relayAny -> com.bayx.chat.t("Bu telefondan aramalar bağlanabilir.")
+                    turnCount == 0 -> com.bayx.chat.t("Sunucu arama ayarı eksik. Sunucuda kur.sh komutunu yeniden çalıştır.")
+                    else -> com.bayx.chat.t("Sunucunun güvenlik duvarı arama portlarını engelliyor: 3478 (TCP ve UDP) ve 49160-49200 (UDP) açılmalı. Sunucuda sudo tayfa-arama-test komutunu çalıştır.")
+                },
+            )
+        }
     }
 
     private suspend fun createPeer(callId: String, peerId: String, video: Boolean): PeerConnection {

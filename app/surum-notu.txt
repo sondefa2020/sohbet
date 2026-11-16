@@ -1,6 +1,5 @@
-Kişi kartları: bir kişiye dokununca profili, hakkında yazısı ve işlemleri açılır.
-Profili düzenle: fotoğraf, ad, hakkında, kullanıcı adı ve telefon tek ekranda.
-QR kodum ve davet linki; QR okutarak kişi ekleme.
-Yeni telefona QR ile aktarma: eski mesajlar anahtar yazmadan gelir.
-Sesli mesajı yazıya çevirme, hazır cevaplar, zamanlanmış mesaj, mesaj hatırlatma, Kendime not.
-Sessiz saatler, "Kimler bana ulaşabilir", sohbet kilidi, büyük yazı.
+WhatsApp gibi: arkadaşlık isteği yok, herkes numarasını ya da kullanıcı adını bildiği kişiye yazabilir.
+Yeni sohbet ekranı: rehberdeki Tayfa kullanıcıları, numara ile sohbet (tuş takımı), kullanıcı adıyla bulma.
+Birebir sohbette "Grup araması yok" hatası düzeltildi.
+Ayarlar > Kolaylıklar > Arama bağlantı testi.
+Küçük ekranlarda kayma ve iç içe girmeler düzeltildi.

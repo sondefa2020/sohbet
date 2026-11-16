@@ -595,6 +595,9 @@ def handle_set(headers, body):
     return {"ok": True, "username": name}
 
 
+_number_lookups = giris.Attempts(limit=60)  # kişi başına saatte en fazla 60 numara sorgusu (tarama önlemi)
+
+
 def _looks_like_phone(text):
     """'0532 123 45 67', '+90 532...', '5321234567' gibi girişler numara sayılır."""
     t = text.strip()
@@ -610,9 +613,9 @@ def contact_find(headers, body):
     if _looks_like_phone(text):
         # Telefonla arama (WhatsApp gibi): numarayla kayıtlı kullanıcıyı bul.
         # Numara taramasını önlemek için kişi başına saatte sınırlı sorgu.
-        if _reset_attempts.blocked("numara-ara:" + me):
+        if _number_lookups.blocked(me):
             raise ApiError(429, "COK_FAZLA_DENEME", "Çok fazla numara aradın. Biraz sonra tekrar dene.")
-        _reset_attempts.fail("numara-ara:" + me)
+        _number_lookups.fail(me)
         phone = telefon.normalize(text)
         if phone:
             with GIRIS.lock:

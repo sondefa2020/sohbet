@@ -359,6 +359,29 @@ private fun MainNav(me: AuthState.LoggedIn) {
                 onCalls = { nav.navigate("calls") },
                 onStatus = { nav.navigate("status") },
                 onPerson = { uid -> nav.navigate("person/" + Uri.encode(uid)) },
+                onNewChat = { nav.navigate("newchat") },
+            )
+        }
+        composable("newchat") {
+            NewChatScreen(
+                onBack = { nav.popBackStack() },
+                onOpenChat = { roomId -> nav.navigate("chat/" + Uri.encode(roomId)) { popUpTo("newchat") { inclusive = true } } },
+                onDialpad = { nav.navigate("dialpad") },
+                onFindName = { nav.navigate("findname") },
+                onPerson = { uid -> nav.navigate("person/" + Uri.encode(uid)) },
+            )
+        }
+        composable("dialpad") {
+            DialpadScreen(
+                onBack = { nav.popBackStack() },
+                onOpenChat = { roomId -> nav.navigate("chat/" + Uri.encode(roomId)) { popUpTo("newchat") { inclusive = true } } },
+            )
+        }
+        composable("findname") {
+            FindByNameScreen(
+                onBack = { nav.popBackStack() },
+                onOpenChat = { roomId -> nav.navigate("chat/" + Uri.encode(roomId)) { popUpTo("newchat") { inclusive = true } } },
+                onPerson = { uid -> nav.navigate("person/" + Uri.encode(uid)) },
             )
         }
         composable("person/{id}") { entry ->
