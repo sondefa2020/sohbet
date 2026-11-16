@@ -65,6 +65,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bayx.chat.data.Api
+import com.bayx.chat.data.AuthState
 import com.bayx.chat.data.Bayx
 import com.bayx.chat.data.Calls
 import com.bayx.chat.data.ChatPrefs

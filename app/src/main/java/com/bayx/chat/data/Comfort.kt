@@ -9,6 +9,8 @@ import java.util.Calendar
  */
 object Comfort {
     private const val PREFS = "tayfa_kolaylik"
+    val DEFAULT_REPLIES = listOf("Tamam 👍", "Müsait değilim, sonra yazarım", "Geliyorum", "Arıyorum", "Teşekkürler 🙏")
+
     private lateinit var app: Context
 
     /** Sessiz saatler açık mı; başlangıç ve bitiş gün içindeki dakika olarak (ör. 23:00 = 1380). */
@@ -64,5 +66,4 @@ object Comfort {
 
     fun label(minutes: Int): String = "%02d:%02d".format(java.util.Locale.US, minutes / 60, minutes % 60)
 
-    val DEFAULT_REPLIES = listOf("Tamam 👍", "Müsait değilim, sonra yazarım", "Geliyorum", "Arıyorum", "Teşekkürler 🙏")
 }
