@@ -121,10 +121,10 @@ class StatusViewModel : ViewModel() {
         viewModelScope.launch { StatusRepo.addTextStatus(text, bg)?.let { _messages.tryEmit(it) } }
     }
 
-    fun addImage(jpeg: ByteArray, fail: String) {
+    fun addImage(jpeg: ByteArray, fail: String, caption: String = "") {
         _uploading.value = true
         viewModelScope.launch {
-            val ok = StatusRepo.addImageStatus(jpeg, "")
+            val ok = StatusRepo.addImageStatus(jpeg, caption)
             _uploading.value = false
             if (!ok) _messages.tryEmit(StatusRepo.statusError.value ?: fail)
         }

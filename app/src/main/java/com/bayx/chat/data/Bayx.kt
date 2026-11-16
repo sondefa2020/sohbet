@@ -1070,6 +1070,25 @@ object Bayx {
         ok
     }
 
+    /** Birine doğrudan metin gönderir (durum yanıtı, tepki): sohbeti bulur/açar, gönderir, kapatır. */
+    suspend fun sendTextToUser(userId: String, text: String): Boolean = withContext(Dispatchers.IO) {
+        val roomId = startDirectChat(userId) ?: return@withContext false
+        var session: ChatSession? = null
+        repeat(10) {
+            if (session == null) {
+                session = openChat(roomId)
+                if (session == null) kotlinx.coroutines.delay(500)
+            }
+        }
+        val s = session ?: return@withContext false
+        try {
+            sendText(s, text)
+        } finally {
+            kotlinx.coroutines.delay(800)
+            closeChat(s)
+        }
+    }
+
     /** Okundu bilgisi kapalıysa okuma yalnızca bende işaretlenir, karşı tarafa gitmez. */
     private fun receiptType(): ReceiptType = if (Comfort.readReceipts.value) ReceiptType.READ else ReceiptType.READ_PRIVATE
 

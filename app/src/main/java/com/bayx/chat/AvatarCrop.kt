@@ -16,6 +16,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.RotateRight
 import androidx.compose.material3.Icon
@@ -110,16 +113,26 @@ fun AvatarCropDialog(source: Bitmap, onCancel: () -> Unit, onDone: (ByteArray) -
         }
     }.getOrNull()
 
-    Dialog(onDismissRequest = onCancel, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Column(Modifier.fillMaxSize().background(Color.Black).systemBarsPadding()) {
-            Text(
-                t("Fotoğrafı ayarla"), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(18.dp),
-            )
+    Dialog(onDismissRequest = onCancel, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+        Column(Modifier.fillMaxSize().background(Color.Black).statusBarsPadding()) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TextButton(onClick = onCancel) { Text(t("Vazgeç"), color = Color.White, fontSize = 16.sp) }
+                Text(
+                    t("Fotoğrafı ayarla"), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                )
+                TextButton(onClick = { crop()?.let(onDone) }) {
+                    Text(t("Bitti"), color = Color(0xFFE8B98C), fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                }
+            }
             Box(
                 Modifier
                     .weight(1f)
                     .fillMaxWidth()
+                    .clipToBounds()
                     .onSizeChanged { area = it }
                     .pointerInput(bitmap, circle) {
                         detectTransformGestures { _, pan, gestureZoom, _ ->
@@ -156,7 +169,7 @@ fun AvatarCropDialog(source: Bitmap, onCancel: () -> Unit, onDone: (ByteArray) -
                 modifier = Modifier.align(Alignment.CenterHorizontally).padding(8.dp),
             )
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 10.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {

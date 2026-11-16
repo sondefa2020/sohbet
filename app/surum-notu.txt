@@ -1,3 +1,2 @@
-Gelen arama artık tam ekran açılıyor: telefon kilitliyken de, başka uygulamadayken de. İlk açılışta istenen izni ver.
-Cevapsız arama bildirimi: "Geri ara" doğrudan arar, "Mesaj" sohbeti açar.
-Aramalar listesindeki telefon/kamera simgesi doğrudan arar.
+Profil fotoğrafı kırpma ekranı düzeltildi: "Bitti" artık üstte ve altta görünüyor.
+Yeni Durum: hikâye kartları, renk geçişli arka planlar ve yazı stilleri, akıcı ilerleme, basılı tutunca durdurma, aşağı kaydırıp kapatma, emoji tepkileri ve yanıt, fotoğrafa açıklama, durumları sessize alma.
