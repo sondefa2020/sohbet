@@ -291,6 +291,15 @@ private fun MainNav(me: AuthState.LoggedIn) {
     val nav = rememberNavController()
     val context = LocalContext.current
 
+    // Arama ekranındaki "Mesaj" tuşu: arama küçülür, o kişiyle sohbet açılır.
+    val chatRequest by CallUiState.openChatWith.collectAsState()
+    LaunchedEffect(chatRequest) {
+        val peer = chatRequest ?: return@LaunchedEffect
+        CallUiState.openChatWith.value = null
+        val roomId = Bayx.startDirectChat(peer)
+        if (roomId != null) nav.navigate("chat/" + Uri.encode(roomId))
+    }
+
     // Android 13+: bildirim izni (bir kez sorulur; reddedilirse uygulama yine çalışır).
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     LaunchedEffect(Unit) {
@@ -470,6 +479,8 @@ private fun MainNav(me: AuthState.LoggedIn) {
                 CallsScreen(
                     onBack = { nav.popBackStack() },
                     onOpenChat = { roomId -> nav.navigate("chat/" + Uri.encode(roomId)) },
+                    onNewCall = { nav.navigate("newchat") },
+                    onDialpad = { nav.navigate("dialpad") },
                 )
             }
         }

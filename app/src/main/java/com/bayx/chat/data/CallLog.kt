@@ -13,6 +13,8 @@ data class CallEntry(
     val answered: Boolean,
     val video: Boolean,
     val time: Long,
+    /** Konuşma süresi (saniye); cevaplanmayan aramada 0. */
+    val duration: Long = 0L,
 )
 
 /** Yerel, cihazda tutulan arama geçmişi (sunucuya gitmez). */
@@ -31,9 +33,9 @@ object CallLog {
     }
 
     /** Biten bir aramayı kaydeder (en yeni başta). */
-    fun record(peerId: String, peerName: String, outgoing: Boolean, answered: Boolean, video: Boolean) {
+    fun record(peerId: String, peerName: String, outgoing: Boolean, answered: Boolean, video: Boolean, duration: Long = 0L) {
         if (!::app.isInitialized || peerId.isBlank()) return
-        val entry = CallEntry(peerId, peerName, outgoing, answered, video, System.currentTimeMillis())
+        val entry = CallEntry(peerId, peerName, outgoing, answered, video, System.currentTimeMillis(), duration)
         val list = (listOf(entry) + entries.value).take(MAX)
         entries.value = list
         save(list)
@@ -59,6 +61,7 @@ object CallLog {
                 answered = o.optBoolean("answered"),
                 video = o.optBoolean("video"),
                 time = o.optLong("time"),
+                duration = o.optLong("sure"),
             )
         }
     }.getOrDefault(emptyList())
@@ -73,7 +76,8 @@ object CallLog {
                     .put("outgoing", e.outgoing)
                     .put("answered", e.answered)
                     .put("video", e.video)
-                    .put("time", e.time),
+                    .put("time", e.time)
+                    .put("sure", e.duration),
             )
         }
         prefs().edit().putString(KEY, arr.toString()).apply()

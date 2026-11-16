@@ -75,6 +75,12 @@ data class CallState(
     val ringing: Boolean = false,
     /** Görüşme sürerken bağlantı koptu; yeniden kuruluyor. */
     val reconnecting: Boolean = false,
+    /** Bağlantı kalitesi: 3 iyi, 2 orta, 1 zayıf (gecikme ve paket kaybından). */
+    val quality: Int = 3,
+    /** Ses sunucu (TURN) üzerinden aktarılıyor mu (doğrudan bağlantı kurulamadı). */
+    val relayed: Boolean = false,
+    /** Biten görüşmenin süresi (saniye); bitiş ekranında gösterilir. */
+    val endedDuration: Long = 0L,
 )
 
 /**
@@ -104,6 +110,7 @@ object Calls {
 
     private var pollJob: Job? = null
     private var ringJob: Job? = null
+    private var statsJob: Job? = null
     private var disconnectJob: Job? = null
     private var connectJob: Job? = null
     private var restartJob: Job? = null
@@ -773,6 +780,7 @@ object Calls {
                         disconnectJob?.cancel()
                         restartJob?.cancel()
                         connectJob?.cancel()
+                        startStats(callId)
                         if (current.phase != CallPhase.ACTIVE) {
                             state.value = current.copy(phase = CallPhase.ACTIVE, startedAt = System.currentTimeMillis(), reconnecting = false)
                         } else if (current.reconnecting) {
@@ -858,6 +866,66 @@ object Calls {
         mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", if (video) "true" else "false"))
     }
 
+    private var endedDuration = 0L
+
+    /**
+     * Görüşme sürerken iki saniyede bir WebRTC istatistiklerine bakar: gidiş-dönüş süresi ve
+     * paket kaybından bağlantı kalitesini çıkarır (ekrandaki sinyal çubukları ve uyarı için).
+     */
+    private fun startStats(callId: String) {
+        if (statsJob?.isActive == true) return
+        statsJob = scope.launch {
+            var lastLost = -1L
+            var lastRecv = -1L
+            while (true) {
+                delay(2_000)
+                val current = state.value ?: break
+                if (current.callId != callId || current.phase == CallPhase.ENDED) break
+                val peer = pc ?: continue
+                val report = suspendCancellableCoroutine<org.webrtc.RTCStatsReport?> { cont ->
+                    runCatching { peer.getStats { r -> if (cont.isActive) cont.resume(r) } }
+                        .onFailure { if (cont.isActive) cont.resume(null) }
+                } ?: continue
+                var rtt = -1.0
+                var relayed = false
+                var lost = 0L
+                var recv = 0L
+                val stats = report.statsMap
+                for (st in stats.values) {
+                    val m = st.members
+                    when (st.type) {
+                        "candidate-pair" -> if (m["state"] == "succeeded" && m["nominated"] == true) {
+                            (m["currentRoundTripTime"] as? Number)?.toDouble()?.let { rtt = it }
+                            val local = stats[m["localCandidateId"] as? String]
+                            if (local?.members?.get("candidateType") == "relay") relayed = true
+                        }
+                        "inbound-rtp" -> if (m["kind"] == "audio") {
+                            lost += (m["packetsLost"] as? Number)?.toLong() ?: 0L
+                            recv += (m["packetsReceived"] as? Number)?.toLong() ?: 0L
+                        }
+                    }
+                }
+                val lossPct = if (lastLost >= 0 && lastRecv >= 0) {
+                    val dl = (lost - lastLost).coerceAtLeast(0)
+                    val dr = (recv - lastRecv).coerceAtLeast(0)
+                    if (dl + dr > 0) dl * 100.0 / (dl + dr) else if (current.phase == CallPhase.ACTIVE && !current.held) 100.0 else 0.0
+                } else 0.0
+                lastLost = lost
+                lastRecv = recv
+                val q = when {
+                    rtt < 0 && lossPct == 0.0 -> current.quality
+                    rtt > 0.7 || lossPct > 10 -> 1
+                    rtt > 0.35 || lossPct > 3 -> 2
+                    else -> 3
+                }
+                val now = state.value ?: break
+                if (now.callId == callId && (now.quality != q || now.relayed != relayed)) {
+                    state.value = now.copy(quality = q, relayed = relayed)
+                }
+            }
+        }
+    }
+
     /** Aramayı yerelde kapatır; [notify] doğruysa karşı tarafa kapatma mesajı gönderir. */
     private fun end(reason: String?, notify: Boolean = true) {
         val current = state.value ?: return
@@ -868,6 +936,7 @@ object Calls {
             runCatching { Notifier.showMissedCall(app, current.peerId, current.peerName, current.video, roomId) }
         }
         if (notify) send("hangup", current.peerId, current.callId)
+        val talked = if (current.phase == CallPhase.ACTIVE && current.startedAt > 0) (System.currentTimeMillis() - current.startedAt) / 1000 else 0L
         runCatching {
             CallLog.record(
                 peerId = current.peerId,
@@ -875,8 +944,12 @@ object Calls {
                 outgoing = current.fromMe,
                 answered = current.phase == CallPhase.ACTIVE,
                 video = current.video,
+                duration = talked,
             )
         }
+        endedDuration = talked
+        statsJob?.cancel()
+        statsJob = null
         ringJob?.cancel()
         disconnectJob?.cancel()
         connectJob?.cancel()
@@ -911,9 +984,9 @@ object Calls {
         if (reason == null) {
             state.value = null
         } else {
-            state.value = current.copy(phase = CallPhase.ENDED, endReason = reason, reconnecting = false)
+            state.value = current.copy(phase = CallPhase.ENDED, endReason = reason, reconnecting = false, endedDuration = endedDuration)
             scope.launch {
-                delay(2_500)
+                delay(4_500)
                 if (state.value?.callId == current.callId && state.value?.phase == CallPhase.ENDED) state.value = null
             }
         }
