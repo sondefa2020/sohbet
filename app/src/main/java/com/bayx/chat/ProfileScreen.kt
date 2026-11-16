@@ -577,8 +577,11 @@ internal fun SettingRow(
     ) {
         Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(25.dp))
         Spacer(Modifier.width(18.dp))
-        Text(label, modifier = Modifier.weight(1f), color = tint, fontSize = 17.sp)
-        if (trailing != null) trailing() else Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = SoftBlue)
+        Text(label, modifier = Modifier.weight(1f), color = tint, fontSize = 16.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        if (trailing != null) {
+            Spacer(Modifier.width(8.dp))
+            Box(Modifier.widthIn(max = 150.dp)) { trailing() }
+        } else Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = SoftBlue)
     }
 }
 

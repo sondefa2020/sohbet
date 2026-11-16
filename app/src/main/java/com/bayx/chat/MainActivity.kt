@@ -169,13 +169,26 @@ fun BayxTheme(content: @Composable () -> Unit) {
         // Büyük yazı (Ayarlar > Kolaylıklar): telefonun yazı boyutunun üstüne ek büyütme.
         val scale by com.bayx.chat.data.Comfort.textScale.collectAsState()
         val density = androidx.compose.ui.platform.LocalDensity.current
+        val widthDp = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp
+        // Her ekranda aynı oranlar: dar ekranlarda (ya da telefonda "ekran yakınlaştırma" büyükse)
+        // tüm arayüz orantılı küçülür; tasarım ~392dp genişliğe göre dengelenir. Taşma, iç içe girme olmaz.
+        val fit = if (widthDp in 1 until DESIGN_WIDTH_DP) (widthDp / DESIGN_WIDTH_DP.toFloat()).coerceAtLeast(0.80f) else 1f
+        // Telefonun yazı boyutu çok büyükse sınırlanır (en fazla %15); kendi "Büyük yazı" seçimi ayrıca uygulanır.
+        val font = density.fontScale.coerceAtMost(1.15f) * scale
         CompositionLocalProvider(
             LocalLayoutDirection provides dir,
-            androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density, density.fontScale * scale),
+            androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density * fit, font),
+            LocalAppWidth provides (widthDp / fit).toInt(),
             content = content,
         )
     }
 }
+
+/** Tasarımın dengelendiği ekran genişliği (dp). */
+const val DESIGN_WIDTH_DP = 392
+
+/** Uygulamanın gördüğü (orantılanmış) ekran genişliği, dp. */
+val LocalAppWidth = androidx.compose.runtime.staticCompositionLocalOf { DESIGN_WIDTH_DP }
 
 @Composable
 fun BayxApp() {

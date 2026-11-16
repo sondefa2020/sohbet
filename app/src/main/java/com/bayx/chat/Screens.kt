@@ -348,7 +348,7 @@ fun ChatListScreen(
     var tab by remember { mutableIntStateOf(0) }
     var unreadOnly by remember { mutableStateOf(false) }
     // Küçük ekranlar (ör. 360dp altı): daha sıkı yerleşim.
-    val narrow = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 380
+    val narrow = LocalAppWidth.current < 380
     val allRooms by Bayx.rooms.collectAsState()
     val onlineUsers by PresenceRepo.online.collectAsState()
     val presences by PresenceRepo.presences.collectAsState()
@@ -898,7 +898,7 @@ enum class AppTab { CHATS, CALLS, STATUS, MEDIA, SETTINGS }
 
 @Composable
 internal fun BottomNav(current: AppTab, onSelect: (AppTab) -> Unit) {
-    val narrow = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 380
+    val narrow = LocalAppWidth.current < 380
     Surface(
         modifier = Modifier.padding(start = 10.dp, end = 10.dp, bottom = 10.dp).fillMaxWidth().height(if (narrow) 62.dp else 70.dp),
         shape = RoundedCornerShape(28.dp),
@@ -964,11 +964,12 @@ private fun RowScope.NavItem(label: String, icon: ImageVector, selected: Boolean
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        val narrow = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 380
+        val narrow = LocalAppWidth.current < 380
         Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(if (narrow) 22.dp else 25.dp))
         Spacer(Modifier.height(3.dp))
+        val labelSize = with(androidx.compose.ui.platform.LocalDensity.current) { (if (narrow) 10.5f else 11.5f).dp.toSp() }
         Text(
-            label, color = tint, fontSize = if (narrow) 10.sp else 12.sp,
+            label, color = tint, fontSize = labelSize,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
             maxLines = 1, softWrap = false, overflow = TextOverflow.Clip,
         )

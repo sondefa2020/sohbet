@@ -1,5 +1,2 @@
-WhatsApp gibi: arkadaşlık isteği yok, herkes numarasını ya da kullanıcı adını bildiği kişiye yazabilir.
-Yeni sohbet ekranı: rehberdeki Tayfa kullanıcıları, numara ile sohbet (tuş takımı), kullanıcı adıyla bulma.
-Birebir sohbette "Grup araması yok" hatası düzeltildi.
-Ayarlar > Kolaylıklar > Arama bağlantı testi.
-Küçük ekranlarda kayma ve iç içe girmeler düzeltildi.
+Küçük ekranlı telefonlarda arayüz artık orantılı: yazılar taşmıyor, alt menü kesilmiyor, satırlar iki satıra bölünmüyor.
+Telefonun yazı boyutu çok büyük ayarlıysa uygulama içinde dengeli tutulur (Kolaylıklar > Yazı boyutu ile yine büyütebilirsin).
