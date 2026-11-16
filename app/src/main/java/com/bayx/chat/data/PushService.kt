@@ -32,6 +32,7 @@ class PushService : FirebaseMessagingService() {
                 val from = data["from"].orEmpty()
                 val name = data["name"].orEmpty().ifBlank { from.substringBefore(":").removePrefix("@") }
                 Notifier.showIncomingCall(applicationContext, name, data["video"] == "1", from, data["call_id"])
+                Calls.openCallScreen()
             }
             "contact_request" -> {
                 val name = data["name"].orEmpty().ifBlank { "Biri" }

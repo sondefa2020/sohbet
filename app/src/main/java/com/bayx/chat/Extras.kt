@@ -276,6 +276,10 @@ fun ComfortScreen(onBack: () -> Unit) {
             Text(t("Kolaylıklar"), color = Ink, fontSize = 20.sp, fontWeight = FontWeight.Bold)
         }
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
+            // ---- Gelen arama tam ekran izinleri
+            ComfortTitle(t("Aramalar"))
+            CallPermissionsCard()
+
             // ---- Arama bağlantı testi
             ComfortTitle(t("Arama bağlantı testi"))
             SoftCard(Modifier.fillMaxWidth()) {
@@ -742,6 +746,87 @@ fun StarredScreen(onBack: () -> Unit, onOpenChat: (String) -> Unit) {
                     Text(it.text, color = Ink, fontSize = 15.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
                 }
                 HorizontalDivider(color = Line, modifier = Modifier.padding(horizontal = 18.dp))
+            }
+        }
+    }
+}
+
+// ====================================================================== gelen arama tam ekran izinleri
+
+private fun canOverlay(context: android.content.Context) =
+    android.os.Build.VERSION.SDK_INT < 23 || android.provider.Settings.canDrawOverlays(context)
+
+private fun openFullScreenSetting(context: android.content.Context) {
+    if (android.os.Build.VERSION.SDK_INT < 34) return
+    runCatching {
+        context.startActivity(
+            android.content.Intent(android.provider.Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, android.net.Uri.parse("package:" + context.packageName))
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    }
+}
+
+private fun openOverlaySetting(context: android.content.Context) {
+    runCatching {
+        context.startActivity(
+            android.content.Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION, android.net.Uri.parse("package:" + context.packageName))
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    }
+}
+
+/**
+ * Gelen aramanın her durumda tam ekran açılması için iki Android izni gerekir:
+ * kilit ekranında tam ekran (Android 14+) ve telefon açıkken öne gelebilmek (diğer uygulamaların üzerinde).
+ * Eksikse uygulama açılışında bir kez sorulur; Kolaylıklar'dan her zaman açılabilir.
+ */
+@Composable
+fun CallPermissionsPrompt() {
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("tayfa_arama_izin", android.content.Context.MODE_PRIVATE) }
+    var show by remember {
+        mutableStateOf(!prefs.getBoolean("soruldu", false) && (!com.bayx.chat.data.Notifier.canFullScreen(context) || !canOverlay(context)))
+    }
+    if (!show) return
+    fun done() { prefs.edit().putBoolean("soruldu", true).apply(); show = false }
+    AlertDialog(
+        onDismissRequest = { done() },
+        title = { Text(t("Gelen aramalar tam ekran açılsın")) },
+        text = {
+            Text(
+                t("Biri seni aradığında arama ekranının telefon kilitliyken de, başka bir uygulamadayken de tam ekran açılması için Android'den izin vermen gerekiyor. Açılan ekranda Tayfa'ya izin ver ve geri dön."),
+                color = Muted, fontSize = 14.sp, lineHeight = 20.sp,
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                done()
+                if (!com.bayx.chat.data.Notifier.canFullScreen(context)) openFullScreenSetting(context) else openOverlaySetting(context)
+            }) { Text(t("İzin ver")) }
+        },
+        dismissButton = { TextButton(onClick = { done() }) { Text(t("Sonra")) } },
+    )
+}
+
+/** Kolaylıklar ekranındaki durum kartı. */
+@Composable
+internal fun CallPermissionsCard() {
+    val context = LocalContext.current
+    var tick by remember { mutableStateOf(0) }
+    androidx.lifecycle.compose.LifecycleResumeEffect(Unit) { tick++; onPauseOrDispose { } }
+    val full = remember(tick) { com.bayx.chat.data.Notifier.canFullScreen(context) }
+    val over = remember(tick) { canOverlay(context) }
+    SoftCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+            Text(t("Gelen arama ekranı"), color = Ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text((if (full) "✓ " else "✗ ") + t("Kilit ekranında tam ekran"), color = if (full) Color(0xFF1E8E4E) else Color(0xFFB4232A), fontSize = 14.sp, modifier = Modifier.weight(1f))
+                if (!full) TextButton(onClick = { openFullScreenSetting(context) }) { Text(t("Aç")) }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text((if (over) "✓ " else "✗ ") + t("Telefon açıkken tam ekran"), color = if (over) Color(0xFF1E8E4E) else Color(0xFFB4232A), fontSize = 14.sp, modifier = Modifier.weight(1f))
+                if (!over) TextButton(onClick = { openOverlaySetting(context) }) { Text(t("Aç")) }
             }
         }
     }

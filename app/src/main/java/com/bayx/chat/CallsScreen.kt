@@ -39,6 +39,8 @@ fun CallsScreen(onBack: () -> Unit, onOpenChat: (String) -> Unit) {
     val toast = rememberToast()
     var opening by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
+    // Sağdaki telefon/kamera simgesi doğrudan arar (WhatsApp gibi); satıra dokunmak sohbeti açar.
+    val askCall = rememberCallPermissions { toast(t("Arama için mikrofon (ve görüntülü aramada kamera) izni gerekli.")) }
 
     fun openWith(peerId: String) {
         if (opening) return
@@ -82,7 +84,12 @@ fun CallsScreen(onBack: () -> Unit, onOpenChat: (String) -> Unit) {
             }
         } else {
             LazyColumn(Modifier.fillMaxSize()) {
-                items(entries, key = { it.peerId + ":" + it.time }) { e -> CallRow(e) { openWith(e.peerId) } }
+                items(entries, key = { it.peerId + ":" + it.time }) { e ->
+                    CallRow(
+                        e,
+                        onCall = { askCall(e.video) { com.bayx.chat.data.Calls.startCall(e.peerId, e.peerName, e.video) } },
+                    ) { openWith(e.peerId) }
+                }
             }
         }
     }
@@ -103,7 +110,7 @@ fun CallsScreen(onBack: () -> Unit, onOpenChat: (String) -> Unit) {
 }
 
 @Composable
-private fun CallRow(e: CallEntry, onClick: () -> Unit) {
+private fun CallRow(e: CallEntry, onCall: () -> Unit, onClick: () -> Unit) {
     val missed = !e.outgoing && !e.answered
     val arrow = when {
         missed -> Icons.AutoMirrored.Filled.CallMissed
@@ -145,11 +152,13 @@ private fun CallRow(e: CallEntry, onClick: () -> Unit) {
             }
         }
         Spacer(Modifier.width(10.dp))
-        Icon(
-            if (e.video) Icons.Outlined.Videocam else Icons.Outlined.Call,
-            contentDescription = if (e.video) t("Görüntülü ara") else "Sesli ara",
-            tint = Blue,
-            modifier = Modifier.size(24.dp),
-        )
+        IconButton(onClick = onCall) {
+            Icon(
+                if (e.video) Icons.Outlined.Videocam else Icons.Outlined.Call,
+                contentDescription = if (e.video) t("Görüntülü ara") else t("Sesli ara"),
+                tint = Blue,
+                modifier = Modifier.size(26.dp),
+            )
+        }
     }
 }

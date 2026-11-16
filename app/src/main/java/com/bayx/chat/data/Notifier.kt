@@ -31,6 +31,13 @@ object Notifier {
     private const val CALL_NOTIFICATION_ID = 1001
     const val EXTRA_ROOM_ID = "tayfa_room_id"
     const val EXTRA_ACCEPT_CALL = "tayfa_accept_call"
+    /** Gelen arama ekranı: kilit ekranının üstünde, ekranı açarak gösterilir. */
+    const val EXTRA_INCOMING_CALL = "tayfa_incoming_call"
+    /** Cevapsız aramadaki "Geri ara": doğrudan arama başlatır (kişi ya da sohbet ekranına uğramadan). */
+    const val EXTRA_CALL_BACK = "tayfa_call_back"
+    const val EXTRA_CALL_BACK_NAME = "tayfa_call_back_name"
+    const val EXTRA_CALL_BACK_VIDEO = "tayfa_call_back_video"
+    private const val MISSED_NOTIFICATION_BASE = 7300
 
     /** Aynı sohbet için kısa sürede iki kez ses çalmasın (senkron + Firebase aynı mesajı bildirebilir). */
     private val lastAlert = HashMap<String, Long>()
@@ -308,7 +315,7 @@ object Notifier {
         val channel = NotificationManagerCompat.from(context).getNotificationChannel(CH_CALLS)
         if (channel != null && channel.importance == NotificationManager.IMPORTANCE_NONE) return false
         val name = callerName.ifBlank { "Tayfa" }
-        val open = openIntent(context, null, CALL_NOTIFICATION_ID)
+        val open = incomingIntent(context)
         val answer = PendingIntent.getActivity(
             context, CALL_NOTIFICATION_ID + 1,
             Intent(context, MainActivity::class.java).apply {
@@ -350,6 +357,54 @@ object Notifier {
         // Israrcı: zil sesi ve titreşim bildirim kapanana kadar tekrar eder.
         notification.flags = notification.flags or android.app.Notification.FLAG_INSISTENT
         return runCatching { NotificationManagerCompat.from(context).notify(CALL_NOTIFICATION_ID, notification) }.isSuccess
+    }
+
+    /** Arama ekranını açan istek (tam ekran bildirimi ve doğrudan açılış için). */
+    fun incomingIntent(context: Context): PendingIntent = PendingIntent.getActivity(
+        context, CALL_NOTIFICATION_ID + 9,
+        Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(EXTRA_INCOMING_CALL, true)
+        },
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
+
+    /** Tam ekran arama izni (Android 14+ kullanıcı onayı ister). */
+    fun canFullScreen(context: Context): Boolean =
+        Build.VERSION.SDK_INT < 34 || context.getSystemService(NotificationManager::class.java)?.canUseFullScreenIntent() != false
+
+    /** Cevapsız arama bildirimi: "Geri ara" doğrudan arar, "Mesaj" sohbeti açar. */
+    fun showMissedCall(context: Context, peerId: String, name: String, video: Boolean, roomId: String?) {
+        if (!canNotify(context)) return
+        val id = MISSED_NOTIFICATION_BASE + (peerId.hashCode() and 0xfff)
+        val callBack = PendingIntent.getActivity(
+            context, id,
+            Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                putExtra(EXTRA_CALL_BACK, peerId)
+                putExtra(EXTRA_CALL_BACK_NAME, name)
+                putExtra(EXTRA_CALL_BACK_VIDEO, video)
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val shown = name.ifBlank { "Tayfa" }
+        val builder = NotificationCompat.Builder(context, CH_MESSAGES)
+            .setSmallIcon(R.drawable.ic_stat_tayfa)
+            .setContentTitle(if (video) com.bayx.chat.t("Cevapsız görüntülü arama") else com.bayx.chat.t("Cevapsız sesli arama"))
+            .setContentText(shown)
+            .setCategory(NotificationCompat.CATEGORY_MISSED_CALL)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setWhen(System.currentTimeMillis())
+            .setShowWhen(true)
+            .setContentIntent(openIntent(context, roomId, id + 1))
+            .addAction(R.drawable.ic_stat_tayfa, com.bayx.chat.t("Geri ara"), callBack)
+        if (roomId != null) builder.addAction(R.drawable.ic_stat_tayfa, com.bayx.chat.t("Mesaj"), openIntent(context, roomId, id + 2))
+        runCatching { NotificationManagerCompat.from(context).notify(id, builder.build()) }
+    }
+
+    fun cancelMissed(context: Context, peerId: String) {
+        runCatching { NotificationManagerCompat.from(context).cancel(MISSED_NOTIFICATION_BASE + (peerId.hashCode() and 0xfff)) }
     }
 
     /** Görüşme sürerken (CallService) gösterilen sessiz bildirim; "Kapat" ile görüşme biter. */

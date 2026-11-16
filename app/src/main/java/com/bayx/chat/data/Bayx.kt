@@ -152,6 +152,9 @@ object Bayx {
     /** Şu an karşı tarafın yazdığı sohbetler (listede "yazıyor…" göstermek için; açık sohbetlerde). */
     val typingRooms = MutableStateFlow<Set<String>>(emptySet())
 
+    /** Cevapsız aramadaki "Geri ara": (kişi, ad, görüntülü mü). */
+    val pendingCall = MutableStateFlow<Triple<String, String, Boolean>?>(null)
+
     /** Davet linkinden ya da QR'dan gelen kullanıcı adı. */
     val pendingInvite = MutableStateFlow<String?>(null)
 

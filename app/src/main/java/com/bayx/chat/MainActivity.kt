@@ -95,6 +95,20 @@ class MainActivity : FragmentActivity() {
 
     private fun handleIntent(intent: Intent?) {
         intent?.getStringExtra("tayfa_open")?.let { Bayx.pendingOpen.value = it }
+        // Gelen arama: ekranı aç ve kilit ekranının üstünde göster (arama ekranı hemen görünsün).
+        if (intent?.getBooleanExtra(Notifier.EXTRA_INCOMING_CALL, false) == true || intent?.hasExtra(Notifier.EXTRA_ACCEPT_CALL) == true) {
+            intent.removeExtra(Notifier.EXTRA_INCOMING_CALL)
+            showOverLockScreen()
+            com.bayx.chat.data.Calls.ensurePolling()
+        }
+        // Cevapsız aramadaki "Geri ara": doğrudan arama başlar.
+        intent?.getStringExtra(Notifier.EXTRA_CALL_BACK)?.let { peer ->
+            val name = intent.getStringExtra(Notifier.EXTRA_CALL_BACK_NAME).orEmpty()
+            val video = intent.getBooleanExtra(Notifier.EXTRA_CALL_BACK_VIDEO, false)
+            intent.removeExtra(Notifier.EXTRA_CALL_BACK)
+            Notifier.cancelMissed(this, peer)
+            Bayx.pendingCall.value = Triple(peer, name, video)
+        }
         // Arama bildirimindeki "Cevapla": arama ekranı açılınca izinleri alıp hemen cevaplar.
         intent?.getStringExtra(Notifier.EXTRA_ACCEPT_CALL)?.let {
             intent.removeExtra(Notifier.EXTRA_ACCEPT_CALL)
@@ -116,6 +130,18 @@ class MainActivity : FragmentActivity() {
         val roomId = intent?.getStringExtra(Notifier.EXTRA_ROOM_ID) ?: return
         intent.removeExtra(Notifier.EXTRA_ROOM_ID)
         Bayx.pendingRoom.value = roomId
+    }
+
+    private fun showOverLockScreen() {
+        if (Build.VERSION.SDK_INT >= 27) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        } else {
+            @Suppress("DEPRECATION")
+            window.addFlags(
+                android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON,
+            )
+        }
     }
 
     override fun onStart() {
@@ -282,6 +308,18 @@ private fun MainNav(me: AuthState.LoggedIn) {
         Bayx.pendingRoom.value = null
         nav.navigate("chat/" + Uri.encode(roomId)) { launchSingleTop = true }
     }
+    // Cevapsız aramadan "Geri ara": izinleri al, doğrudan ara.
+    val pendingCall by Bayx.pendingCall.collectAsState()
+    val callToast = rememberToast()
+    val askCall = rememberCallPermissions { callToast(t("Arama için mikrofon (ve görüntülü aramada kamera) izni gerekli.")) }
+    LaunchedEffect(pendingCall) {
+        val (peer, name, video) = pendingCall ?: return@LaunchedEffect
+        Bayx.pendingCall.value = null
+        askCall(video) { com.bayx.chat.data.Calls.startCall(peer, name, video) }
+    }
+    // Gelen aramaların tam ekran açılması için gereken izinler (bir kez sorulur).
+    CallPermissionsPrompt()
+
     // Davet linki ya da QR ile gelen kişi: kim olduğunu göster, tek dokunuşla sohbet aç.
     val pendingInvite by Bayx.pendingInvite.collectAsState()
     pendingInvite?.let { name ->

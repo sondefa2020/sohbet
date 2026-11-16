@@ -1,4 +1,3 @@
-Yanıtlarda alıntı: yanıt verilen mesaj artık balonun üstünde görünür; dokununca o mesaja gider.
-Profil fotoğrafı kırpma: yakınlaştır, ortala, döndür. Fotoğraflar artık yan dönmüyor.
-Kişi kartı: fotoğrafa dokununca tam ekran; ortak medya, sesli mesaj ve bağlantı özeti; yıldızlı mesaj sayısı.
-Güvenlik iyileştirmeleri.
+Gelen arama artık tam ekran açılıyor: telefon kilitliyken de, başka uygulamadayken de. İlk açılışta istenen izni ver.
+Cevapsız arama bildirimi: "Geri ara" doğrudan arar, "Mesaj" sohbeti açar.
+Aramalar listesindeki telefon/kamera simgesi doğrudan arar.

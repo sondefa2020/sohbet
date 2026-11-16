@@ -862,6 +862,11 @@ object Calls {
     private fun end(reason: String?, notify: Boolean = true) {
         val current = state.value ?: return
         if (current.phase == CallPhase.ENDED) return
+        // Cevaplanmadan biten gelen arama (biz reddetmediysek): WhatsApp gibi "Cevapsız arama" bildirimi.
+        if (!current.fromMe && current.phase == CallPhase.INCOMING && reason != null) {
+            val roomId = runCatching { Bayx.rooms.value.firstOrNull { it.isDirect && it.dmUserId == current.peerId }?.id }.getOrNull()
+            runCatching { Notifier.showMissedCall(app, current.peerId, current.peerName, current.video, roomId) }
+        }
         if (notify) send("hangup", current.peerId, current.callId)
         runCatching {
             CallLog.record(
@@ -1035,6 +1040,24 @@ object Calls {
         Notifier.cancelCall(app)
         val shown = !foreground && Notifier.showIncomingCall(app, name, video, from, callId)
         if (!shown) startRinging()
+        // Telefon açık ve uygulama arka plandaysa Android yalnızca küçük bir bildirim gösterir.
+        // "Diğer uygulamaların üzerinde göster" izni verildiyse arama ekranı doğrudan tam ekran açılır.
+        if (!foreground) openCallScreen()
+    }
+
+    /** Arama ekranını öne getirir (izin varsa arka plandan da). */
+    fun openCallScreen() {
+        val canOverlay = android.os.Build.VERSION.SDK_INT < 23 || android.provider.Settings.canDrawOverlays(app)
+        if (!canOverlay) return
+        runCatching {
+            app.startActivity(
+                android.content.Intent(app, com.bayx.chat.MainActivity::class.java).apply {
+                    flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                        android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                    putExtra(Notifier.EXTRA_INCOMING_CALL, true)
+                },
+            )
+        }
     }
 
     private fun startRinging() {
