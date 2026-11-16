@@ -629,8 +629,7 @@ def contact_find(headers, body):
         _number_lookups.fail(me)
         phone = telefon.normalize(text)
         if phone:
-            with GIRIS.lock:
-                uid = _phones().get(phone)
+            uid = _uid_for_phone(phone)
     if uid is None:
         if not USERNAME_RE.match(raw):
             if _looks_like_phone(text):
@@ -1813,6 +1812,22 @@ def phone_of(uid):
         return _phone_of_user().get(uid)
 
 
+def _uid_for_phone(phone):
+    """Numaranın sahibi. Ana tablo eksik kalmışsa (eski bir yeniden başlatma kaybı) diğer iki
+    tablodan bulup ana tabloyu onarır; böylece kayıtlı kişi "Tayfa'da değil" görünmez."""
+    with GIRIS.lock:
+        uid = _phones().get(phone)
+        if uid:
+            return uid
+        uid = _phone_hashes().get(telefon.contact_hash(phone))
+        if not uid:
+            uid = next((u for u, p in _phone_of_user().items() if p == phone), None)
+        if not uid or _phone_of_user().get(uid, phone) != phone:
+            return None
+    _bind_phone(uid, phone)
+    return uid
+
+
 def _bind_phone(uid, phone):
     with GIRIS.lock:
         old = _phone_of_user().get(uid)
@@ -2015,7 +2030,7 @@ def set_admin(who, on=True):
     if _looks_like_phone(who):
         phone = telefon.normalize(who)
         with GIRIS.lock:
-            uid = _phones().get(phone) if phone else None
+            uid = _uid_for_phone(phone) if phone else None
     if uid is None:
         raw = who.lower().lstrip("@").split(":")[0]
         if USERNAME_RE.match(raw) and active_user(resolve_username(raw)) is not None:

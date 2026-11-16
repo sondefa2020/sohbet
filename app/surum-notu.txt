@@ -1,4 +1,2 @@
-Durum paylaşırken "Paylaş" tuşu artık üstte de var; klavye açıkken de görünür.
-Arama ekranına modern, hareketli renkli arka plan ve çalarken avatarın etrafında nabız halkaları.
-Kullanıcı adını bir kez seçtiysen artık bir daha "seç" diye sorulmaz.
-Üye sınırı kaldırıldı.
+Numara ile sohbet: telefonun klavyesi artık uygulamanın tuş takımının üstüne açılmıyor.
+Numara ile arama: kayıtlı kişi bulunamıyorsa sunucu kaydı kendiliğinden onarıyor; bağlantı hatası artık "Tayfa'da değil" diye gösterilmiyor, "Tekrar dene" çıkıyor.

@@ -126,6 +126,7 @@ fun CountryPhoneField(
     digits: String,
     onDigits: (String) -> Unit,
     check: Phones.Check,
+    ownKeypad: Boolean = false,
 ) {
     var picking by remember { mutableStateOf(false) }
     val country = remember(region) { Phones.country(region) }
@@ -166,6 +167,8 @@ fun CountryPhoneField(
                 onDigits(clean)
             },
             singleLine = true,
+            // Ekranın kendi tuş takımı varsa telefonun klavyesi açılmasın (üst üste binmesin).
+            readOnly = ownKeypad,
             placeholder = { Text(Phones.example(region), color = Muted, maxLines = 1, softWrap = false, overflow = androidx.compose.ui.text.style.TextOverflow.Clip) },
             textStyle = androidx.compose.ui.text.TextStyle(fontSize = 17.sp, color = Ink),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),

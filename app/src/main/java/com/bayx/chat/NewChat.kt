@@ -60,6 +60,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bayx.chat.data.Api
+import com.bayx.chat.data.ApiException
 import com.bayx.chat.data.Bayx
 import com.bayx.chat.data.ContactsRepo
 import com.bayx.chat.data.PhonebookRepo
@@ -241,20 +242,28 @@ fun DialpadScreen(onBack: () -> Unit, onOpenChat: (String) -> Unit) {
     var result by remember { mutableStateOf<Api.ContactFind?>(null) }
     var looking by remember { mutableStateOf(false) }
     var notFound by remember { mutableStateOf(false) }
+    var lookupError by remember { mutableStateOf<String?>(null) }
+    var retry by remember { mutableStateOf(0) }
     val check = Phones.check(region, digits)
     val askCallPermissions = rememberCallPermissions { toast(t("Arama için mikrofon (ve görüntülü aramada kamera) izni gerekli.")) }
     val small = LocalConfiguration.current.screenHeightDp < 700
 
     // Numara tamamlanınca kendiliğinden Tayfa'da ara.
-    LaunchedEffect(check) {
+    LaunchedEffect(check, retry) {
         result = null
         notFound = false
+        lookupError = null
         val valid = check as? Phones.Check.Valid ?: return@LaunchedEffect
         delay(350)
         looking = true
-        val hit = ContactsRepo.findUser(valid.e164)
+        // Bağlantı hatası "Tayfa'da değil" diye gösterilmesin; ayrı söylenir ve tekrar denenebilir.
+        val token = Bayx.accessToken
+        val outcome = runCatching { if (token == null) error("oturum") else Api.contactFind(token, valid.e164) }
         looking = false
-        if (hit?.found == true) result = hit else notFound = true
+        outcome.onSuccess { hit -> if (hit.found) result = hit else notFound = true }
+        outcome.onFailure { e ->
+            lookupError = (e as? ApiException)?.message?.takeIf { it.isNotBlank() } ?: t("Bağlantı kurulamadı.")
+        }
     }
 
     fun open(userId: String, then: (String) -> Unit) {
@@ -270,7 +279,7 @@ fun DialpadScreen(onBack: () -> Unit, onOpenChat: (String) -> Unit) {
             Text(t("Numara ile sohbet"), color = Ink, fontSize = 20.sp, fontWeight = FontWeight.Bold)
         }
         Column(Modifier.padding(horizontal = 16.dp)) {
-            CountryPhoneField(region = region, onRegion = { region = it }, digits = digits, onDigits = { digits = it }, check = check)
+            CountryPhoneField(region = region, onRegion = { region = it }, digits = digits, onDigits = { digits = it }, check = check, ownKeypad = true)
             Spacer(Modifier.height(10.dp))
             // Sonuç kartı
             Box(Modifier.fillMaxWidth().height(if (small) 76.dp else 92.dp), contentAlignment = Alignment.Center) {
@@ -287,6 +296,13 @@ fun DialpadScreen(onBack: () -> Unit, onOpenChat: (String) -> Unit) {
                             Text(r.displayName, color = Ink, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(t("Tayfa'da"), color = Color(0xFF1E8E4E), fontSize = 13.sp)
                         }
+                    }
+                    lookupError != null -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(lookupError.orEmpty(), color = Muted, fontSize = 14.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                        Text(
+                            t("Tekrar dene"), color = Blue, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(top = 4.dp).clip(RoundedCornerShape(10.dp)).clickable { retry++ }.padding(8.dp),
+                        )
                     }
                     notFound -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(t("Bu numara Tayfa'da değil."), color = Muted, fontSize = 14.sp)
