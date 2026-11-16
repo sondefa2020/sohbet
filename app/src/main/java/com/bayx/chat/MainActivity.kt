@@ -450,6 +450,9 @@ private fun MainNav(me: AuthState.LoggedIn) {
                 )
             }
         }
+        composable("starred") {
+            StarredScreen(onBack = { nav.popBackStack() }, onOpenChat = { roomId -> nav.navigate("chat/" + Uri.encode(roomId)) })
+        }
         composable("comfort") {
             ComfortScreen(onBack = { nav.popBackStack() })
         }
@@ -470,6 +473,7 @@ private fun MainNav(me: AuthState.LoggedIn) {
                     onPhone = { nav.navigate("phonelink") { launchSingleTop = true } },
                     onComfort = { nav.navigate("comfort") },
                     onEditProfile = { nav.navigate("editprofile") },
+                    onStarred = { nav.navigate("starred") },
                 )
             }
         }

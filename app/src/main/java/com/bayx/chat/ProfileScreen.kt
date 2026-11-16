@@ -1,6 +1,7 @@
 package com.bayx.chat
 
 import androidx.compose.material.icons.outlined.AlternateEmail
+import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material.icons.outlined.Accessibility
 import androidx.compose.material.icons.outlined.PhonelinkSetup
 import androidx.compose.material.icons.outlined.Backup
@@ -137,6 +138,7 @@ fun ProfileScreen(
     onPhone: () -> Unit = {},
     onComfort: () -> Unit = {},
     onEditProfile: () -> Unit = {},
+    onStarred: () -> Unit = {},
 ) {
     var confirmLogout by remember { mutableStateOf(false) }
     var langPick by remember { mutableStateOf(false) }
@@ -329,6 +331,8 @@ fun ProfileScreen(
                 SettingRow(Icons.Outlined.PhonelinkSetup, t("Yeni telefona aktar")) { showTransfer = true }
                 HorizontalDivider(color = Line)
                 SettingRow(Icons.Outlined.Accessibility, t("Kolaylıklar")) { onComfort() }
+                HorizontalDivider(color = Line)
+                SettingRow(Icons.Outlined.StarOutline, t("Yıldızlı mesajlar")) { onStarred() }
                 HorizontalDivider(color = Line)
                 SettingRow(Icons.Outlined.Lock, t("Gizlilik ve Güvenlik")) {
                     info = t("Mesajların uçtan uca şifrelidir. Bu cihazdaki oturum ve sohbet verileri şifreli saklanır; gelen fotoğraf, video ve sesler galeriye kaydedilmez. Çıkış yaptığında bu cihazdaki her şey silinir.")

@@ -78,6 +78,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.outlined.Archive
+import androidx.compose.ui.text.withStyle
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.MarkChatUnread
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.outlined.EditNote
@@ -355,6 +358,7 @@ fun ChatListScreen(
     var query by remember { mutableStateOf("") }
     var searching by remember { mutableStateOf(false) }
     var scanQr by remember { mutableStateOf(false) }
+    var deleteRoom by remember { mutableStateOf<ChatSummary?>(null) }
     // Mesaj istekleri (tanımadığın kişilerden) listede değil, ayrı bir şeritte durur.
     val requests = allRooms.filter { it.request }
     val rooms = allRooms.filter { !it.secret && !it.request }.filter {
@@ -707,6 +711,21 @@ fun ChatListScreen(
         )
     }
 
+    deleteRoom?.let { chat ->
+        AlertDialog(
+            onDismissRequest = { deleteRoom = null },
+            title = { Text(tf("%s sohbeti silinsin mi?", chat.name)) },
+            text = { Text(t("Sohbet bu listeden kaldırılır. Karşı taraftaki mesajlar silinmez."), color = Muted) },
+            confirmButton = {
+                TextButton(onClick = {
+                    deleteRoom = null
+                    scope.launch { if (!Bayx.deleteChat(chat.id)) toast(t("İşlem yapılamadı. Tekrar dene.")) }
+                }) { Text(t("Sil"), color = Color(0xFFB4232A)) }
+            },
+            dismissButton = { TextButton(onClick = { deleteRoom = null }) { Text(t("Vazgeç")) } },
+        )
+    }
+
     if (scanQr) {
         ScanQrDialog(onDismiss = { scanQr = false }) { text ->
             scanQr = false
@@ -729,6 +748,12 @@ fun ChatListScreen(
                 actionRoom = null
             },
             onInfo = chat.dmUserId?.takeIf { chat.isDirect }?.let { uid -> { actionRoom = null; onPerson(uid) } },
+            unread = chat.unread > 0,
+            onToggleUnread = {
+                actionRoom = null
+                scope.launch { Bayx.setMarkedUnread(chat.id, chat.unread == 0) }
+            },
+            onDelete = { actionRoom = null; deleteRoom = chat },
         )
     }
 
@@ -756,6 +781,9 @@ private fun ChatActionSheet(
     onArchive: () -> Unit,
     onLock: () -> Unit = {},
     onInfo: (() -> Unit)? = null,
+    unread: Boolean = false,
+    onToggleUnread: (() -> Unit)? = null,
+    onDelete: (() -> Unit)? = null,
 ) {
     androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss, containerColor = CardBg) {
         Column(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
@@ -782,6 +810,8 @@ private fun ChatActionSheet(
                 if (flags.locked) t("Sohbet kilidini kaldır") else t("Sohbeti kilitle"), onLock,
             )
             if (onInfo != null) SheetAction(Icons.Outlined.Info, t("Kişi bilgisi"), onInfo)
+            if (onToggleUnread != null) SheetAction(Icons.Outlined.MarkChatUnread, if (unread) t("Okundu olarak işaretle") else t("Okunmadı olarak işaretle"), onToggleUnread)
+            if (onDelete != null) SheetAction(Icons.Outlined.Delete, t("Sohbeti sil"), onDelete)
         }
     }
 }
@@ -1173,14 +1203,30 @@ private fun ChatRow(
             }
             Spacer(Modifier.height(4.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    chat.lastMessage.ifEmpty { t("Uçtan uca şifreli sohbet") },
-                    modifier = Modifier.weight(1f),
-                    color = Muted,
-                    fontSize = 15.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                val drafts by com.bayx.chat.data.Drafts.map.collectAsState()
+                val typingNow by com.bayx.chat.data.Bayx.typingRooms.collectAsState()
+                val draftText = drafts[chat.id]
+                when {
+                    typingNow.contains(chat.id) -> Text(
+                        t("yazıyor…"), modifier = Modifier.weight(1f), color = Color(0xFF1E8E4E),
+                        fontSize = 15.sp, maxLines = 1, fontWeight = FontWeight.SemiBold,
+                    )
+                    !draftText.isNullOrBlank() -> Text(
+                        androidx.compose.ui.text.buildAnnotatedString {
+                            withStyle(androidx.compose.ui.text.SpanStyle(color = Color(0xFF1E8E4E), fontWeight = FontWeight.SemiBold)) { append(t("Taslak") + ": ") }
+                            append(draftText)
+                        },
+                        modifier = Modifier.weight(1f), color = Muted, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                    else -> Text(
+                        chat.lastMessage.ifEmpty { t("Uçtan uca şifreli sohbet") },
+                        modifier = Modifier.weight(1f),
+                        color = Muted,
+                        fontSize = 15.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 if (chat.unread > 0) {
                     Spacer(Modifier.width(8.dp))
                     Box(

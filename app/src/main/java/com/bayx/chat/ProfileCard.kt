@@ -88,6 +88,7 @@ fun PersonCardScreen(userId: String, onBack: () -> Unit, onOpenChat: (String) ->
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var confirmBlock by remember { mutableStateOf(false) }
+    var editNote by remember { mutableStateOf(false) }
     val flags by ChatPrefs.state.collectAsState()
     val presences by PresenceRepo.presences.collectAsState()
     val askCallPermissions = rememberCallPermissions { toast(t("Arama için mikrofon (ve görüntülü aramada kamera) izni gerekli.")) }
@@ -190,6 +191,17 @@ fun PersonCardScreen(userId: String, onBack: () -> Unit, onOpenChat: (String) ->
                 }
             }
 
+            // Kişiye özel not: yalnızca sen görürsün.
+            val notes by com.bayx.chat.data.ContactNotes.map.collectAsState()
+            val note = notes[userId].orEmpty()
+            Spacer(Modifier.height(12.dp))
+            SoftCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.fillMaxWidth().clickable { editNote = true }.padding(horizontal = 18.dp, vertical = 12.dp)) {
+                    Text(t("Not (yalnızca sen görürsün)"), color = Muted, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Text(note.ifBlank { t("Bu kişi hakkında kendine bir not ekle…") }, color = if (note.isBlank()) Muted else Ink, fontSize = 15.sp, lineHeight = 21.sp)
+                }
+            }
+
             if (roomId != null) {
                 Spacer(Modifier.height(12.dp))
                 SoftCard(Modifier.fillMaxWidth()) {
@@ -234,6 +246,17 @@ fun PersonCardScreen(userId: String, onBack: () -> Unit, onOpenChat: (String) ->
         }
     }
 
+    if (editNote) {
+        TextInputDialog(
+            title = t("Kişiye özel not"),
+            initial = com.bayx.chat.data.ContactNotes.map.value[userId].orEmpty(),
+            maxLength = 300,
+            onDismiss = { editNote = false },
+        ) { value ->
+            editNote = false
+            com.bayx.chat.data.ContactNotes.set(userId, value)
+        }
+    }
     if (confirmBlock && c != null) {
         AlertDialog(
             onDismissRequest = { confirmBlock = false },

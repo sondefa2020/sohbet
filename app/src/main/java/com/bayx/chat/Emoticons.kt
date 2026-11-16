@@ -36,6 +36,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.Placeholder
 import androidx.compose.ui.text.PlaceholderVerticalAlign
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -104,9 +105,38 @@ fun singleEmoticon(text: String): Emo? {
 
 /** İfade kodlarını satır içinde hareketli ifadelere çeviren metin. */
 @Composable
-fun EmoticonText(text: String, color: Color, fontSize: TextUnit, modifier: Modifier = Modifier) {
+fun EmoticonText(text: String, color: Color, fontSize: TextUnit, modifier: Modifier = Modifier, links: Boolean = false) {
     val parts = remember(text) { tokenize(text) }
     if (parts.none { it is Emo }) {
+        if (links && LINK_RE.containsMatchIn(text)) {
+            // Bağlantılar, telefon numaraları ve e-postalar dokunulabilir.
+            val linkColor = androidx.compose.ui.graphics.Color(0xFF2D7FD6)
+            val annotated = remember(text) {
+                buildAnnotatedString {
+                    var last = 0
+                    LINK_RE.findAll(text).forEach { m ->
+                        append(text.substring(last, m.range.first))
+                        val raw = m.value
+                        val url = when {
+                            raw.contains("@") && !raw.startsWith("http") -> "mailto:$raw"
+                            raw.first().isDigit() || raw.startsWith("+") -> "tel:" + raw.filter { it.isDigit() || it == '+' }
+                            raw.startsWith("http") -> raw
+                            else -> "https://$raw"
+                        }
+                        withLink(
+                            androidx.compose.ui.text.LinkAnnotation.Url(
+                                url,
+                                androidx.compose.ui.text.TextLinkStyles(androidx.compose.ui.text.SpanStyle(color = linkColor, textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline)),
+                            ),
+                        ) { append(raw) }
+                        last = m.range.last + 1
+                    }
+                    append(text.substring(last))
+                }
+            }
+            Text(annotated, color = color, fontSize = fontSize, modifier = modifier)
+            return
+        }
         Text(text, color = color, fontSize = fontSize, modifier = modifier)
         return
     }
@@ -127,6 +157,11 @@ fun EmoticonText(text: String, color: Color, fontSize: TextUnit, modifier: Modif
     }
     Text(annotated, color = color, fontSize = fontSize, inlineContent = inline, modifier = modifier)
 }
+
+/** Bağlantı, e-posta ve telefon numarası. */
+private val LINK_RE = Regex(
+    """(https?://[^\s]+|www\.[^\s]+|[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}|\+?\d[\d ]{8,15}\d)""",
+)
 
 @Composable
 fun Emoticon(emo: Emo, modifier: Modifier = Modifier, size: Dp? = null) {

@@ -147,6 +147,9 @@ object Bayx {
     /** Bildirime dokunularak açılması istenen sohbet. */
     val pendingRoom = MutableStateFlow<String?>(null)
     val pendingOpen = MutableStateFlow<String?>(null)
+    /** Şu an karşı tarafın yazdığı sohbetler (listede "yazıyor…" göstermek için; açık sohbetlerde). */
+    val typingRooms = MutableStateFlow<Set<String>>(emptySet())
+
     /** Davet linkinden ya da QR'dan gelen kullanıcı adı. */
     val pendingInvite = MutableStateFlow<String?>(null)
 
@@ -372,6 +375,7 @@ object Bayx {
             runCatching { appContext.getSharedPreferences(name, android.content.Context.MODE_PRIVATE).edit().clear().apply() }
         }
         runCatching { Timed.jobs.value.forEach { Timed.cancel(it.id) } }
+        runCatching { Starred.clear(); Drafts.clear(); ContactNotes.clear() }
         runCatching { syncService?.close() }
         runCatching { client?.close() }
         roomListResult = null
@@ -573,7 +577,7 @@ object Bayx {
             name = PhonebookRepo.nameFor(partner) ?: info.displayName?.takeIf { it.isNotBlank() } ?: "Sohbet",
             lastMessage = text,
             time = time,
-            unread = info.numUnreadMessages.toInt(),
+            unread = info.numUnreadMessages.toInt().let { if (it == 0 && info.isMarkedUnread) 1 else it },
             isDirect = direct,
             lastFromMe = fromMe,
             secret = secretLifetime(info.topic) != null,
@@ -640,6 +644,7 @@ object Bayx {
         runCatching {
             val info = room.roomInfo()
             session.title.value = info.displayName.orEmpty()
+            session.pinned.value = info.pinnedEventIds
             session.isDirect = looksDirect(info)
             val lifetime = secretLifetime(info.topic)
             if (lifetime != null) {
@@ -679,6 +684,8 @@ object Bayx {
                     session.typing.value = typingUserIds.filter { it != me }.map { uid ->
                         presenceName(uid)
                     }
+                    val others = typingUserIds.any { it != me }
+                    typingRooms.value = if (others) typingRooms.value + session.roomId else typingRooms.value - session.roomId
                 }
             })
         }.getOrNull()
@@ -691,7 +698,7 @@ object Bayx {
             }
         })
         scope.launch { runCatching { timeline.paginateBackwards(40.toUShort()) } }
-        scope.launch { runCatching { timeline.markAsRead(ReceiptType.READ) } }
+        scope.launch { runCatching { timeline.markAsRead(receiptType()) } }
         session
     }
 
@@ -730,7 +737,7 @@ object Bayx {
         }
         session.messages.value = mapped
         val timeline = session.timeline
-        if (timeline != null) scope.launch { runCatching { timeline.markAsRead(ReceiptType.READ) } }
+        if (timeline != null) scope.launch { runCatching { timeline.markAsRead(receiptType()) } }
     }
 
     private fun toMessage(item: TimelineItem): ChatMessage? {
@@ -1032,6 +1039,42 @@ object Bayx {
         val ok = runCatching { timeline.send(messageEventContentFromMarkdown(text)) }.isSuccess
         if (ok && text != NUDGE_BODY && !text.startsWith(EFFECT_MARK)) Sounds.play(Sounds.Kind.OUTGOING)
         ok
+    }
+
+    /** Okundu bilgisi kapalıysa okuma yalnızca bende işaretlenir, karşı tarafa gitmez. */
+    private fun receiptType(): ReceiptType = if (Comfort.readReceipts.value) ReceiptType.READ else ReceiptType.READ_PRIVATE
+
+    /** Sohbeti "okunmadı" olarak işaretle / işareti kaldır (WhatsApp gibi, tüm cihazlarda). */
+    suspend fun setMarkedUnread(roomId: String, value: Boolean): Boolean = withContext(Dispatchers.IO) {
+        val c = client ?: return@withContext false
+        runCatching { c.getRoom(roomId)?.setUnreadFlag(value) }.isSuccess
+    }
+
+    /** Sohbeti sil: odadan çıkar, listeden kaldırır. */
+    suspend fun deleteChat(roomId: String): Boolean = withContext(Dispatchers.IO) {
+        val c = client ?: return@withContext false
+        runCatching { c.getRoom(roomId)?.leave() }.isSuccess.also { if (it) Drafts.set(roomId, "") }
+    }
+
+    /** Mesajı sohbetin üstüne sabitle / kaldır (tüm üyeler görür). */
+    suspend fun setPinned(session: ChatSession, msg: ChatMessage, pin: Boolean): Boolean = withContext(Dispatchers.IO) {
+        val timeline = session.timeline ?: return@withContext false
+        val id = (msg.eventId as? EventOrTransactionId.EventId)?.eventId ?: return@withContext false
+        val ok = runCatching { if (pin) timeline.pinEvent(id) else timeline.unpinEvent(id) }.getOrDefault(false)
+        if (ok) session.pinned.value = if (pin) (listOf(id) + session.pinned.value).distinct() else session.pinned.value - id
+        ok
+    }
+
+    /** Sohbeti metin olarak dışa aktar (yüklü mesajlar). */
+    fun exportText(session: ChatSession): String = buildString {
+        val fmt = java.text.SimpleDateFormat("dd.MM.yyyy HH:mm", java.util.Locale.getDefault())
+        appendLine("Tayfa · " + session.title.value)
+        appendLine()
+        session.messages.value.filter { it.kind != MsgKind.DATE }.forEach { m ->
+            val who = if (m.mine) "Ben" else m.sender
+            val body = m.text.ifBlank { if (m.media != null) "<medya>" else "" }
+            appendLine("[" + fmt.format(java.util.Date(m.time)) + "] " + who + ": " + body)
+        }
     }
 
     /** Kendi sunucu kullanıcı adım (ör. @t252cddb103:alan -> t252cddb103). */

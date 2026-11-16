@@ -28,6 +28,13 @@ import androidx.compose.ui.graphics.Brush
 import com.bayx.chat.data.Gate
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Alarm
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.material.icons.outlined.PushPin
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.StarOutline
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.runtime.LaunchedEffect
@@ -135,6 +142,7 @@ internal fun MessageRow(
     onLongPress: (ChatMessage) -> Unit = {},
     onReact: (ChatMessage, String) -> Unit = { _, _ -> },
     onVote: (PollInfo, String) -> Unit = { _, _ -> },
+    onSwipeReply: (ChatMessage) -> Unit = {},
 ) {
     if (msg.kind == MsgKind.EFFECT) {
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -196,7 +204,36 @@ internal fun MessageRow(
     val fg = Ink
     val sub = if (msg.mine) (if (ThemeState.dark) Color(0xFFC2A68C) else Color(0xFF8A7460)) else Muted
     val visual = msg.kind == MsgKind.IMAGE || msg.kind == MsgKind.VIDEO
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = if (msg.mine) Arrangement.End else Arrangement.Start) {
+    // Sağa kaydırınca yanıtla (WhatsApp gibi).
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val trigger = with(density) { 64.dp.toPx() }
+    var dragX by remember(msg.key) { mutableStateOf(0f) }
+    val shownX by androidx.compose.animation.core.animateFloatAsState(dragX, label = "kaydir")
+    val starredList by com.bayx.chat.data.Starred.items.collectAsState()
+    val starred = starredList.any { it.key == msg.key }
+    Box(Modifier.fillMaxWidth()) {
+        if (shownX > 8f) {
+            Icon(
+                Icons.AutoMirrored.Outlined.Reply, null, tint = Blue.copy(alpha = (shownX / trigger).coerceIn(0f, 1f)),
+                modifier = Modifier.align(Alignment.CenterStart).padding(start = 4.dp).size(24.dp),
+            )
+        }
+    Row(
+        Modifier.fillMaxWidth()
+            .graphicsLayer { translationX = shownX }
+            .then(
+                if (msg.eventId != null) Modifier.pointerInput(msg.key) {
+                    detectHorizontalDragGestures(
+                        onDragEnd = { if (dragX >= trigger) onSwipeReply(msg); dragX = 0f },
+                        onDragCancel = { dragX = 0f },
+                    ) { change, amount ->
+                        val next = (dragX + amount).coerceIn(0f, trigger * 1.25f)
+                        if (next != dragX) { dragX = next; change.consume() }
+                    }
+                } else Modifier,
+            ),
+        horizontalArrangement = if (msg.mine) Arrangement.End else Arrangement.Start,
+    ) {
         Surface(
             shape = shape,
             color = if (msg.mine) Color.Transparent else CardBg,
@@ -206,7 +243,12 @@ internal fun MessageRow(
                 .then(if (msg.mine) Modifier.shadow(3.dp, shape, ambientColor = SoftShadow, spotColor = SoftShadow) else Modifier)
                 .clip(shape)
                 .then(if (msg.mine) Modifier.background(PeachBrush) else Modifier)
-                .combinedClickable(onClick = {}, onLongClick = { onLongPress(msg) }),
+                .combinedClickable(
+                    onClick = {},
+                    onLongClick = { onLongPress(msg) },
+                    // Çift dokun: kalp bırak.
+                    onDoubleClick = if (msg.eventId != null) ({ onReact(msg, "❤️") }) else null,
+                ),
         ) {
             Column(
                 Modifier.padding(horizontal = if (visual) 6.dp else 16.dp, vertical = if (visual) 6.dp else 10.dp),
@@ -229,7 +271,7 @@ internal fun MessageRow(
                     if (big != null) {
                         Emoticon(big, size = 64.dp)
                     } else {
-                        EmoticonText(msg.text, color = fg, fontSize = 16.sp)
+                        EmoticonText(msg.text, color = fg, fontSize = 16.sp, links = true)
                     }
                 } else {
                     MediaContent(msg, tint = fg, onOpen = onOpen)
@@ -239,6 +281,10 @@ internal fun MessageRow(
                     Modifier.align(Alignment.End).padding(horizontal = if (visual) 8.dp else 0.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    if (starred) {
+                        Icon(Icons.Filled.Star, t("Yıldızlı"), tint = sub, modifier = Modifier.size(13.dp))
+                        Spacer(Modifier.width(3.dp))
+                    }
                     Text(formatClock(msg.time), color = sub, fontSize = 12.sp)
                     val stateIcon = when (msg.state) {
                         MsgState.SENDING -> Icons.Outlined.Schedule to t("Gönderiliyor")
@@ -259,6 +305,7 @@ internal fun MessageRow(
                 }
             }
         }
+    }
     }
     if (msg.reactions.isNotEmpty()) {
         Row(
@@ -376,6 +423,12 @@ internal fun MessageActionSheet(
     onDismiss: () -> Unit,
     onReact: (String) -> Unit = {},
     onRemind: (() -> Unit)? = null,
+    onCopy: (() -> Unit)? = null,
+    onStar: (() -> Unit)? = null,
+    starred: Boolean = false,
+    onPin: (() -> Unit)? = null,
+    pinned: Boolean = false,
+    onInfo: (() -> Unit)? = null,
 ) {
     androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss, containerColor = CardBg) {
         Column(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
@@ -399,9 +452,13 @@ internal fun MessageActionSheet(
             }
             ActionRow(Icons.AutoMirrored.Outlined.Reply, t("Yanıtla"), onReply)
             if (msg.kind == MsgKind.TEXT) ActionRow(Icons.AutoMirrored.Outlined.Send, t("İlet"), onForward)
+            if (onCopy != null && msg.text.isNotBlank()) ActionRow(Icons.Outlined.ContentCopy, t("Kopyala"), onCopy)
+            if (onStar != null) ActionRow(if (starred) Icons.Outlined.StarOutline else Icons.Filled.Star, if (starred) t("Yıldızı kaldır") else t("Yıldızla"), onStar)
+            if (onPin != null && msg.eventId != null) ActionRow(Icons.Outlined.PushPin, if (pinned) t("Sabitlemeyi kaldır") else t("Sabitle"), onPin)
             if (onRemind != null) ActionRow(Icons.Outlined.Alarm, t("Hatırlat"), onRemind)
+            if (onInfo != null && msg.mine) ActionRow(Icons.Outlined.Info, t("Bilgi"), onInfo)
             if (canEdit) ActionRow(Icons.Outlined.Edit, t("Düzenle"), onEdit)
-            if (canDelete) ActionRow(Icons.Outlined.Delete, "Sil", onDelete, tint = Color(0xFFB4232A))
+            if (canDelete) ActionRow(Icons.Outlined.Delete, t("Sil"), onDelete, tint = Color(0xFFB4232A))
         }
     }
 }

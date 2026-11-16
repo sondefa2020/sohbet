@@ -87,6 +87,8 @@ class ChatSession internal constructor(val roomId: String) {
     val title = MutableStateFlow("")
     @Volatile var isDirect: Boolean = true
     val dmUserId = MutableStateFlow<String?>(null)
+    /** Sohbete sabitlenmiş mesajların kimlikleri (en yenisi başta). */
+    val pinned = MutableStateFlow<List<String>>(emptyList())
     /** Şu an yazmakta olan diğer üyelerin adları. */
     val typing = MutableStateFlow<List<String>>(emptyList())
     /** Gizli sohbet mi; öyleyse mesajların kaybolma süresi (ms). */

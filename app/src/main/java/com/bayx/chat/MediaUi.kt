@@ -65,6 +65,11 @@ internal object VoicePlayer {
         private set
     private var player: MediaPlayer? = null
 
+    /** Çalarken hızı değiştir. */
+    fun applySpeed(speed: Float) {
+        runCatching { player?.let { it.playbackParams = it.playbackParams.setSpeed(speed) } }
+    }
+
     fun stop() {
         runCatching { player?.release() }
         player = null
@@ -81,7 +86,11 @@ internal object VoicePlayer {
                 stop()
                 true
             }
-            p.setOnPreparedListener { it.start() }
+            p.setOnPreparedListener {
+                // Sesli mesaj hızı (1x / 1.5x / 2x)
+                runCatching { it.playbackParams = it.playbackParams.setSpeed(com.bayx.chat.data.Comfort.voiceSpeed.value) }
+                it.start()
+            }
             p.prepareAsync()
             player = p
             playingKey = key
@@ -236,6 +245,20 @@ internal fun MediaContent(msg: ChatMessage, tint: Color, onOpen: (ChatMessage) -
                     )
                     // Sesli mesajı yazıya çevir (yalnızca sesli mesajlarda, müzikte değil).
                     if (title == null) TranscribeLine(msg.key, media, tint)
+                    // Çalarken hız düğmesi (WhatsApp gibi 1x → 1.5x → 2x)
+                    if (title == null && VoicePlayer.playingKey == msg.key) {
+                        val speed by com.bayx.chat.data.Comfort.voiceSpeed.collectAsState()
+                        Text(
+                            (if (speed % 1f == 0f) speed.toInt().toString() else speed.toString()) + "×",
+                            color = tint, fontSize = 12.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                            modifier = Modifier.padding(top = 4.dp).clip(RoundedCornerShape(10.dp)).background(tint.copy(alpha = 0.12f))
+                                .clickable {
+                                    val next = when (speed) { 1f -> 1.5f; 1.5f -> 2f; else -> 1f }
+                                    com.bayx.chat.data.Comfort.setVoiceSpeed(next)
+                                    VoicePlayer.applySpeed(next)
+                                }.padding(horizontal = 8.dp, vertical = 2.dp),
+                        )
+                    }
                 }
                 Spacer(Modifier.width(8.dp))
             }

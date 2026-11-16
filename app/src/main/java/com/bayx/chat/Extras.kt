@@ -261,6 +261,8 @@ fun ComfortScreen(onBack: () -> Unit) {
     val jobs by Timed.jobs.collectAsState()
     var editReply by remember { mutableStateOf<Int?>(null) }
     var callReport by remember { mutableStateOf<String?>(null) }
+    val readReceipts by Comfort.readReceipts.collectAsState()
+    val undoSend by Comfort.undoSend.collectAsState()
     var callTesting by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { ReachRepo.refresh(force = true) }
 
@@ -316,6 +318,24 @@ fun ComfortScreen(onBack: () -> Unit) {
                             }
                         }
                     }
+                }
+            }
+
+            // ---- Gizlilik ve mesajlaşma
+            ComfortTitle(t("Mesajlaşma"))
+            SoftCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) {
+                    ToggleLine(
+                        t("Okundu bilgisi"),
+                        t("Kapatırsan karşı taraf mesajını okuduğunu görmez (mavi tik gitmez)."),
+                        readReceipts,
+                    ) { com.bayx.chat.data.Comfort.setReadReceipts(it) }
+                    HorizontalDivider(color = Line)
+                    ToggleLine(
+                        t("Gönderimi geri al"),
+                        t("Gönder'e bastıktan sonra 4 saniye içinde \"Geri al\" diyebilirsin."),
+                        undoSend,
+                    ) { com.bayx.chat.data.Comfort.setUndoSend(it) }
                 }
             }
 
@@ -679,5 +699,50 @@ internal fun TranscribeLine(key: String, media: MediaRef, tint: Color) {
                 }
             }.padding(vertical = 2.dp),
         )
+    }
+}
+
+
+@Composable
+private fun ToggleLine(title: String, subtitle: String, value: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable { onChange(!value) }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, color = Ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Text(subtitle, color = Muted, fontSize = 13.sp, lineHeight = 18.sp)
+        }
+        Spacer(Modifier.width(10.dp))
+        Switch(checked = value, onCheckedChange = onChange)
+    }
+}
+
+/** Yıldızlı mesajlar: işaretlediğin önemli mesajlar; dokununca sohbet açılır. */
+@Composable
+fun StarredScreen(onBack: () -> Unit, onOpenChat: (String) -> Unit) {
+    BackHandler(onBack = onBack)
+    val items by com.bayx.chat.data.Starred.items.collectAsState()
+    Column(Modifier.fillMaxSize().background(PageBrush).systemBarsPadding()) {
+        Row(Modifier.fillMaxWidth().padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, t("Geri"), tint = Ink) }
+            Text(t("Yıldızlı mesajlar"), color = Ink, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        }
+        if (items.isEmpty()) {
+            Text(
+                t("Henüz yıldızlı mesaj yok. Bir mesaja basılı tutup \"Yıldızla\" diyerek önemli mesajlarını burada toplayabilirsin."),
+                color = Muted, fontSize = 15.sp, lineHeight = 22.sp, textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(32.dp),
+            )
+        }
+        androidx.compose.foundation.lazy.LazyColumn {
+            items(items.size) { i ->
+                val it = items[i]
+                Column(
+                    Modifier.fillMaxWidth().clickable { onOpenChat(it.roomId) }.padding(horizontal = 18.dp, vertical = 12.dp),
+                ) {
+                    Text(it.sender + " · " + it.roomName + " · " + whenLabel(it.time), color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(it.text, color = Ink, fontSize = 15.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                }
+                HorizontalDivider(color = Line, modifier = Modifier.padding(horizontal = 18.dp))
+            }
+        }
     }
 }

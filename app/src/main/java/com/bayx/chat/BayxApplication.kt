@@ -22,6 +22,9 @@ class BayxApplication : Application() {
         com.bayx.chat.data.Comfort.init(this)
         com.bayx.chat.data.ReachRepo.init(this)
         com.bayx.chat.data.Timed.init(this)
+        com.bayx.chat.data.Starred.init(this)
+        com.bayx.chat.data.Drafts.init(this)
+        com.bayx.chat.data.ContactNotes.init(this)
         ThemeState.init(this)
         L.init(this)
     }

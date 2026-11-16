@@ -23,6 +23,15 @@ object Comfort {
 
     val quickReplies = MutableStateFlow(DEFAULT_REPLIES)
 
+    /** Okundu bilgisi: kapalıysa karşı taraf mesajını okuduğunu görmez (WhatsApp'taki mavi tik ayarı). */
+    val readReceipts = MutableStateFlow(true)
+
+    /** Gönderimi geri al: mesaj 4 saniye bekler, bu sürede "Geri al" ile vazgeçilebilir. */
+    val undoSend = MutableStateFlow(false)
+
+    /** Sesli mesaj oynatma hızı (1, 1.5, 2). */
+    val voiceSpeed = MutableStateFlow(1f)
+
     fun init(context: Context) {
         if (::app.isInitialized) return
         app = context.applicationContext
@@ -31,6 +40,9 @@ object Comfort {
         quietFrom.value = p.getInt("sessiz_bas", 23 * 60)
         quietTo.value = p.getInt("sessiz_bit", 7 * 60)
         textScale.value = p.getFloat("yazi", 1f)
+        readReceipts.value = p.getBoolean("okundu", true)
+        undoSend.value = p.getBoolean("geri_al", false)
+        voiceSpeed.value = p.getFloat("ses_hiz", 1f)
         quickReplies.value = p.getString("hazir", null)?.split("\n")?.map { it.trim() }?.filter { it.isNotEmpty() }?.take(5)
             ?.ifEmpty { null } ?: DEFAULT_REPLIES
     }
@@ -43,6 +55,10 @@ object Comfort {
         quietTo.value = to
         prefs().edit().putBoolean("sessiz", enabled).putInt("sessiz_bas", from).putInt("sessiz_bit", to).apply()
     }
+
+    fun setReadReceipts(on: Boolean) { readReceipts.value = on; prefs().edit().putBoolean("okundu", on).apply() }
+    fun setUndoSend(on: Boolean) { undoSend.value = on; prefs().edit().putBoolean("geri_al", on).apply() }
+    fun setVoiceSpeed(v: Float) { voiceSpeed.value = v; prefs().edit().putFloat("ses_hiz", v).apply() }
 
     fun setTextScale(scale: Float) {
         textScale.value = scale

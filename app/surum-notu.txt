@@ -1,2 +1,3 @@
-Küçük ekranlı telefonlarda arayüz artık orantılı: yazılar taşmıyor, alt menü kesilmiyor, satırlar iki satıra bölünmüyor.
-Telefonun yazı boyutu çok büyük ayarlıysa uygulama içinde dengeli tutulur (Kolaylıklar > Yazı boyutu ile yine büyütebilirsin).
+Telefon numarası ve kullanıcı adı artık güncellemelerden sonra kaybolmuyor.
+WhatsApp özellikleri: kaydırarak yanıtla, çift dokununca kalp, yıldızlı mesajlar, mesaj sabitleme, mesaj bilgisi, kopyala, taslaklar, okunmadı olarak işaretle, sohbeti sil, sohbeti dışa aktar, okundu bilgisini kapatma, sesli mesajı 1.5x/2x dinleme, tıklanabilir bağlantı ve numaralar.
+Ek olarak: gönderimi geri al, kişiye özel not, tanımadığın kişiler için güvenlik uyarısı.
