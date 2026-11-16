@@ -193,6 +193,25 @@ else
     KAYIT_EXEC="/usr/bin/python3 /opt/bayx/kayit.py"
 fi
 
+# Sesli mesajı yazıya çevirme (isteğe bağlı): ses yalnızca bu sunucuda işlenir, saklanmaz.
+# Model bir kez indirilir (~500 MB). Kurulamazsa uygulamada "henüz hazır değil" yazar; başka hiçbir şey etkilenmez.
+WHISPER_OK="kapalı"
+if [ "$FASTAPI_OK" = 1 ]; then
+    if "$VENV/bin/pip" install -q --upgrade "faster-whisper==1.2.*" >/dev/null 2>&1; then
+        mkdir -p /var/lib/bayx/whisper /var/lib/bayx/hf
+        if HF_HOME=/var/lib/bayx/hf timeout 1800 "$VENV/bin/python" -c \
+            'from faster_whisper import WhisperModel; WhisperModel("small", device="cpu", compute_type="int8", download_root="/var/lib/bayx/whisper")' \
+            >/tmp/tayfa-whisper.log 2>&1; then
+            WHISPER_OK="evet"
+        else
+            WHISPER_OK="model indirilemedi (ayrıntı: /tmp/tayfa-whisper.log)"
+        fi
+        id bayx >/dev/null 2>&1 && chown -R bayx:bayx /var/lib/bayx/whisper /var/lib/bayx/hf 2>/dev/null || true
+    else
+        WHISPER_OK="paket kurulamadı"
+    fi
+fi
+
 json_field() { python3 -c 'import json,sys; print(json.load(sys.stdin).get(sys.argv[1],""))' "$1"; }
 
 if [ ! -s "$ENV_FILE" ]; then
@@ -459,6 +478,9 @@ ProtectHome=true
 PrivateTmp=true
 StateDirectory=bayx
 Environment=BAYX_STATE_DIR=/var/lib/bayx
+Environment=TAYFA_WHISPER_DIR=/var/lib/bayx/whisper
+Environment=HF_HOME=/var/lib/bayx/hf
+Environment=HF_HUB_OFFLINE=1
 
 [Install]
 WantedBy=multi-user.target
@@ -626,6 +648,26 @@ location = /bayx/call/ws {
     proxy_set_header X-Real-IP \$remote_addr;
     proxy_read_timeout 3600s;
     proxy_send_timeout 3600s;
+}
+location = /bayx/v4/transcribe {
+    # Sesli mesajı yazıya çevirme: ses dosyası için daha büyük gövde ve süre
+    proxy_pass http://127.0.0.1:8010;
+    proxy_http_version 1.1;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_read_timeout 180s;
+    client_max_body_size 12M;
+}
+location = /bayx/app/tayfa.apk {
+    # Uygulama güncellemesi: büyük dosya, doğrudan diskten
+    alias /var/lib/tayfa-apk/tayfa.apk;
+    default_type application/vnd.android.package-archive;
+    add_header Cache-Control "no-cache";
+}
+location ^~ /t/ {
+    # Davet linki sayfası
+    proxy_pass http://127.0.0.1:8010;
+    proxy_http_version 1.1;
+    proxy_set_header X-Real-IP \$remote_addr;
 }
 location ^~ /bayx/ {
     proxy_pass http://127.0.0.1:8010;
@@ -811,6 +853,7 @@ Veritabanı                             : $DB_KIND
 E-posta (doğrulama, şifre sıfırlama)   : $MAIL_OK
 SMS (telefonla kayıt)                  : $SMS_OK
 Uygulama güncellemesi (bu sunucudan)   : $APK_OK
+Sesli mesajı yazıya çevirme            : $WHISPER_OK
 $FIREWALL_NOTE
 $ADMIN_NOTE
 =====================================================

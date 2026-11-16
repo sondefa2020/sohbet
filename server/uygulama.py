@@ -10,6 +10,8 @@ dosya yazma) iş parçacığı havuzunda, arama sinyalleşmesi ise tamamen asenk
 import asyncio
 import json
 import os
+import tempfile
+import threading
 import re
 import time
 from contextlib import asynccontextmanager
@@ -256,6 +258,96 @@ async def username_check(request: Request):
 @app.post("/bayx/v4/username/set")
 async def username_set(request: Request):
     return reply(request, await sync(kayit.handle_set, request.headers, await body(request)))
+
+
+@app.get("/bayx/v4/privacy")
+async def privacy_get(request: Request):
+    return reply(request, await sync(kayit.privacy_get, request.headers))
+
+
+@app.post("/bayx/v4/privacy")
+async def privacy_set(request: Request):
+    return reply(request, await sync(kayit.privacy_set, request.headers, await body(request)))
+
+
+@app.get("/bayx/v4/privacy/allowed")
+async def privacy_allowed(request: Request):
+    return reply(request, await sync(kayit.reach_allowed, request.headers))
+
+
+@app.post("/bayx/v4/transfer/start")
+async def transfer_start(request: Request):
+    return reply(request, await sync(kayit.transfer_start, request.headers, await body(request)))
+
+
+@app.post("/bayx/v4/transfer/info")
+async def transfer_info(request: Request):
+    return reply(request, await sync(kayit.transfer_info, request.headers, await body(request)))
+
+
+@app.post("/bayx/v4/transfer/send")
+async def transfer_send(request: Request):
+    return reply(request, await sync(kayit.transfer_send, request.headers, await body(request)))
+
+
+@app.post("/bayx/v4/transfer/poll")
+async def transfer_poll(request: Request):
+    return reply(request, await sync(kayit.transfer_poll, request.headers, await body(request)))
+
+
+# ------------------------------------------------------------------ sesli mesajı yazıya çevirme
+# Ses yalnızca bu sunucuda, bellekte/geçici dosyada işlenir ve hemen silinir; hiçbir yere kaydedilmez.
+_whisper = {"model": None, "error": None}
+_whisper_lock = threading.Lock()
+_transcribe_slots = threading.BoundedSemaphore(int(os.environ.get("TAYFA_WHISPER_PARALEL", "1")))
+_transcribe_attempts = giris.Attempts(limit=60)
+
+
+def _whisper_model():
+    with _whisper_lock:
+        if _whisper["model"] is None and _whisper["error"] is None:
+            try:
+                from faster_whisper import WhisperModel
+
+                _whisper["model"] = WhisperModel(
+                    os.environ.get("TAYFA_WHISPER_MODEL", "small"),
+                    device="cpu",
+                    compute_type="int8",
+                    download_root=os.environ.get("TAYFA_WHISPER_DIR", "/var/lib/tayfa-whisper"),
+                )
+            except Exception as err:  # paket ya da model yoksa özellik kapalı sayılır
+                _whisper["error"] = repr(err)
+                print("yazıya çevirme kullanılamıyor: %r" % (err,), flush=True)
+        return _whisper["model"]
+
+
+def transcribe_audio(me, data):
+    if _transcribe_attempts.blocked(me):
+        raise ApiError(429, "COK_FAZLA_DENEME", "Çok fazla sesli mesaj çevirdin. Biraz sonra tekrar dene.")
+    _transcribe_attempts.fail(me)
+    model = _whisper_model()
+    if model is None:
+        raise ApiError(503, "CEVIRI_KAPALI", "Yazıya çevirme bu sunucuda henüz hazır değil.")
+    if not _transcribe_slots.acquire(timeout=60):
+        raise ApiError(503, "MESGUL", "Sunucu şu an meşgul. Biraz sonra tekrar dene.")
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".ses") as f:
+            f.write(data)
+            f.flush()
+            segments, info = model.transcribe(f.name, beam_size=1, vad_filter=True)
+            text = " ".join(seg.text.strip() for seg in segments).strip()
+        return {"text": text, "language": getattr(info, "language", "")}
+    finally:
+        _transcribe_slots.release()
+
+
+@app.post("/bayx/v4/transcribe")
+async def transcribe(request: Request):
+    me = await sync(kayit.member_from_token, request.headers)
+    data = await request.body()
+    if not data or len(data) > 12 * 1024 * 1024:
+        raise ApiError(400, "GECERSIZ_ISTEK", "Ses dosyası okunamadı.")
+    return reply(request, await sync(transcribe_audio, me, data))
 
 
 @app.post("/bayx/v4/contacts/match")
@@ -569,6 +661,45 @@ async def admin_action(request: Request, action: str):
 # ------------------------------------------------------------------ arama
 
 
+# ------------------------------------------------------------------ davet linki: https://alan/t/<kullanıcı adı>
+_INVITE_PAGE = """<!doctype html><html lang="tr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
+<title>Tayfa'da {name} ile konuş</title>
+<style>
+body{{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#f7f3ee;color:#1f1b18;display:flex;min-height:100vh;align-items:center;justify-content:center}}
+.k{{background:#fff;border-radius:24px;padding:32px 26px;max-width:380px;width:88%;text-align:center;box-shadow:0 10px 40px rgba(60,40,20,.08)}}
+.a{{width:84px;height:84px;border-radius:50%;background:#dff3e6;color:#1e6b3a;font-size:38px;font-weight:700;display:flex;align-items:center;justify-content:center;margin:0 auto 14px}}
+h1{{font-size:22px;margin:6px 0}} p{{color:#6b625a;line-height:1.5;font-size:15px}}
+a.b{{display:block;margin:12px 0;padding:15px;border-radius:16px;text-decoration:none;font-weight:700;font-size:16px}}
+.b1{{background:#c8956a;color:#1f1b18}} .b2{{background:#f1ebe4;color:#5a4636}}
+small{{color:#9a8f85;display:block;margin-top:14px;line-height:1.5}}
+</style></head><body><div class="k">
+<div class="a">{initial}</div><h1>{name}</h1><p>seni <b>Tayfa</b>'da sohbet etmeye davet ediyor.</p>
+<a class="b b1" href="tayfa://t/{handle}">Uygulamada aç</a>
+<a class="b b2" href="/bayx/app/tayfa.apk">Tayfa'yı indir (Android)</a>
+<small>Uygulamayı kurduktan sonra bu linke tekrar dokun; {name} ile sohbet doğrudan açılır.</small>
+</div></body></html>"""
+
+_INVITE_MISSING = """<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tayfa</title></head><body style="font-family:system-ui;background:#f7f3ee;text-align:center;padding:60px 20px">
+<h2>Bu davet linki geçerli değil</h2><p>Kişi kullanıcı adını değiştirmiş olabilir.</p>
+<p><a href="/bayx/app/tayfa.apk">Tayfa'yı indir</a></p></body></html>"""
+
+
+@app.get("/t/{name}")
+async def invite_page(name: str):
+    card = await sync(kayit.invite_card, name)
+    if not card:
+        return HTMLResponse(_INVITE_MISSING, status_code=404, headers={"Cache-Control": "no-store"})
+    import html as _h
+
+    shown = _h.escape(card["display_name"])
+    return HTMLResponse(
+        _INVITE_PAGE.format(name=shown, initial=_h.escape(card["display_name"][:1].upper() or "T"), handle=_h.escape(card["username"])),
+        headers={"Cache-Control": "no-store", "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer"},
+    )
+
+
 # ------------------------------------------------------------------ uygulama güncellemesi
 # En son APK sunucuda durur (tayfa-apk-guncelle indirir); telefonlar sürümü sorar ve buradan indirir.
 APK_DIR = os.environ.get("BAYX_APK_DIR", "/var/lib/tayfa-apk")
@@ -639,9 +770,9 @@ def validate_signal(caller, data):
 
 def deliver(caller, data):
     to, event = validate_signal(caller, data)
-    if event["type"] == "invite" and kayit.has_blocked(to, caller):
-        # Herkes herkesi arayabilir; yalnızca seni engelleyen kişiye arama gitmez.
-        raise ApiError(403, "ENGELLI", "Bu kişiye şu an ulaşılamıyor.")
+    if event["type"] == "invite" and not kayit.can_reach(caller, to):
+        # Engellendiysen ya da kişi yalnızca kişilerinden arama kabul ediyorsa arama gitmez.
+        raise ApiError(403, "ULASILAMIYOR", "Bu kişi şu an yalnızca kişilerinden arama kabul ediyor.")
     HUB.publish(to, event)
     if event["type"] == "invite":
         kayit.stat_inc("calls")

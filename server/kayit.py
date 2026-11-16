@@ -2095,3 +2095,142 @@ def admin_audit(headers):
     require_admin(headers)
     with GIRIS.lock:
         return {"entries": list(reversed(GIRIS.data.get("audit", [])[-300:]))}
+
+
+
+# ====================================================================== kimler ulaşabilir
+# "herkes": herkes arayabilir ve mesaj isteği gönderebilir (varsayılan).
+# "kisiler": yalnızca kişilerin (arkadaşların) ve numaralarını rehberine kaydettiğin kişiler arar;
+#            diğerlerinin mesajları uygulamada "Mesaj istekleri"ne düşer, bildirim çalmaz.
+REACH_VALUES = ("herkes", "kisiler")
+
+
+def _reach():
+    return GIRIS.data.setdefault("reach", {})
+
+
+def reach_of(uid):
+    with GIRIS.lock:
+        return _reach().get(uid, "herkes")
+
+
+def can_reach(caller, callee):
+    """caller, callee'ye ulaşabilir mi (arama için)?"""
+    if has_blocked(callee, caller):
+        return False
+    if reach_of(callee) == "herkes":
+        return True
+    return are_friends(callee, caller) or knows_number(callee, caller)
+
+
+def privacy_get(headers):
+    me = member_from_token(headers)
+    return {"reach": reach_of(me)}
+
+
+def privacy_set(headers, body):
+    me = member_from_token(headers)
+    value = str(body.get("reach") or "")
+    if value not in REACH_VALUES:
+        raise ApiError(400, "GECERSIZ_DEGER", "Geçersiz seçim.")
+    with GIRIS.lock:
+        if value == "herkes":
+            _reach().pop(me, None)
+        else:
+            _reach()[me] = value
+    GIRIS.save()
+    return {"ok": True, "reach": value}
+
+
+def reach_allowed(headers):
+    """Uygulamanın mesaj isteklerini ayırması için: bana ulaşabilen kişiler (arkadaşlar + rehberim)."""
+    me = member_from_token(headers)
+    with GIRIS.lock:
+        allowed = set(_crec(me)["friends"]) | set(_knows().get(me, []))
+    return {"reach": reach_of(me), "allowed": sorted(allowed)}
+
+
+# ====================================================================== yeni telefona taşıma
+# Yeni telefon bir anahtar çifti üretir ve açık anahtarını QR'da gösterir. Eski telefon QR'ı okutur,
+# yedek anahtarını bu açık anahtarla şifreleyip buraya bırakır; yeni telefon alır ve çözer.
+# Sunucu yalnızca şifreli veriyi birkaç dakika tutar, içeriği göremez. İki telefon da aynı hesapta olmalı.
+TRANSFER_SECONDS = 5 * 60
+_transfers = {}
+_transfer_lock = threading.Lock()
+
+
+def _transfer_gc(now):
+    for key in [k for k, v in _transfers.items() if v["expires"] < now]:
+        _transfers.pop(key, None)
+
+
+def transfer_start(headers, body):
+    me = member_from_token(headers)
+    pub = str(body.get("public_key") or "")
+    if not (40 <= len(pub) <= 300) or not re.fullmatch(r"[A-Za-z0-9+/=_-]+", pub):
+        raise ApiError(400, "GECERSIZ_ISTEK", "Geçersiz istek.")
+    now = time.time()
+    tid = secrets.token_urlsafe(18)
+    with _transfer_lock:
+        _transfer_gc(now)
+        if sum(1 for v in _transfers.values() if v["uid"] == me) >= 3:
+            raise ApiError(429, "COK_FAZLA_DENEME", "Çok fazla deneme. Biraz sonra tekrar dene.")
+        _transfers[tid] = {"uid": me, "pub": pub, "expires": now + TRANSFER_SECONDS, "payload": None}
+    return {"id": tid, "expires_in": TRANSFER_SECONDS}
+
+
+def transfer_info(headers, body):
+    """Eski telefon QR'ı okuttuktan sonra: aktarım bu hesaba mı ait, yeni telefonun açık anahtarı ne?"""
+    me = member_from_token(headers)
+    tid = str(body.get("id") or "")
+    with _transfer_lock:
+        _transfer_gc(time.time())
+        t = _transfers.get(tid)
+        if not t:
+            raise ApiError(404, "SURE_DOLDU", "Kodun süresi doldu. Yeni telefonda yeni kod al.")
+        if t["uid"] != me:
+            raise ApiError(403, "BASKA_HESAP", "Bu kod başka bir hesaba ait. İki telefonda da aynı numarayla giriş yapmalısın.")
+        return {"public_key": t["pub"]}
+
+
+def transfer_send(headers, body):
+    me = member_from_token(headers)
+    tid = str(body.get("id") or "")
+    payload = body.get("payload")
+    if not isinstance(payload, dict) or len(json.dumps(payload)) > 4000:
+        raise ApiError(400, "GECERSIZ_ISTEK", "Geçersiz istek.")
+    with _transfer_lock:
+        t = _transfers.get(tid)
+        if not t or t["expires"] < time.time():
+            raise ApiError(404, "SURE_DOLDU", "Kodun süresi doldu. Yeni telefonda yeni kod al.")
+        if t["uid"] != me:
+            raise ApiError(403, "BASKA_HESAP", "Bu kod başka bir hesaba ait.")
+        t["payload"] = payload
+    audit(me, "telefon-aktar", "")
+    return {"ok": True}
+
+
+def transfer_poll(headers, body):
+    me = member_from_token(headers)
+    tid = str(body.get("id") or "")
+    with _transfer_lock:
+        t = _transfers.get(tid)
+        if not t or t["expires"] < time.time() or t["uid"] != me:
+            return {"status": "gone"}
+        if t["payload"] is None:
+            return {"status": "pending"}
+        _transfers.pop(tid, None)  # bir kez verilir
+        return {"status": "ready", "payload": t["payload"]}
+
+
+# ====================================================================== davet sayfası
+def invite_card(name):
+    """Davet linki için herkese açık en az bilgi: yalnızca görünen ad (numara asla)."""
+    raw = name.strip().lower().lstrip("@")
+    if not USERNAME_RE.match(raw):
+        return None
+    uid = resolve_username(raw)
+    info = active_user(uid)
+    if info is None:
+        return None
+    return {"username": shown_username(uid), "display_name": info.get("displayname") or shown_username(uid)}
