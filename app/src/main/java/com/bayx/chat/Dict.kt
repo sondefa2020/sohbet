@@ -883,5 +883,14 @@ object Dict {
         "İzin ver" to ("Allow" to "السماح"),
         "İşlem yapılamadı. Tekrar dene." to ("Couldn't complete. Try again." to "تعذّر إتمام العملية. حاول مجددًا."),
         "Şu an konuşamıyorum, birazdan arayacağım." to ("Can't talk now, I'll call you soon." to "لا أستطيع التحدث الآن، سأتصل بك قريبًا."),
+        "Gönder…" to ("Send to…" to "إرسال إلى…"),
+        "Kişi ya da grup seç" to ("Choose a person or group" to "اختر شخصًا أو مجموعة"),
+        "%s seçildi" to ("%s selected" to "تم اختيار %s"),
+        "Son sohbetler" to ("Recent chats" to "المحادثات الأخيرة"),
+        "Sohbet" to ("Chat" to "محادثة"),
+        "Grup" to ("Group" to "مجموعة"),
+        "Gönderildi ✓" to ("Sent ✓" to "تم الإرسال ✓"),
+        "En fazla %s kişi ya da gruba aynı anda gönderebilirsin." to ("You can send to up to %s people or groups at once." to "يمكنك الإرسال إلى %s أشخاص أو مجموعات كحد أقصى في وقت واحد."),
+        "%s öğe gönderilemedi. Dosyalar en fazla 50 MB olabilir." to ("%s items couldn't be sent. Files can be up to 50 MB." to "تعذّر إرسال %s عناصر. الحد الأقصى للملف 50 ميغابايت."),
     )
 }

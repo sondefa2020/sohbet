@@ -1,7 +1,3 @@
-Kişi bilgisine dokununca uygulamanın kapanması düzeltildi.
-Rehberine kişi eklediğinde ya da numara düzelttiğinde Tayfa birkaç saniye içinde eşleştirir; o kişi hemen Kişiler'de, sohbette ve gruplarda rehberdeki adıyla görünür.
-Arama kutusuna telefon numarası yazınca kişi hemen çıkar; Tayfa'da değilse tek dokunuşla SMS daveti.
-Sohbet listesinde fotoğrafa, grup bilgisinde üyeye ve grup sohbetinde gönderenin adına dokununca kişi bilgisi açılır.
-Ayarlar → Hesabımı sil: hesabını kalıcı olarak silebilirsin.
-Uygulama beklenmedik şekilde kapanırsa bir sonraki açılışta hata raporunu paylaşabilirsin.
-Gizlilik politikası güncellendi; yeni metinler İngilizce ve Arapçaya çevrildi. Android 16 desteği.
+Tayfa artık telefonun "Paylaş" menüsünde: Galeri, Dosyalar, tarayıcı ya da başka bir uygulamadan fotoğraf, video, dosya, bağlantı veya yazıyı Tayfa'ya gönder.
+Paylaş menüsünün üst sırasında son konuştuğun kişiler ve gruplar doğrudan görünür; birine dokununca içerik hemen ona hazırlanır.
+Gönderme ekranında en fazla 5 kişi ya da grup seç, istersen açıklama ekle; Tayfa kullanan rehber kişilerin de listede.

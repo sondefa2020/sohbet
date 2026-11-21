@@ -1,6 +1,7 @@
 package com.bayx.chat
 
 import kotlinx.coroutines.launch
+import androidx.lifecycle.lifecycleScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.material3.TextButton
@@ -94,6 +95,13 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
+        // Başka uygulamadan "Paylaş → Tayfa": dosyaları kopyala, sohbet seçme ekranını aç.
+        if (com.bayx.chat.data.Share.isShare(intent)) {
+            val shared = Intent(intent)
+            intent?.action = Intent.ACTION_MAIN
+            lifecycleScope.launch { com.bayx.chat.data.Share.accept(this@MainActivity, shared) }
+            return
+        }
         intent?.getStringExtra("tayfa_open")?.let { Bayx.pendingOpen.value = it }
         // Gelen arama: ekranı aç ve kilit ekranının üstünde göster (arama ekranı hemen görünsün).
         if (intent?.getBooleanExtra(Notifier.EXTRA_INCOMING_CALL, false) == true || intent?.hasExtra(Notifier.EXTRA_ACCEPT_CALL) == true) {
@@ -313,6 +321,20 @@ private fun MainNav(me: AuthState.LoggedIn) {
         }
     }
 
+    // "Paylaş → Tayfa" ile gelen içerik: sohbet seçme ekranı.
+    val pendingShare by com.bayx.chat.data.Share.pending.collectAsState()
+    LaunchedEffect(pendingShare != null) {
+        if (pendingShare != null) nav.navigate("share") { launchSingleTop = true }
+    }
+    // Android paylaşım ekranında son sohbetler doğrudan hedef olarak çıksın.
+    val roomsForShare by Bayx.rooms.collectAsState()
+    LaunchedEffect(roomsForShare.map { it.id to it.name }.take(10)) {
+        kotlinx.coroutines.delay(1_500)
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            com.bayx.chat.data.Share.publishTargets(context, roomsForShare)
+        }
+    }
+
     // Bildirime dokunulduysa ilgili sohbeti aç.
     val pendingRoom by Bayx.pendingRoom.collectAsState()
     LaunchedEffect(pendingRoom) {
@@ -410,6 +432,17 @@ private fun MainNav(me: AuthState.LoggedIn) {
     NavHost(navController = nav, startDestination = "chats") {
         composable("phonelink") {
             PhoneAuthScreen(linkToken = Bayx.accessToken, onLinked = { nav.popBackStack() })
+        }
+        composable("share") {
+            ShareScreen(
+                onDone = { roomId ->
+                    if (roomId != null) {
+                        nav.navigate("chat/" + Uri.encode(roomId)) { popUpTo("share") { inclusive = true } }
+                    } else {
+                        nav.popBackStack()
+                    }
+                },
+            )
         }
         composable("chats") {
             ChatListScreen(
