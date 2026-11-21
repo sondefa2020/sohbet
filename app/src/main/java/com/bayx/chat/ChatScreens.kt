@@ -584,6 +584,7 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
                         scope.launch { if (!Bayx.votePoll(session, poll, answer)) toast(t("Oy verilemedi.")) }
                     },
                     onSwipeReply = { m -> replyTarget = m; editTarget = null },
+                    onSender = { uid -> onPerson(uid) },
                     onQuote = { target ->
                         val idx = shown.indexOfFirst { (it.eventId as? org.matrix.rustcomponents.sdk.EventOrTransactionId.EventId)?.eventId == target }
                         if (idx >= 0) scope.launch { listState.animateScrollToItem(idx) } else toast(t("Bu mesaj daha yukarıda; biraz kaydır."))

@@ -66,8 +66,22 @@ object Updater {
         !(context.getSystemService(ConnectivityManager::class.java)?.isActiveNetworkMetered ?: true)
     }.getOrDefault(false)
 
+    /**
+     * Uygulama Google Play'den kurulduysa (ya da Play sürümüyse) kendini güncellemez; güncellemeleri
+     * Play yapar. Play politikası mağaza dışından güncellemeye izin vermez.
+     */
+    fun managedByStore(context: Context): Boolean = runCatching {
+        val pm = context.packageManager
+        val installer = if (Build.VERSION.SDK_INT >= 30) pm.getInstallSourceInfo(context.packageName).installingPackageName
+            else @Suppress("DEPRECATION") pm.getInstallerPackageName(context.packageName)
+        val canInstall = pm.getPackageInfo(context.packageName, android.content.pm.PackageManager.GET_PERMISSIONS)
+            .requestedPermissions?.contains(android.Manifest.permission.REQUEST_INSTALL_PACKAGES) == true
+        installer == "com.android.vending" || !canInstall
+    }.getOrDefault(false)
+
     /** Sunucuya yeni sürüm var mı diye sorar. Wi-Fi'deyse kendiliğinden indirir. */
     suspend fun check(context: Context) = withContext(Dispatchers.IO) {
+        if (managedByStore(context)) return@withContext
         val current = state.value
         if (current is State.Downloading) return@withContext
         val info = runCatching { Api.appLatest() }.getOrNull()

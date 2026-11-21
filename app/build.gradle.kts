@@ -9,14 +9,14 @@ plugins {
 
 android {
     namespace = "com.bayx.chat"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.tayfa.chat"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 65
-        versionName = "0.65.0"
+        targetSdk = 36
+        versionCode = 66
+        versionName = "0.66.0"
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }
@@ -57,6 +57,14 @@ android {
             // Yayın (mağaza / müşteri) sürümü yalnızca sahibinin gizli anahtarıyla imzalanır.
             if (hasKeystore) signingConfig = signingConfigs.getByName("bayx")
             isMinifyEnabled = false
+        }
+        // Google Play sürümü: aynı uygulama, ama kendini güncellemez (güncellemeleri Play yapar) ve
+        // "uygulama yükleme" izni yoktur (src/play/AndroidManifest.xml). Play'e AAB olarak yüklenir:
+        // gradle :app:bundlePlay
+        create("play") {
+            initWith(getByName("release"))
+            if (hasKeystore) signingConfig = signingConfigs.getByName("bayx")
+            matchingFallbacks += listOf("release")
         }
     }
     compileOptions {

@@ -421,21 +421,30 @@ fun ChatListScreen(
     // Kullanıcı adı ya da telefon numarasıyla Tayfa'da arama (yazmayı bırakınca otomatik).
     var globalHit by remember { mutableStateOf<Api.ContactFind?>(null) }
     var globalByPhone by remember { mutableStateOf(false) }
+    // Numara aranırken durum: "aranıyor", "Tayfa'da değil" (davet et) ya da bağlantı hatası.
+    var globalLooking by remember { mutableStateOf(false) }
+    var globalMissPhone by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(query, tab) {
         globalHit = null
+        globalMissPhone = null
+        globalLooking = false
         val q = query.trim()
         val digits = q.filter { it.isDigit() }
         val phoneLike = digits.length >= 10 && q.all { it.isDigit() || it in "+ ()-." }
         val nameLike = !phoneLike && Regex("^@?[a-zA-Z0-9][a-zA-Z0-9._-]{2,19}$").matches(q)
         if (tab > 1 || (!phoneLike && !nameLike)) return@LaunchedEffect
-        kotlinx.coroutines.delay(700)
+        kotlinx.coroutines.delay(450)
         val key = if (phoneLike) {
             PhonebookRepo.normalize(q, PhonebookRepo.region(context))?.let { "+$it" } ?: return@LaunchedEffect
         } else q.lowercase().removePrefix("@")
+        globalLooking = true
         val hit = ContactsRepo.findUser(key)
+        globalLooking = false
         if (hit?.found == true && hit.userId != me.userId) {
             globalByPhone = phoneLike
             globalHit = hit
+        } else if (phoneLike && hit != null && !hit.found) {
+            globalMissPhone = key
         }
     }
 
@@ -518,7 +527,9 @@ fun ChatListScreen(
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when (tab) {
                     0 -> LazyColumn {
-                        globalHit?.let { hit -> item(key = "bul") { FoundUserRow(hit, globalByPhone, onMessage = { openDirectId(hit.userId); query = ""; searching = false }, onRequest = { sendRequest(hit.username); globalHit = null }) } }
+                        globalHit?.let { hit -> item(key = "bul") { FoundUserRow(hit, globalByPhone, onMessage = { openDirectId(hit.userId); query = ""; searching = false }, onRequest = { sendRequest(hit.username); globalHit = null }, onPerson = { onPerson(hit.userId) }) } }
+                        if (globalLooking) item(key = "bul-yukleniyor") { SearchLookingRow() }
+                        globalMissPhone?.let { phone -> item(key = "bul-yok") { SearchMissRow(phone) } }
                         if (query.isBlank() && requests.isNotEmpty()) {
                             item(key = "istekler") { MessageRequestsBar(requests) { id -> onOpenChat(id) } }
                         }
@@ -557,6 +568,7 @@ fun ChatListScreen(
                                     flags = chatFlags(chat.id),
                                     onClick = { onOpenChat(chat.id) },
                                     onLongClick = { actionRoom = chat },
+                                    onAvatar = chat.dmUserId?.takeIf { chat.isDirect }?.let { uid -> { onPerson(uid) } },
                                 )
                             }
                         }
@@ -565,7 +577,9 @@ fun ChatListScreen(
                         // WhatsApp mantığı: kişiler cihaz rehberinden gelir; yalnızca numarası kayıtlı olanlar.
                         val book = phonebook.filter { query.isBlank() || it.name.contains(query, true) || it.phone.contains(query.filter { c -> c.isDigit() }) }
                         LazyColumn {
-                            globalHit?.let { hit -> item(key = "bul") { FoundUserRow(hit, globalByPhone, onMessage = { openDirectId(hit.userId); query = ""; searching = false }, onRequest = { sendRequest(hit.username); globalHit = null }) } }
+                            globalHit?.let { hit -> item(key = "bul") { FoundUserRow(hit, globalByPhone, onMessage = { openDirectId(hit.userId); query = ""; searching = false }, onRequest = { sendRequest(hit.username); globalHit = null }, onPerson = { onPerson(hit.userId) }) } }
+                        if (globalLooking) item(key = "bul-yukleniyor") { SearchLookingRow() }
+                        globalMissPhone?.let { phone -> item(key = "bul-yok") { SearchMissRow(phone) } }
                             if (!contactsAllowed) {
                                 item {
                                     Column(
@@ -1124,14 +1138,15 @@ private fun RequestRow(member: Member, incoming: Boolean, onAccept: () -> Unit, 
 }
 
 @Composable
-private fun FoundUserRow(hit: Api.ContactFind, byPhone: Boolean, onMessage: () -> Unit, onRequest: () -> Unit) {
+private fun FoundUserRow(hit: Api.ContactFind, byPhone: Boolean, onMessage: () -> Unit, onRequest: () -> Unit, onPerson: () -> Unit = {}) {
     Column(Modifier.fillMaxWidth()) {
         Text(t("Tayfa'da bulundu"), color = Muted, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 20.dp, top = 4.dp))
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),
+            // Satıra dokununca sohbet, fotoğrafa dokununca kişi bilgisi açılır.
+            Modifier.fillMaxWidth().clickable(enabled = hit.relation != "blocked", onClick = onMessage).padding(horizontal = 20.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Avatar(hit.displayName, 52.dp)
+            Box(Modifier.clip(CircleShape).clickable(onClick = onPerson)) { Avatar(hit.displayName, 52.dp) }
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(hit.displayName, color = Ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
@@ -1142,6 +1157,32 @@ private fun FoundUserRow(hit: Api.ContactFind, byPhone: Boolean, onMessage: () -
                 else -> TextButton(onClick = onMessage) { Text(t("Mesaj"), fontWeight = FontWeight.SemiBold) }
             }
         }
+    }
+}
+
+@Composable
+private fun SearchLookingRow() {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+        CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(12.dp))
+        Text(t("Tayfa'da aranıyor…"), color = Muted, fontSize = 14.sp)
+    }
+}
+
+/** Yazılan numara Tayfa'da yok: tek dokunuşla SMS daveti. */
+@Composable
+private fun SearchMissRow(phone: String) {
+    val context = LocalContext.current
+    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(PhonebookRepo.pretty(phone), color = Ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Text(t("Bu numara Tayfa'da kayıtlı değil."), color = Muted, fontSize = 13.sp)
+        }
+        TextButton(onClick = {
+            val sms = android.content.Intent(android.content.Intent.ACTION_SENDTO, android.net.Uri.parse("smsto:" + phone))
+                .putExtra("sms_body", tf("Tayfa'da benimle konuş: %s", inviteLink(AccountCache.load(context).username.ifBlank { Bayx.myLocalpart() })))
+            runCatching { context.startActivity(sms) }
+        }) { Text(t("Davet et"), fontWeight = FontWeight.SemiBold) }
     }
 }
 
@@ -1170,6 +1211,7 @@ private fun ChatRow(
     flags: ChatFlags = ChatFlags(),
     onClick: () -> Unit,
     onLongClick: () -> Unit = {},
+    onAvatar: (() -> Unit)? = null,
 ) {
     Row(
         Modifier.fillMaxWidth()
@@ -1177,7 +1219,10 @@ private fun ChatRow(
             .padding(horizontal = 20.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Avatar(chat.name, 60.dp, url = chat.avatarUrl, mode = mode)
+        // Fotoğrafa dokununca kişi bilgisi açılır (WhatsApp gibi).
+        Box(Modifier.clip(CircleShape).then(if (onAvatar != null) Modifier.clickable(onClick = onAvatar) else Modifier)) {
+            Avatar(chat.name, 60.dp, url = chat.avatarUrl, mode = mode)
+        }
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {

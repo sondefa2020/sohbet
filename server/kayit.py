@@ -1467,6 +1467,41 @@ def admin_action(action, body, caller):
     return {"ok": True, "user_id": uid}
 
 
+def account_delete(headers, body):
+    """Kişi kendi hesabını kalıcı olarak siler (Google Play şartı). Matrix hesabı kapatılır ve
+    adı/fotoğrafı silinir; numara, kullanıcı adı, kişi listesi ve giriş kayıtları bu sunucudan
+    temizlenir. Numara ve kullanıcı adı sonra yeniden kullanılabilir. Geri alınamaz."""
+    me = member_from_token(headers)
+    if str((body or {}).get("confirm") or "") != "SIL":
+        raise ApiError(400, "ONAY_GEREKLI", "Silmek için onay gerekli.")
+    status, info = synapse("GET", "/_synapse/admin/v2/users/" + quote(me))
+    if status != 200 or info.get("deactivated"):
+        raise ApiError(404, "KULLANICI_YOK", "Hesap bulunamadı.")
+    if info.get("admin"):
+        raise ApiError(400, "YONETICI", "Yönetici hesabı uygulamadan silinemez. Önce başka bir yönetici ata.")
+    status, _ = synapse("POST", "/_synapse/admin/v1/deactivate/" + quote(me), {"erase": True})
+    if status != 200:
+        raise ApiError(502, "SUNUCU_HATASI", "Hesap şu an silinemedi. Biraz sonra tekrar dene.")
+    with GIRIS.lock:
+        phone = _phone_of_user().pop(me, None)
+        for table in (_phones(), _phone_hashes(), _handles()):
+            for k in [k for k, v in table.items() if v == me]:
+                del table[k]
+        _handle_of_user().pop(me, None)
+        if phone and _phones().get(phone) == me:
+            _phones().pop(phone, None)
+        GIRIS.save()
+    # Bu hesabın önbellekteki oturumları da hemen geçersiz olsun.
+    with _presence_lock:
+        for k in [k for k, v in _token_cache.items() if v[0] == me]:
+            del _token_cache[k]
+    GIRIS.forget_user(me)
+    EMAILS.remove(me)
+    contact_forget(me)
+    audit(me, "self-delete", me)
+    return {"ok": True}
+
+
 def create_invite(body, caller):
     try:
         uses = int(body.get("uses", 1))

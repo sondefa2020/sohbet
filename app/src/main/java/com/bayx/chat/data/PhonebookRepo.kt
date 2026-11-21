@@ -8,6 +8,9 @@ import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import org.json.JSONArray
 import org.json.JSONObject
 import java.security.MessageDigest
@@ -39,11 +42,20 @@ object PhonebookRepo {
 
     private val byUser = HashMap<String, Entry>()
 
+    /**
+     * Ekranların okuduğu kopya: Compose durumu olduğu için rehber değişince isimler, "rehberde kayıtlı"
+     * işaretleri ve bilinmeyen kişi uyarısı uygulamanın her yerinde anında yenilenir.
+     */
+    private var byUserState by androidx.compose.runtime.mutableStateOf<Map<String, Entry>>(emptyMap())
+    private var observer: android.database.ContentObserver? = null
+    private var pending: kotlinx.coroutines.Job? = null
+    private val bg = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
+
     fun hasPermission(context: Context) =
         ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
 
     /** Rehberdeki adı (yoksa null): sohbet listesinde ve sohbet başlığında kullanılır. */
-    fun nameFor(userId: String?): String? = userId?.let { synchronized(byUser) { byUser[it]?.name } }
+    fun nameFor(userId: String?): String? = userId?.let { byUserState[it]?.name }
 
     /** E.164 rakamlarını okunur yazar: 905441234567 -> +90 544 123 45 67 */
     fun pretty(digits: String): String = runCatching {
@@ -52,7 +64,7 @@ object PhonebookRepo {
     }.getOrDefault("+" + digits.trimStart('+'))
 
     /** Bu kişinin numarası rehberimde kayıtlı mı (arama/mesaj izni). */
-    fun isContact(userId: String?): Boolean = userId != null && synchronized(byUser) { byUser.containsKey(userId) }
+    fun isContact(userId: String?): Boolean = userId != null && byUserState.containsKey(userId)
 
     /** Seçilen ülke (giriş ekranında): rehberdeki ülke kodsuz numaralar bu ülkeye göre okunur. */
     fun region(context: Context): String =
@@ -77,8 +89,46 @@ object PhonebookRepo {
     /** Açılışta: önceki eşleşmeleri hemen göster, gerekiyorsa arka planda yenile. */
     suspend fun start(context: Context) {
         load(context)
+        watch(context.applicationContext)
         val last = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong("son", 0L)
         if (hasPermission(context) && System.currentTimeMillis() - last > SYNC_EVERY_MS) sync(context)
+    }
+
+    /**
+     * Telefonun rehberi değişince (kişi eklendi, numara düzeltildi) birkaç saniye içinde yeniden
+     * eşleştirir: yeni eklediğin kişi Tayfa kullanıyorsa hemen Kişiler'de ve sohbette görünür.
+     */
+    fun watch(context: Context) {
+        if (observer != null || !hasPermission(context)) return
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+        val obs = object : android.database.ContentObserver(handler) {
+            override fun onChange(selfChange: Boolean) = schedule(context, 2_500L)
+        }
+        runCatching {
+            context.contentResolver.registerContentObserver(
+                android.provider.ContactsContract.Contacts.CONTENT_URI, true, obs,
+            )
+            observer = obs
+        }
+    }
+
+    /** Uygulama öne gelince: rehber izni yeni verildiyse izlemeye başla, bir dakikadan eskiyse yenile. */
+    fun onForeground(context: Context) {
+        if (!hasPermission(context) || Bayx.accessToken == null) return
+        watch(context.applicationContext)
+        val last = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong("son", 0L)
+        if (System.currentTimeMillis() - last > 60_000L) schedule(context.applicationContext, 300L)
+    }
+
+    /** Kısa aralıkla gelen değişiklikleri tek eşleştirmede toplar. */
+    fun schedule(context: Context, delayMs: Long) {
+        pending?.cancel()
+        pending = bg.launch {
+            kotlinx.coroutines.delay(delayMs)
+            // Başka bir eşleştirme sürüyorsa bitmesini bekle; bu değişiklik kaçmasın.
+            while (syncing.value) kotlinx.coroutines.delay(800)
+            sync(context)
+        }
     }
 
     /** Son eşleştirmeden bu yana [olderThanMs] geçtiyse yeniler (ör. Kişiler sekmesi açılınca). */
@@ -139,6 +189,7 @@ object PhonebookRepo {
             byUser.clear()
             list.forEach { byUser[it.userId] = it }
         }
+        byUserState = list.associateBy { it.userId }
         entries.value = list
         runCatching { Bayx.refreshNames() }
     }
@@ -170,6 +221,7 @@ object PhonebookRepo {
     /** Oturum kapanınca: bu cihazdaki eşleşmeler silinir. */
     fun reset(context: Context) {
         synchronized(byUser) { byUser.clear() }
+        byUserState = emptyMap()
         entries.value = emptyList()
         notOnTayfa.value = 0
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().apply()

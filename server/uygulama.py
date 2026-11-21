@@ -138,7 +138,7 @@ async def options(request: Request, path: str):
 
 
 # Sunucunun hangi sürümü çalıştırdığını görmek için (https://.../bayx/health).
-SURUM = "2026.11.16-7"
+SURUM = "2026.11.21-1"
 
 
 @app.get("/bayx/health")
@@ -259,6 +259,11 @@ async def username_check(request: Request):
 @app.post("/bayx/v4/username/set")
 async def username_set(request: Request):
     return reply(request, await sync(kayit.handle_set, request.headers, await body(request)))
+
+
+@app.post("/bayx/v4/account/delete")
+async def account_delete(request: Request):
+    return reply(request, await sync(kayit.account_delete, request.headers, await body(request)))
 
 
 @app.post("/bayx/v4/profile/card")
@@ -725,6 +730,82 @@ _INVITE_MISSING = """<!doctype html><html lang="tr"><head><meta charset="utf-8">
 <title>Tayfa</title></head><body style="font-family:system-ui;background:#f7f3ee;text-align:center;padding:60px 20px">
 <h2>Bu davet linki geçerli değil</h2><p>Kişi kullanıcı adını değiştirmiş olabilir.</p>
 <p><a href="/bayx/app/tayfa.apk">Tayfa'yı indir</a></p></body></html>"""
+
+
+_GIZLILIK = """Tayfa Gizlilik Politikası
+
+Son güncelleme: Kasım 2026
+Veri sorumlusu: Acıoğlu Records (acioglu30@gmail.com)
+
+1. Hangi veriler işlenir
+- Telefon numaran (hesabını doğrulamak ve seni tanıyanların seni bulabilmesi için).
+- Kullanıcı adın, görünen adın, profil fotoğrafın ve "Hakkında" yazın.
+- Çevrimiçi durumun (gizlilik ayarlarından kapatabilirsin).
+- Bildirim gönderebilmek için cihazının bildirim anahtarı.
+- İsteğe bağlı verdiğin e-posta adresin (yalnızca hesap kurtarma için).
+
+2. Rehber
+Rehber izni verirsen, numaralar telefonundan çıkmadan önce tek yönlü özetlenir (hash) ve yalnızca bu özetler, hangi kişilerin Tayfa kullandığını bulmak için sunucuyla karşılaştırılır. Rehberin, isimler ya da numaralar sunucuda saklanmaz.
+
+3. Mesaj ve arama içeriği
+Mesajların, fotoğraf, video, sesli mesajların ve aramaların uçtan uca şifrelidir; sunucu ya da Acıoğlu Records bunları okuyamaz veya dinleyemez. Doğrudan bağlantı kurulamayan aramalarda şifreli ses/görüntü sunucumuz üzerinden aktarılır ama çözülemez. Gelen medya telefonun galerisine kaydedilmez.
+
+4. Sesli mesajı yazıya çevirme
+Bu özelliği kullandığında yalnızca seçtiğin sesli mesaj, yazıya çevrilmek için kendi sunucumuza gönderilir; işlem sunucumuzda yapılır, üçüncü bir tarafa gönderilmez ve ses kaydı saklanmaz.
+
+5. Bildirimler
+Anlık bildirim için Google Firebase Cloud Messaging kullanılır. Bildirime mesaj içeriği konmaz.
+
+6. Takip ve reklam
+Uygulama reklam, analiz ya da üçüncü taraf takip aracı kullanmaz. Uygulama çökerse, teknik hata özeti yalnızca senin telefonunda tutulur ve sen istersen paylaşırsın.
+
+7. Saklama ve silme
+Uygulamada Ayarlar → Hesabımı sil ile hesabını istediğin an kalıcı olarak silebilirsin: adın, fotoğrafın, kullanıcı adın, numara eşleşmen ve kişi listen sunucudan kaldırılır. Uygulamaya erişemiyorsan https://sohbet.acioglu.tr/bayx/hesap-sil adresindeki yolu izle. Çıkış yaptığında bu cihazdaki oturum, mesaj ve önbellek silinir.
+
+8. Haklarınız (KVKK)
+6698 sayılı KVKK kapsamında verilerine erişme, düzeltilmesini ya da silinmesini isteme hakların vardır. Başvuru: acioglu30@gmail.com
+
+9. Değişiklikler
+Bu politika güncellenebilir; önemli değişiklikler uygulamada duyurulur."""
+
+
+def _plain_page(title, text):
+    import html as _h
+    parts = []
+    for para in text.split("\n\n"):
+        lines = para.strip().split("\n")
+        if re.match(r"^\d+\. ", lines[0]):
+            parts.append("<h2>%s</h2>" % _h.escape(lines[0]))
+            lines = lines[1:]
+        if lines:
+            parts.append("<p>%s</p>" % "<br>".join(_h.escape(x) for x in lines))
+    body = "".join(parts)
+    return HTMLResponse(
+        "<!doctype html><html lang=tr><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
+        "<title>%s</title><style>body{font-family:system-ui,sans-serif;max-width:720px;margin:0 auto;padding:24px;"
+        "line-height:1.6;color:#2a1c10;background:#f8f4ef}h1{font-size:26px}h2{font-size:18px;margin-top:26px}</style>"
+        "<body><h1>%s</h1>%s</body></html>" % (_h.escape(title), _h.escape(title), body)
+    )
+
+
+@app.get("/bayx/gizlilik")
+async def gizlilik():
+    text = _GIZLILIK.split("\n", 1)[1].strip()
+    return _plain_page("Tayfa Gizlilik Politikası", text)
+
+
+@app.get("/bayx/hesap-sil")
+async def hesap_sil():
+    return _plain_page("Tayfa hesabını silme", """Tayfa hesabını uygulamadan kalıcı olarak silebilirsin:
+
+1. Uygulamada
+Tayfa'yı aç → Ayarlar → Hesabımı sil → onay kutusuna SİL yaz → Hesabı sil.
+
+2. Neler silinir
+Adın, profil fotoğrafın, "Hakkında" yazın, kullanıcı adın, telefon numarası eşleşmen, kişi listen ve giriş kayıtların hemen silinir; tüm gruplardan çıkarılırsın. Uçtan uca şifreli mesajların zaten sunucuda okunabilir değildir; hesap kapanınca bu hesaba bir daha erişilemez. Güvenlik kayıtlarında yalnızca "hesap silindi" bilgisi kalır.
+
+3. Uygulamaya erişemiyorsan
+Telefonunu kaybettiysen ya da uygulamayı açamıyorsan, kayıtlı telefon numaranı yazarak acioglu30@gmail.com adresine "Hesabımı silin" diye yaz. Numaranın sana ait olduğunu SMS koduyla doğruladıktan sonra hesabın en geç 7 gün içinde silinir.""")
 
 
 @app.get("/t/{name}")

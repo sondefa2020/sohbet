@@ -1,6 +1,7 @@
-Yeni arama ekranı: buzlu cam kontrol paneli, etiketli tuşlar, "Uçtan uca şifreli" etiketi ve canlı bağlantı kalitesi göstergesi; zayıf bağlantıda uyarı.
-Arama sürerken ekranı küçült: üstte yeşil şeritle uygulamada gezin, tek dokunuşla geri dön, şeritten sessize al ya da kapat.
-Gelen aramayı hazır mesajla reddet ("Müsait değilim…").
-Görüntülü aramada kendi görüntünü sürükle, dokununca büyük ekranla yer değiştir; kontroller dokunmayınca kendiliğinden gizlenir.
-Arama bitince süresi görünür ve "Tekrar ara" tuşu çıkar.
-Aramalar sekmesi yenilendi: arama kutusu, Yeni arama / Tuş takımı / Cevapsız kartları, sık arananlar, art arda aramalar tek satırda, konuşma süreleri, her satırda sesli ve görüntülü arama tuşu.
+Kişi bilgisine dokununca uygulamanın kapanması düzeltildi.
+Rehberine kişi eklediğinde ya da numara düzelttiğinde Tayfa birkaç saniye içinde eşleştirir; o kişi hemen Kişiler'de, sohbette ve gruplarda rehberdeki adıyla görünür.
+Arama kutusuna telefon numarası yazınca kişi hemen çıkar; Tayfa'da değilse tek dokunuşla SMS daveti.
+Sohbet listesinde fotoğrafa, grup bilgisinde üyeye ve grup sohbetinde gönderenin adına dokununca kişi bilgisi açılır.
+Ayarlar → Hesabımı sil: hesabını kalıcı olarak silebilirsin.
+Uygulama beklenmedik şekilde kapanırsa bir sonraki açılışta hata raporunu paylaşabilirsin.
+Gizlilik politikası güncellendi; yeni metinler İngilizce ve Arapçaya çevrildi. Android 16 desteği.

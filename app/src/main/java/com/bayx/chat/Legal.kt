@@ -38,29 +38,33 @@ Son güncelleme: Kasım 2026
 Veri sorumlusu: Acıoğlu Records (acioglu30@gmail.com)
 
 1. Hangi veriler işlenir
-- Kullanıcı adı ve görünen adın.
-- İsteğe bağlı verdiğin e-posta adresin (yalnızca şifre sıfırlama ve doğrulama için).
-- Çevrimiçi durumun ve durum mesajın.
+- Telefon numaran (hesabını doğrulamak ve seni tanıyanların seni bulabilmesi için).
+- Kullanıcı adın, görünen adın, profil fotoğrafın ve "Hakkında" yazın.
+- Çevrimiçi durumun (gizlilik ayarlarından kapatabilirsin).
 - Bildirim gönderebilmek için cihazının bildirim anahtarı.
+- İsteğe bağlı verdiğin e-posta adresin (yalnızca hesap kurtarma için).
 
-2. Mesaj içeriği
-Mesajların, fotoğraf, video ve sesli mesajların uçtan uca şifrelidir. Sunucu ya da Acıoğlu Records bu içerikleri okuyamaz. Gelen medya telefonun galerisine kaydedilmez; uygulamanın şifreli alanında tutulur ve çıkış yapınca silinir.
+2. Rehber
+Rehber izni verirsen, numaralar telefonundan çıkmadan önce tek yönlü özetlenir (hash) ve yalnızca bu özetler, hangi kişilerin Tayfa kullandığını bulmak için sunucuyla karşılaştırılır. Rehberin, isimler ya da numaralar sunucuda saklanmaz.
 
-3. Bildirimler
-Anlık bildirim için Google Firebase Cloud Messaging kullanılır. Bildirime mesaj içeriği konmaz; yalnızca "yeni mesaj var" uyarısı iletilir.
+3. Mesaj ve arama içeriği
+Mesajların, fotoğraf, video, sesli mesajların ve aramaların uçtan uca şifrelidir; sunucu ya da Acıoğlu Records bunları okuyamaz veya dinleyemez. Doğrudan bağlantı kurulamayan aramalarda şifreli ses/görüntü sunucumuz üzerinden aktarılır ama çözülemez. Gelen medya telefonun galerisine kaydedilmez.
 
-4. Çerez ve takip
-Uygulama reklam, analiz ya da üçüncü taraf takip aracı kullanmaz.
+4. Sesli mesajı yazıya çevirme
+Bu özelliği kullandığında yalnızca seçtiğin sesli mesaj, yazıya çevrilmek için kendi sunucumuza gönderilir; işlem sunucumuzda yapılır, üçüncü bir tarafa gönderilmez ve ses kaydı saklanmaz.
 
-5. E-posta
-E-posta vermek zorunlu değildir. Verirsen yalnızca hesap doğrulama ve şifre sıfırlama kodu göndermek için kullanılır; pazarlama amacıyla kullanılmaz.
+5. Bildirimler
+Anlık bildirim için Google Firebase Cloud Messaging kullanılır. Bildirime mesaj içeriği konmaz.
 
-6. Saklama ve silme
-Hesabın kapatıldığında ya da çıkış yaptığında bu cihazdaki oturum, mesaj ve önbellek silinir. Hesabının tümüyle silinmesini istersen yöneticiyle iletişime geç.
+6. Takip ve reklam
+Uygulama reklam, analiz ya da üçüncü taraf takip aracı kullanmaz. Uygulama çökerse, teknik hata özeti yalnızca senin telefonunda tutulur ve sen istersen paylaşırsın.
 
-7. Haklarınız (KVKK)
-6698 sayılı KVKK kapsamında; verilerine erişme, düzeltilmesini ya da silinmesini isteme hakların vardır. Başvuru için: acioglu30@gmail.com
+7. Saklama ve silme
+Uygulamada Ayarlar → Hesabımı sil ile hesabını istediğin an kalıcı olarak silebilirsin: adın, fotoğrafın, kullanıcı adın, numara eşleşmen ve kişi listen sunucudan kaldırılır. Uygulamaya erişemiyorsan https://sohbet.acioglu.tr/bayx/hesap-sil adresindeki yolu izle. Çıkış yaptığında bu cihazdaki oturum, mesaj ve önbellek silinir.
 
-8. Değişiklikler
+8. Haklarınız (KVKK)
+6698 sayılı KVKK kapsamında verilerine erişme, düzeltilmesini ya da silinmesini isteme hakların vardır. Başvuru: acioglu30@gmail.com
+
+9. Değişiklikler
 Bu politika güncellenebilir; önemli değişiklikler uygulamada duyurulur."""
 }

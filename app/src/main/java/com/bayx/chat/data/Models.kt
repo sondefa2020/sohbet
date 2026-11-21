@@ -81,6 +81,8 @@ data class ChatMessage(
     val poll: PollInfo? = null,
     /** Bu mesaj bir yanıtsa, yanıtlanan mesajın kısa bilgisi (alıntı olarak gösterilir). */
     val replyTo: ReplyRef? = null,
+    /** Gönderenin Matrix kimliği (grup mesajında ada dokununca kişi kartı için). */
+    val senderId: String = "",
 )
 
 /** Yanıtlanan mesaj: kimden, ne yazmıştı. */

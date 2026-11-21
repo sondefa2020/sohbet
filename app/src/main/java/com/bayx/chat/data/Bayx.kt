@@ -334,6 +334,30 @@ object Bayx {
     }
 
     /** Oturumu sunucuda sonlandırır ve bu cihazdaki tüm anahtarları, mesajları ve önbelleği siler. */
+    /**
+     * Hesabı sunucudan kalıcı olarak siler, sonra bu cihazdaki her şeyi temizler.
+     * Hata olursa mesajı döndürür (hesap silinmemiştir), başarılıysa null.
+     */
+    suspend fun deleteAccount(): String? = withContext(Dispatchers.IO) {
+        val token = accessToken ?: return@withContext "Oturum bulunamadı."
+        try {
+            Api.accountDelete(token)
+        } catch (e: ApiException) {
+            return@withContext e.message ?: "Hesap silinemedi."
+        } catch (e: Exception) {
+            return@withContext "Hesap silinemedi. İnternet bağlantını kontrol et."
+        }
+        authMutex.withLock {
+            Calls.shutdown()
+            runCatching { withTimeoutOrNull(5_000) { syncService?.stop() } }
+            teardown()
+            wipeLocal()
+            Notifier.cancelAll(appContext)
+            auth.value = AuthState.LoggedOut
+        }
+        null
+    }
+
     suspend fun logout() = withContext(Dispatchers.IO) {
         authMutex.withLock {
             val c = client
@@ -765,7 +789,9 @@ object Bayx {
             else -> if (event.isOwn) MsgState.SENT else MsgState.NONE
         }
         val profile = event.senderProfile
-        val sender = if (profile is ProfileDetails.Ready) profile.displayName ?: event.sender else event.sender
+        // Rehberde kayıtlıysa rehberdeki adı (WhatsApp gibi), yoksa kişinin kendi adı.
+        val sender = PhonebookRepo.nameFor(event.sender)
+            ?: if (profile is ProfileDetails.Ready) profile.displayName ?: event.sender else event.sender
         val effect = effectName(event.content)
         if (effect != null) {
             if (!event.isOwn) noticeEffect(event.sender, effect, event.timestamp.toLong())
@@ -789,7 +815,7 @@ object Bayx {
         }.getOrDefault(emptyList())
         return ChatMessage(
             key, kind, text, event.isOwn, sender, event.timestamp.toLong(), state, media?.second,
-            eventId = event.eventOrTransactionId, reactions = reactions, poll = poll,
+            eventId = event.eventOrTransactionId, reactions = reactions, poll = poll, senderId = event.sender,
         )
     }
 

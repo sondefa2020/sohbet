@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.PersonAddAlt
 import androidx.compose.material.icons.outlined.PersonRemove
 import androidx.compose.material.icons.outlined.Shield
@@ -35,7 +36,7 @@ import kotlinx.coroutines.launch
 private val LeaveRed = Color(0xFFB4232A)
 
 @Composable
-fun GroupInfoScreen(roomId: String, onBack: () -> Unit, onLeft: () -> Unit) {
+fun GroupInfoScreen(roomId: String, onBack: () -> Unit, onLeft: () -> Unit, onPerson: (String) -> Unit = {}) {
     val scope = rememberCoroutineScope()
     val toast = rememberToast()
     val vm = viewModel(key = "grup:$roomId") { com.bayx.chat.ui.GroupInfoViewModel(roomId) }
@@ -119,10 +120,11 @@ fun GroupInfoScreen(roomId: String, onBack: () -> Unit, onLeft: () -> Unit) {
             }
 
             items(g.members, key = { it.userId }) { m ->
-                val clickable = g.canManage && !m.isMe
+                val clickable = !m.isMe
                 Row(
                     Modifier.fillMaxWidth()
-                        .then(if (clickable) Modifier.clickable { actionMember = m } else Modifier)
+                        // Yönetici: işlem menüsü (içinde "Bilgileri gör"); diğer herkes: doğrudan kişi kartı.
+                        .then(if (clickable) Modifier.clickable { if (g.canManage) actionMember = m else onPerson(m.userId) } else Modifier)
                         .padding(horizontal = 20.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -218,6 +220,10 @@ fun GroupInfoScreen(roomId: String, onBack: () -> Unit, onLeft: () -> Unit) {
             member = m,
             amAdmin = amAdmin,
             onDismiss = { actionMember = null },
+            onInfo = {
+                actionMember = null
+                onPerson(m.userId)
+            },
             onToggleAdmin = {
                 actionMember = null
                 vm.toggleAdmin(m, t("Yetki değiştirilemedi."))
@@ -236,6 +242,7 @@ private fun MemberActionSheet(
     member: GroupRepo.GroupMember,
     amAdmin: Boolean,
     onDismiss: () -> Unit,
+    onInfo: () -> Unit,
     onToggleAdmin: () -> Unit,
     onRemove: () -> Unit,
 ) {
@@ -246,6 +253,14 @@ private fun MemberActionSheet(
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp),
             )
+            Row(
+                Modifier.fillMaxWidth().clickable(onClick = onInfo).padding(horizontal = 24.dp, vertical = 15.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Outlined.Person, null, tint = Blue, modifier = Modifier.size(24.dp))
+                Spacer(Modifier.width(20.dp))
+                Text(t("Bilgileri gör"), color = Ink, fontSize = 16.sp)
+            }
             if (amAdmin && !member.invited) {
                 Row(
                     Modifier.fillMaxWidth().clickable(onClick = onToggleAdmin).padding(horizontal = 24.dp, vertical = 15.dp),

@@ -7,6 +7,7 @@ import com.bayx.chat.data.Bayx
 class BayxApplication : Application() {
     override fun onCreate() {
         super.onCreate()
+        CrashReport.install(this)
         // Matrix SDK'nın TLS sertifika doğrulaması Android bağlamına ihtiyaç duyar.
         try {
             org.matrix.rustsdk.Android.init(this)

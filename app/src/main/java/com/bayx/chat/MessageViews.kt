@@ -144,6 +144,7 @@ internal fun MessageRow(
     onVote: (PollInfo, String) -> Unit = { _, _ -> },
     onSwipeReply: (ChatMessage) -> Unit = {},
     onQuote: (String) -> Unit = {},
+    onSender: (String) -> Unit = {},
 ) {
     if (msg.kind == MsgKind.EFFECT) {
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -260,7 +261,8 @@ internal fun MessageRow(
                         color = Blue,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(horizontal = if (visual) 8.dp else 0.dp),
+                        modifier = Modifier.padding(horizontal = if (visual) 8.dp else 0.dp)
+                            .then(if (msg.senderId.isNotEmpty()) Modifier.clickable { onSender(msg.senderId) } else Modifier),
                     )
                     Spacer(Modifier.height(2.dp))
                 }

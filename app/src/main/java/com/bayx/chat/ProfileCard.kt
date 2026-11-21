@@ -104,8 +104,12 @@ fun PersonCardScreen(userId: String, onBack: () -> Unit, onOpenChat: (String) ->
         val token = Bayx.accessToken ?: return@LaunchedEffect
         try {
             card = Api.profileCard(token, userId)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: com.bayx.chat.data.ApiException) {
             error = t(e.message ?: "Profil açılamadı.")
+        } catch (e: Throwable) {
+            error = t("Profil bilgileri alınamadı. Tekrar dene.")
         }
     }
     val c = card
@@ -202,13 +206,14 @@ fun PersonCardScreen(userId: String, onBack: () -> Unit, onOpenChat: (String) ->
             }
 
             // Medya, bağlantılar ve sohbet özeti (birebir sohbetten)
-            val chatMessages = chatSession?.messages?.collectAsState()?.value.orEmpty()
-            if (chatSession != null) {
+            val sessionNow = chatSession
+            if (sessionNow != null) {
+                val chatMessages by sessionNow.messages.collectAsState()
                 val media = chatMessages.filter { it.kind == com.bayx.chat.data.MsgKind.IMAGE || it.kind == com.bayx.chat.data.MsgKind.VIDEO }.reversed()
                 val voices = chatMessages.count { it.kind == com.bayx.chat.data.MsgKind.VOICE }
                 val links = chatMessages.count { it.kind == com.bayx.chat.data.MsgKind.TEXT && Regex("https?://|www\\.").containsMatchIn(it.text) }
                 val starredHere = starredAll.count { it.roomId == roomId }
-                val disappearing by chatSession!!.disappearing.collectAsState()
+                val disappearing by sessionNow.disappearing.collectAsState()
                 Spacer(Modifier.height(12.dp))
                 SoftCard(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
@@ -297,10 +302,11 @@ fun PersonCardScreen(userId: String, onBack: () -> Unit, onOpenChat: (String) ->
 
     val dmRoom = remember(userId) { Bayx.rooms.value.firstOrNull { it.dmUserId == userId && it.isDirect }?.id }
     LaunchedEffect(dmRoom) {
-        if (dmRoom != null) chatSession = Bayx.openChat(dmRoom)
+        // Sohbet açılamazsa kart yine açılır; yalnızca medya özeti görünmez (önceden burada uygulama kapanıyordu).
+        if (dmRoom != null) chatSession = runCatching { Bayx.openChat(dmRoom) }.getOrNull()
     }
     androidx.compose.runtime.DisposableEffect(dmRoom) {
-        onDispose { chatSession?.let { s -> kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch { Bayx.closeChat(s) } } }
+        onDispose { chatSession?.let { s -> kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch { runCatching { Bayx.closeChat(s) } } } }
     }
     if (galleryOpen) chatSession?.let { MediaGalleryDialog(it) { galleryOpen = false } }
     if (photoOpen) {

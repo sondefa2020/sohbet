@@ -368,6 +368,11 @@ object Api {
         post<UsernameSetDto>("/bayx/v4/username/set", buildJsonObject { put("username", username) }, token).username
 
     /** Kişi kartı: ad, kullanıcı adı, hakkında, durum; numara yalnızca rehberinde kayıtlıysa. */
+    /** Hesabı kalıcı olarak sil (geri alınamaz). */
+    suspend fun accountDelete(token: String) {
+        postUnit("/bayx/v4/account/delete", buildJsonObject { put("confirm", "SIL") }, token)
+    }
+
     suspend fun profileCard(token: String, userId: String): ProfileCard =
         post("/bayx/v4/profile/card", buildJsonObject { put("user_id", userId) }, token)
 

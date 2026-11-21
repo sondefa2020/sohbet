@@ -67,6 +67,17 @@ jobs:
         env:
           BAYX_KEYSTORE_PASS: ${{ secrets.BAYX_KEYSTORE_PASS }}
         run: gradle :app:assembleRelease --stacktrace
+      - name: Google Play paketi (AAB) derle
+        if: env.HAS_RELEASE_KEY == '1'
+        env:
+          BAYX_KEYSTORE_PASS: ${{ secrets.BAYX_KEYSTORE_PASS }}
+        run: gradle :app:bundlePlay --stacktrace
+      - uses: actions/upload-artifact@v4
+        if: env.HAS_RELEASE_KEY == '1'
+        with:
+          name: tayfa-google-play-aab
+          path: app/build/outputs/bundle/play/app-play.aab
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         if: env.HAS_RELEASE_KEY == '1'
         with:

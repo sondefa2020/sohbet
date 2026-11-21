@@ -148,6 +148,8 @@ class MainActivity : FragmentActivity() {
         super.onStart()
         Gate.onForeground()
         Bayx.setForeground(true)
+        // Rehberde yeni eklenen kişiler uygulamaya dönünce hemen eşleşsin.
+        com.bayx.chat.data.PhonebookRepo.onForeground(this)
     }
 
     override fun onStop() {
@@ -278,6 +280,7 @@ fun BayxApp() {
     }
     // Otomatik güncelleme (giriş yapılmamışken de çalışır).
     if (auth !is AuthState.Loading) UpdatePrompt()
+    CrashReportDialog()
     val locked by Gate.locked.collectAsState()
     if (auth is AuthState.LoggedIn) {
         EffectOverlay()
@@ -510,6 +513,7 @@ private fun MainNav(me: AuthState.LoggedIn) {
                 roomId = entry.arguments?.getString("id").orEmpty(),
                 onBack = { nav.popBackStack() },
                 onLeft = { nav.popBackStack(route = "chats", inclusive = false) },
+                onPerson = { uid -> nav.navigate("person/" + Uri.encode(uid)) },
             )
         }
         composable("profile") {

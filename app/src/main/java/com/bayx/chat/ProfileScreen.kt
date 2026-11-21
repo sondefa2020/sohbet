@@ -1,6 +1,7 @@
 package com.bayx.chat
 
 import androidx.compose.material.icons.outlined.AlternateEmail
+import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material.icons.outlined.Accessibility
 import androidx.compose.material.icons.outlined.PhonelinkSetup
@@ -141,6 +142,10 @@ fun ProfileScreen(
     onStarred: () -> Unit = {},
 ) {
     var confirmLogout by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
+    var deleteText by remember { mutableStateOf("") }
+    var deleting by remember { mutableStateOf(false) }
+    var deleteError by remember { mutableStateOf<String?>(null) }
     var langPick by remember { mutableStateOf(false) }
     var confirmNewKey by remember { mutableStateOf(false) }
     var loggingOut by remember { mutableStateOf(false) }
@@ -420,6 +425,7 @@ fun ProfileScreen(
                 }
                 HorizontalDivider(color = Line)
                 SettingRow(Icons.AutoMirrored.Outlined.Logout, t("Çıkış Yap"), tint = Color(0xFFB4232A)) { confirmLogout = true }
+                SettingRow(Icons.Outlined.DeleteForever, t("Hesabımı sil"), tint = Color(0xFFB4232A)) { deleteText = ""; deleteError = null; confirmDelete = true }
             }
         }
         Spacer(Modifier.height(28.dp))
@@ -555,6 +561,42 @@ fun ProfileScreen(
                 }
             },
             confirmButton = { TextButton(onClick = { langPick = false }) { Text(t("Vazgeç")) } },
+        )
+    }
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { if (!deleting) confirmDelete = false },
+            title = { Text(t("Hesabını sil")) },
+            text = {
+                Column {
+                    Text(
+                        t("Hesabın kalıcı olarak silinir: adın, fotoğrafın, kullanıcı adın, numara eşleşmen ve kişi listen kaldırılır, tüm gruplardan çıkarılırsın. Bu işlem geri alınamaz."),
+                        color = Ink, fontSize = 14.sp,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Text(t("Onaylamak için SİL yaz:"), color = Muted, fontSize = 13.sp)
+                    OutlinedTextField(
+                        deleteText, { deleteText = it.take(10) }, singleLine = true, enabled = !deleting,
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    )
+                    deleteError?.let { Text(t(it), color = Color(0xFFB4232A), fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp)) }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !deleting && deleteText.trim().uppercase(java.util.Locale("tr")) == "SİL",
+                    onClick = {
+                        deleting = true
+                        deleteError = null
+                        scope.launch {
+                            val err = Bayx.deleteAccount()
+                            deleting = false
+                            if (err != null) deleteError = err else confirmDelete = false
+                        }
+                    },
+                ) { Text(if (deleting) t("Siliniyor…") else t("Hesabı sil"), color = Color(0xFFB4232A)) }
+            },
+            dismissButton = { TextButton(enabled = !deleting, onClick = { confirmDelete = false }) { Text(t("Vazgeç")) } },
         )
     }
     if (confirmLogout) {
