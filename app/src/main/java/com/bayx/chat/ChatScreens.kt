@@ -407,7 +407,7 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
                         color = when {
                             typing.isNotEmpty() -> Blue
                             session.secret -> Color(0xFF6D4FC2)
-                            else -> modeColor(partnerPresence?.mode)?.let { if (it == Online) Color(0xFF136A38) else it } ?: Muted
+                            else -> modeColor(partnerPresence?.mode)?.let { if (it == Online) Blue else it } ?: Muted
                         },
                         fontSize = 13.sp,
                         maxLines = 1,
@@ -415,22 +415,26 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
                     )
                 }
             }
-            ChipIcon(Icons.Outlined.Vibration, t("Titreşim gönder"), size = 38.dp, tint = Color(0xFF9A6236)) {
-                val now = System.currentTimeMillis()
-                if (now - lastNudge < 5_000) {
-                    toast(t("Biraz bekle; titreşim 5 saniyede bir gönderilebilir."))
-                } else {
-                    lastNudge = now
-                    scope.launch { if (!Bayx.sendNudge(session)) toast(t("Titreşim gönderilemedi.")) }
-                }
-            }
-            Spacer(Modifier.width(6.dp))
-            ChipIcon(Icons.Outlined.Call, "Sesli ara", size = 38.dp) { placeCall(false) }
-            Spacer(Modifier.width(6.dp))
-            ChipIcon(Icons.Outlined.Videocam, t("Görüntülü ara"), size = 38.dp) { placeCall(true) }
+            // WhatsApp düzeni: görüntülü ve sesli arama düz simge; titreşim menüde.
+            IconButton(onClick = { placeCall(true) }) { Icon(Icons.Outlined.Videocam, t("Görüntülü ara"), tint = Ink) }
+            IconButton(onClick = { placeCall(false) }) { Icon(Icons.Outlined.Call, "Sesli ara", tint = Ink) }
             Box {
                 IconButton(onClick = { menuOpen = true }) { Icon(Icons.Filled.MoreVert, t("Diğer"), tint = Ink) }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text(t("Titreşim gönder")) },
+                        leadingIcon = { Icon(Icons.Outlined.Vibration, contentDescription = null) },
+                        onClick = {
+                            menuOpen = false
+                            val now = System.currentTimeMillis()
+                            if (now - lastNudge < 5_000) {
+                                toast(t("Biraz bekle; titreşim 5 saniyede bir gönderilebilir."))
+                            } else {
+                                lastNudge = now
+                                scope.launch { if (!Bayx.sendNudge(session)) toast(t("Titreşim gönderilemedi.")) }
+                            }
+                        },
+                    )
                     DropdownMenuItem(
                         text = { Text(if (chatLocked) t("Sohbet kilidini kaldır") else t("Sohbeti kilitle")) },
                         leadingIcon = { Icon(if (chatLocked) Icons.Outlined.LockOpen else Icons.Outlined.Lock, contentDescription = null) },

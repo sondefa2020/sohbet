@@ -500,7 +500,7 @@ internal fun Waveform(seed: Int, playing: Boolean, modifier: Modifier) {
             label = "dalga",
         ).value
     } else 1f
-    val colors = listOf(Color(0xFF6EC6FF), Color(0xFF8B7BFF), Color(0xFFE77BC4), Color(0xFFF6A86B))
+    val colors = listOf(Blue, Blue.copy(alpha = 0.55f))
     androidx.compose.foundation.Canvas(modifier) {
         val step = size.width / bars.size
         val brush = Brush.horizontalGradient(colors, startX = 0f, endX = size.width)
