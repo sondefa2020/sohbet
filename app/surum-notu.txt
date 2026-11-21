@@ -1,3 +1,5 @@
-Tayfa artık telefonun "Paylaş" menüsünde: Galeri, Dosyalar, tarayıcı ya da başka bir uygulamadan fotoğraf, video, dosya, bağlantı veya yazıyı Tayfa'ya gönder.
-Paylaş menüsünün üst sırasında son konuştuğun kişiler ve gruplar doğrudan görünür; birine dokununca içerik hemen ona hazırlanır.
-Gönderme ekranında en fazla 5 kişi ya da grup seç, istersen açıklama ekle; Tayfa kullanan rehber kişilerin de listede.
+Yeni tasarım: açık temada beyaz zemin ve Tayfa karamel rengi, koyu temada siyah zemin ve kırmızı vurgu.
+Sohbetler: büyük "Tayfa" başlığı, her zaman görünen arama kutusu, yeni filtre çipleri, ince ayraçlı sohbet listesi, köşeli yeni sohbet düğmesi.
+Alt menü WhatsApp gibi: Sohbetler, Durum, Aramalar, Ayarlar; okunmamış sohbet sayısı rozette. Medya üst menüye taşındı.
+Sohbet: noktalı yeni arka plan, WhatsApp tarzı köşeli balonlar, ifade-ek-kamera tek çubukta.
+Aramalar ve gelen arama ekranı yeni renklere uyarlandı.

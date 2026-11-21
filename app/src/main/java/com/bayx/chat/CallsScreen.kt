@@ -209,7 +209,7 @@ fun CallsScreen(
             } else {
                 item {
                     Column(
-                        Modifier.padding(horizontal = 12.dp).fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(GlassPill),
+                        Modifier.fillMaxWidth(),
                     ) {
                         groups.forEachIndexed { i, g ->
                             CallRow(
@@ -269,18 +269,25 @@ private fun QuickCard(
     alert: Boolean = false,
     onClick: () -> Unit,
 ) {
+    // WhatsApp düzeni: yuvarlak, açık vurgu zeminli simge ve altında etiket.
     Column(
-        modifier.clip(RoundedCornerShape(20.dp))
-            .background(if (selected) Blue.copy(alpha = 0.16f) else GlassPill)
-            .clickable(onClick = onClick)
-            .padding(vertical = 14.dp, horizontal = 6.dp),
+        modifier.clip(RoundedCornerShape(16.dp)).clickable(onClick = onClick).padding(vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Box(Modifier.size(40.dp).clip(CircleShape).background(if (alert) MissedRed.copy(alpha = 0.12f) else Blue.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
-            Icon(icon, null, tint = if (alert) MissedRed else Blue, modifier = Modifier.size(22.dp))
+        Box(
+            Modifier.size(56.dp).clip(CircleShape).background(
+                when {
+                    selected -> AccentFill
+                    alert -> MissedRed.copy(alpha = 0.12f)
+                    else -> SoftAccent
+                },
+            ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, null, tint = when { selected -> Color.White; alert -> MissedRed; else -> SoftAccentInk }, modifier = Modifier.size(24.dp))
         }
         Spacer(Modifier.height(7.dp))
-        Text(label, color = Ink, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(label, color = Ink, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -346,7 +353,7 @@ private fun CallRow(g: CallGroup, onAudio: () -> Unit, onVideo: () -> Unit, onCl
 @Composable
 private fun CallBubble(icon: ImageVector, label: String, onClick: () -> Unit) {
     Box(
-        Modifier.size(40.dp).clip(CircleShape).background(Blue.copy(alpha = 0.10f)).clickable(onClick = onClick),
+        Modifier.size(44.dp).clip(CircleShape).clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
-    ) { Icon(icon, contentDescription = label, tint = Blue, modifier = Modifier.size(21.dp)) }
+    ) { Icon(icon, contentDescription = label, tint = Ink, modifier = Modifier.size(22.dp)) }
 }

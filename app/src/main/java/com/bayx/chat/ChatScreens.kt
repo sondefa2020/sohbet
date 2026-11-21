@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.Brush
 import com.bayx.chat.data.Gate
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.PhotoCamera
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material3.AssistChip
@@ -658,46 +659,55 @@ internal fun ChatContent(session: ChatSession, onBack: () -> Unit, onGroupInfo: 
                     }
                 }
             }
+            // WhatsApp düzeni: tek bir hap içinde ifade, yazı, ek ve kamera; yanında yuvarlak gönder/mikrofon.
             Row(
-                Modifier.fillMaxWidth().background(GlassBar).padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 10.dp),
+                verticalAlignment = Alignment.Bottom,
             ) {
-                Surface(shape = CircleShape, color = GlassPill, shadowElevation = 2.dp, modifier = Modifier.size(48.dp)) {
-                    IconButton(onClick = { showAttach = true }) { Icon(Icons.Filled.Add, "Ekle", tint = Ink) }
-                }
-                Spacer(Modifier.width(10.dp))
                 Surface(
-                    shape = RoundedCornerShape(28.dp),
-                    color = GlassPill,
-                    shadowElevation = 2.dp,
-                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(25.dp),
+                    color = if (ThemeState.dark) Color(0xFF1E1E21) else Color.White,
+                    shadowElevation = 1.dp,
+                    modifier = Modifier.weight(1f).heightIn(min = 50.dp),
                 ) {
-                    TextField(
-                        value = draft,
-                        onValueChange = { draft = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("Mesaj yaz...", color = Muted) },
-                        trailingIcon = {
-                            IconButton(onClick = { showEmoji = !showEmoji }) {
-                                Icon(Icons.Outlined.EmojiEmotions, t("İfadeler ve efektler"), tint = if (showEmoji) Blue else Muted)
-                            }
-                        },
-                        maxLines = 4,
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = Color.Transparent,
-                            unfocusedContainerColor = Color.Transparent,
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent,
-                        ),
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
+                        IconButton(onClick = { showEmoji = !showEmoji }) {
+                            Icon(Icons.Outlined.EmojiEmotions, t("İfadeler ve efektler"), tint = if (showEmoji) Blue else Muted)
+                        }
+                        TextField(
+                            value = draft,
+                            onValueChange = { draft = it },
+                            modifier = Modifier.weight(1f),
+                            placeholder = { Text(t("Mesaj"), color = Muted, fontSize = 16.sp) },
+                            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 16.sp, color = Ink),
+                            maxLines = 5,
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent,
+                                focusedIndicatorColor = Color.Transparent,
+                                unfocusedIndicatorColor = Color.Transparent,
+                                cursorColor = Blue,
+                            ),
+                        )
+                        IconButton(onClick = { showAttach = true }) { Icon(Icons.Filled.AttachFile, t("Dosya ekle"), tint = Muted) }
+                        if (draft.isBlank()) {
+                            IconButton(onClick = {
+                                val launched = runCatching {
+                                    val file = MediaTools.newCameraFile(context)
+                                    cameraFile = file
+                                    takePicture.launch(FileProvider.getUriForFile(context, context.packageName + ".dosya", file))
+                                }.isSuccess
+                                if (!launched) toast(t("Kamera açılamadı."))
+                            }) { Icon(Icons.Outlined.PhotoCamera, t("Kamera"), tint = Muted) }
+                        }
+                    }
                 }
-                Spacer(Modifier.width(10.dp))
+                Spacer(Modifier.width(6.dp))
                 Box(
                     Modifier
-                        .size(56.dp)
-                        .shadow(8.dp, CircleShape, ambientColor = Blue, spotColor = Blue)
+                        .size(50.dp)
                         .clip(CircleShape)
-                        .background(BlueBrush)
+                        .background(AccentFill)
                         .combinedClickable(
                             onLongClick = {
                                 // Basılı tut: mesajı ileri bir zamana planla.

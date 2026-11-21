@@ -46,6 +46,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.material.icons.automirrored.outlined.Chat
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -88,34 +91,43 @@ import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.RadioButtonChecked
+import androidx.compose.material.icons.outlined.PhotoCamera
+import androidx.compose.material.icons.outlined.AddComment
+import androidx.compose.material.icons.outlined.Close
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
-internal val BlueBrush = Brush.verticalGradient(listOf(BlueLight, BlueDark))
+internal val BlueBrush: Brush get() = Brush.verticalGradient(listOf(BlueLight, BlueDark))
 internal val SoftShadow = Color(0x26825A32)
 internal val PageBrush: Brush
-    get() = if (ThemeState.dark) {
-        Brush.verticalGradient(listOf(Color(0xFF17130F), Color(0xFF14110F), Color(0xFF100D0B)))
-    } else {
-        Brush.verticalGradient(listOf(Color(0xFFFCFAF7), Color(0xFFF8F3ED), Color(0xFFF1E9DF)))
-    }
+    get() = SolidColor(Bg)
 
 // ---------- Ortak parçalar ----------
 
 private val avatarTints = listOf(
-    Color(0xFFFFE3EC) to Color(0xFFA3204E),
-    Color(0xFFDCE9FF) to Color(0xFF1247A8),
-    Color(0xFFDDF5E6) to Color(0xFF136A38),
-    Color(0xFFFFEBD2) to Color(0xFF8A4B00),
-    Color(0xFFE9E4FF) to Color(0xFF4A2FB0),
+    Color(0xFFE8D3C0) to Color(0xFF7A4A26),
+    Color(0xFFD9E4F5) to Color(0xFF2D5B94),
+    Color(0xFFDDEFE3) to Color(0xFF23724A),
+    Color(0xFFF6DADA) to Color(0xFFA33A3A),
+    Color(0xFFE7DDF6) to Color(0xFF5B3F99),
+    Color(0xFFF7E6C4) to Color(0xFF8A5A12),
+)
+private val avatarTintsDark = listOf(
+    Color(0xFF3A2618) to Color(0xFFF0C9A8),
+    Color(0xFF1C2A3F) to Color(0xFFA9C6F0),
+    Color(0xFF16301F) to Color(0xFF9ED9B4),
+    Color(0xFF3D1717) to Color(0xFFF2A9A9),
+    Color(0xFF281C40) to Color(0xFFC9B4F2),
+    Color(0xFF3A2A0E) to Color(0xFFF2D08A),
 )
 
 @Composable
 internal fun Avatar(name: String, size: Dp, online: Boolean = false, url: String? = null, mode: String? = null) {
-    val (bg, fg) = avatarTints[(name.firstOrNull()?.code ?: 0) % avatarTints.size]
+    val tints = if (ThemeState.dark) avatarTintsDark else avatarTints
+    val (bg, fg) = tints[(name.firstOrNull()?.code ?: 0) % tints.size]
     val bitmap by produceState<android.graphics.Bitmap?>(initialValue = null, url) {
         value = url?.let { ProfileRepo.loadAvatar(it) }
     }
@@ -479,22 +491,47 @@ fun ChatListScreen(
                 Modifier.fillMaxWidth().padding(start = 16.dp, end = 12.dp, top = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                LogoMark(if (narrow) 38.dp else 46.dp)
-                Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f)) {
-                    Text("Tayfa", color = Ink, fontSize = if (narrow) 21.sp else 25.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
-                    Text(me.displayName.ifEmpty { "Sohbet" }, color = Muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                // WhatsApp düzeni: solda vurgu renginde "Tayfa", sağda QR, kamera ve menü.
+                Text(
+                    "Tayfa", color = Blue, fontSize = if (narrow) 25.sp else 28.sp, fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = (-0.6).sp, maxLines = 1, modifier = Modifier.weight(1f),
+                )
+                IconButton(onClick = { scanQr = true }) { Icon(Icons.Outlined.QrCodeScanner, t("QR okut"), tint = Ink) }
+                IconButton(onClick = onStatus) { Icon(Icons.Outlined.PhotoCamera, t("Durum ekle"), tint = Ink) }
+                Box {
+                    var menu by remember { mutableStateOf(false) }
+                    IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, t("Menü"), tint = Ink) }
+                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = CardBg) {
+                        DropdownMenuItem(text = { Text(t("Yeni grup"), color = Ink) }, onClick = { menu = false; showNewGroup = true })
+                        DropdownMenuItem(text = { Text(t("Medya"), color = Ink) }, onClick = { menu = false; onMedia() })
+                        DropdownMenuItem(text = { Text(t("Gizli Oda"), color = Ink) }, onClick = { menu = false; onSecret() })
+                        DropdownMenuItem(text = { Text(t("Ayarlar"), color = Ink) }, onClick = { menu = false; onProfile() })
+                    }
                 }
-                val chip = if (narrow) 38.dp else 44.dp
-                ChipIcon(Icons.Outlined.QrCodeScanner, t("QR okut"), size = chip) { scanQr = true }
-                Spacer(Modifier.width(8.dp))
-                ChipIcon(Icons.Outlined.Search, t("Ara"), size = chip) { searching = !searching; if (!searching) query = "" }
-                Spacer(Modifier.width(8.dp))
-                ChipIcon(Icons.Outlined.Settings, t("Ayarlar"), size = chip, onClick = onProfile)
             }
-            Spacer(Modifier.height(12.dp))
+            // Her zaman görünen arama kutusu (WhatsApp gibi): sohbet, kişi, kullanıcı adı ya da numara.
             Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 14.dp),
+                Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp).fillMaxWidth().height(46.dp)
+                    .clip(RoundedCornerShape(23.dp)).background(GlassPill).padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Outlined.Search, null, tint = Muted, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(10.dp))
+                Box(Modifier.weight(1f)) {
+                    if (query.isEmpty()) Text(t("Ara veya yeni sohbet başlat"), color = Muted, fontSize = 15.sp, maxLines = 1)
+                    androidx.compose.foundation.text.BasicTextField(
+                        query, { query = it; searching = it.isNotEmpty() }, singleLine = true,
+                        textStyle = androidx.compose.ui.text.TextStyle(color = Ink, fontSize = 15.sp),
+                        cursorBrush = SolidColor(Blue), modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                if (query.isNotEmpty()) {
+                    Icon(Icons.Outlined.Close, t("Temizle"), tint = Muted, modifier = Modifier.size(20.dp).clickable { query = ""; searching = false })
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 val unreadCount = rooms.count { it.unread > 0 }
@@ -503,25 +540,6 @@ fun ChatListScreen(
                 FilterChipPill(t("Kişiler"), tab == 1) { tab = 1; unreadOnly = false }
                 FilterChipPill(t("Gruplar"), tab == 2) { tab = 2; unreadOnly = false }
                 FilterChipPill(t("Gizli Oda"), false, onClick = onSecret)
-            }
-            if (searching) {
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    singleLine = true,
-                    placeholder = { Text(t("Sohbet, kişi, kullanıcı adı ya da numara ara"), color = Muted) },
-                    leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null, tint = Muted) },
-                    shape = RoundedCornerShape(24.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = CardBg,
-                        unfocusedContainerColor = CardBg,
-                        focusedTextColor = Ink,
-                        unfocusedTextColor = Ink,
-                        unfocusedBorderColor = Line,
-                        focusedBorderColor = Blue,
-                    ),
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp).fillMaxWidth(),
-                )
             }
             Spacer(Modifier.height(12.dp))
             Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -699,15 +717,15 @@ fun ChatListScreen(
             Modifier
                 .align(Alignment.BottomEnd)
                 .navigationBarsPadding()
-                .padding(end = 20.dp, bottom = if (narrow) 92.dp else 104.dp)
-                .size(if (narrow) 56.dp else 62.dp)
-                .shadow(10.dp, CircleShape, ambientColor = Blue, spotColor = Blue)
-                .clip(CircleShape)
-                .background(BlueBrush)
+                .padding(end = 18.dp, bottom = 90.dp)
+                .size(58.dp)
+                .shadow(8.dp, RoundedCornerShape(18.dp))
+                .clip(RoundedCornerShape(18.dp))
+                .background(AccentFill)
                 .clickable(onClick = onNewChat),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.Edit, contentDescription = t("Yeni sohbet"), tint = Color.White, modifier = Modifier.size(28.dp))
+            Icon(Icons.Outlined.AddComment, contentDescription = t("Yeni sohbet"), tint = Color.White, modifier = Modifier.size(25.dp))
         }
     }
 
@@ -942,18 +960,15 @@ enum class AppTab { CHATS, CALLS, STATUS, MEDIA, SETTINGS }
 
 @Composable
 internal fun BottomNav(current: AppTab, onSelect: (AppTab) -> Unit) {
-    val narrow = LocalAppWidth.current < 380
-    Surface(
-        modifier = Modifier.padding(start = 10.dp, end = 10.dp, bottom = 10.dp).fillMaxWidth().height(if (narrow) 62.dp else 70.dp),
-        shape = RoundedCornerShape(28.dp),
-        color = GlassPill,
-        shadowElevation = 6.dp,
-    ) {
-        Row {
-            NavItem(t("Sohbetler"), Icons.Filled.Sms, current == AppTab.CHATS) { onSelect(AppTab.CHATS) }
-            NavItem(t("Aramalar"), Icons.Outlined.Call, current == AppTab.CALLS) { onSelect(AppTab.CALLS) }
+    // WhatsApp düzeni: düz alt çubuk, üstte ince çizgi, seçili sekmede simgenin arkasında hap.
+    val rooms by com.bayx.chat.data.Bayx.rooms.collectAsState()
+    val unreadChats = rooms.count { it.unread > 0 && !it.request }
+    Column(Modifier.fillMaxWidth().background(GlassBar)) {
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Line))
+        Row(Modifier.fillMaxWidth().height(72.dp).padding(horizontal = 6.dp)) {
+            NavItem(t("Sohbetler"), Icons.AutoMirrored.Outlined.Chat, current == AppTab.CHATS, unreadChats) { onSelect(AppTab.CHATS) }
             NavItem(t("Durum"), Icons.Outlined.RadioButtonChecked, current == AppTab.STATUS) { onSelect(AppTab.STATUS) }
-            NavItem(t("Medya"), Icons.Outlined.PermMedia, current == AppTab.MEDIA) { onSelect(AppTab.MEDIA) }
+            NavItem(t("Aramalar"), Icons.Outlined.Call, current == AppTab.CALLS) { onSelect(AppTab.CALLS) }
             NavItem(t("Ayarlar"), Icons.Outlined.Settings, current == AppTab.SETTINGS) { onSelect(AppTab.SETTINGS) }
         }
     }
@@ -995,26 +1010,40 @@ private fun QuickCard(
 }
 
 @Composable
-private fun RowScope.NavItem(label: String, icon: ImageVector, selected: Boolean, onClick: () -> Unit) {
-    val tint = if (selected) Blue else Muted
+private fun RowScope.NavItem(label: String, icon: ImageVector, selected: Boolean, badge: Int = 0, onClick: () -> Unit) {
     Column(
         Modifier
             .weight(1f)
             .fillMaxHeight()
-            .padding(3.dp)
-            .clip(RoundedCornerShape(20.dp))
-            .then(if (selected) Modifier.background(if (ThemeState.dark) Color(0xFF3A2E24) else Color(0xFFF5EADD)) else Modifier)
-            .clickable(onClick = onClick),
+            .clickable(
+                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            ),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        val narrow = LocalAppWidth.current < 380
-        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(if (narrow) 22.dp else 25.dp))
-        Spacer(Modifier.height(3.dp))
-        val labelSize = with(androidx.compose.ui.platform.LocalDensity.current) { (if (narrow) 10.5f else 11.5f).dp.toSp() }
+        Box(contentAlignment = Alignment.Center) {
+            Box(
+                Modifier.width(64.dp).height(32.dp).clip(RoundedCornerShape(16.dp))
+                    .background(if (selected) SoftAccent else Color.Transparent),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(icon, contentDescription = null, tint = if (selected) SoftAccentInk else Muted, modifier = Modifier.size(23.dp))
+            }
+            if (badge > 0) {
+                Box(
+                    Modifier.align(Alignment.TopEnd).offset(x = (-6).dp, y = (-4).dp)
+                        .defaultMinSize(minWidth = 18.dp).height(18.dp).clip(CircleShape).background(AccentFill).padding(horizontal = 5.dp),
+                    contentAlignment = Alignment.Center,
+                ) { Text(if (badge > 99) "99+" else "$badge", color = Color.White, fontSize = 10.5.sp, fontWeight = FontWeight.Bold) }
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        val labelSize = with(androidx.compose.ui.platform.LocalDensity.current) { 12f.dp.toSp() }
         Text(
-            label, color = tint, fontSize = labelSize,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+            label, color = if (selected) Ink else Muted, fontSize = labelSize,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
             maxLines = 1, softWrap = false, overflow = TextOverflow.Clip,
         )
     }
@@ -1216,21 +1245,26 @@ private fun ChatRow(
     Row(
         Modifier.fillMaxWidth()
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(horizontal = 20.dp, vertical = 10.dp),
+            .padding(start = 16.dp, end = 16.dp, top = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // Fotoğrafa dokununca kişi bilgisi açılır (WhatsApp gibi).
-        Box(Modifier.clip(CircleShape).then(if (onAvatar != null) Modifier.clickable(onClick = onAvatar) else Modifier)) {
-            Avatar(chat.name, 60.dp, url = chat.avatarUrl, mode = mode)
+        Box(Modifier.padding(bottom = 9.dp).clip(CircleShape).then(if (onAvatar != null) Modifier.clickable(onClick = onAvatar) else Modifier)) {
+            Avatar(chat.name, 52.dp, url = chat.avatarUrl, mode = mode)
         }
-        Spacer(Modifier.width(16.dp))
-        Column(Modifier.weight(1f)) {
+        Spacer(Modifier.width(14.dp))
+        val divider = Line
+        Column(
+            Modifier.weight(1f)
+                .drawBehind { drawLine(divider, androidx.compose.ui.geometry.Offset(0f, size.height - 0.5f), androidx.compose.ui.geometry.Offset(size.width, size.height - 0.5f), strokeWidth = 1f) }
+                .padding(top = 2.dp, bottom = 11.dp),
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     chat.name,
                     color = Ink,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.5.sp,
+                    fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
@@ -1244,17 +1278,20 @@ private fun ChatRow(
                     Icon(Icons.Outlined.PushPin, "Sabit", tint = SoftBlue, modifier = Modifier.size(16.dp))
                 }
                 Spacer(Modifier.width(8.dp))
-                Text(formatTime(chat.time), color = if (chat.unread > 0) Blue else SoftBlue, fontSize = 13.sp)
+                Text(
+                    formatTime(chat.time), color = if (chat.unread > 0) Blue else Muted, fontSize = 12.5.sp,
+                    fontWeight = if (chat.unread > 0) FontWeight.Bold else FontWeight.Medium,
+                )
             }
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(3.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 val drafts by com.bayx.chat.data.Drafts.map.collectAsState()
                 val typingNow by com.bayx.chat.data.Bayx.typingRooms.collectAsState()
                 val draftText = drafts[chat.id]
                 when {
                     typingNow.contains(chat.id) -> Text(
-                        t("yazıyor…"), modifier = Modifier.weight(1f), color = Color(0xFF1E8E4E),
-                        fontSize = 15.sp, maxLines = 1, fontWeight = FontWeight.SemiBold,
+                        t("yazıyor…"), modifier = Modifier.weight(1f), color = Blue,
+                        fontSize = 14.5.sp, maxLines = 1, fontWeight = FontWeight.SemiBold,
                     )
                     !draftText.isNullOrBlank() -> Text(
                         androidx.compose.ui.text.buildAnnotatedString {
@@ -1266,8 +1303,9 @@ private fun ChatRow(
                     else -> Text(
                         chat.lastMessage.ifEmpty { t("Uçtan uca şifreli sohbet") },
                         modifier = Modifier.weight(1f),
-                        color = Muted,
-                        fontSize = 15.sp,
+                        color = if (chat.unread > 0) Ink else Muted,
+                        fontWeight = if (chat.unread > 0) FontWeight.SemiBold else FontWeight.Normal,
+                        fontSize = 14.5.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -1275,13 +1313,13 @@ private fun ChatRow(
                 if (chat.unread > 0) {
                     Spacer(Modifier.width(8.dp))
                     Box(
-                        Modifier.defaultMinSize(minWidth = 26.dp).height(26.dp).clip(CircleShape).background(Blue).padding(horizontal = 7.dp),
+                        Modifier.defaultMinSize(minWidth = 22.dp).height(22.dp).clip(CircleShape).background(AccentFill).padding(horizontal = 6.dp),
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
                             if (chat.unread > 99) "99+" else "${chat.unread}",
                             color = Color.White,
-                            fontSize = 13.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                         )
                     }
@@ -1298,13 +1336,12 @@ private fun FilterChipPill(label: String, selected: Boolean, onClick: () -> Unit
     Box(
         Modifier
             .clip(RoundedCornerShape(18.dp))
-            .background(if (selected) (if (ThemeState.dark) Color(0xFF3A2E24) else Color(0xFFF5EADD)) else GlassPill)
-            .border(1.dp, if (selected) Blue.copy(alpha = 0.35f) else Line, RoundedCornerShape(18.dp))
+            .background(if (selected) SoftAccent else ChipBg)
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp),
     ) {
         Text(
-            label, color = if (selected) Blue else Ink, fontSize = 14.sp,
+            label, color = if (selected) SoftAccentInk else Ink, fontSize = 14.sp,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium, maxLines = 1, softWrap = false,
         )
     }

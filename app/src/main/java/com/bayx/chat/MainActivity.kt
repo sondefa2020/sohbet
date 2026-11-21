@@ -66,14 +66,21 @@ import androidx.navigation.compose.rememberNavController
 
 // Tayfa tasarım dili: sıcak krem zemin, kum/karamel vurgu, koyu mürekkep yazı.
 // (Adlar eski sürümden kalma; "Blue" artık karamel vurgu rengidir.)
-val Blue: Color get() = if (ThemeState.dark) Color(0xFFC79A6E) else Color(0xFFB07A4E)
-val BlueLight = Color(0xFFE6C9A6)
-val BlueDark = Color(0xFFC79A6E)
-val Ink: Color get() = if (ThemeState.dark) Color(0xFFF2ECE4) else Color(0xFF1F1B18)
-val Muted: Color get() = if (ThemeState.dark) Color(0xFF9A9088) else Color(0xFF6E655C)
-val SoftBlue: Color get() = if (ThemeState.dark) Color(0xFFA09589) else Color(0xFF8C7F72)
-val Bg: Color get() = if (ThemeState.dark) Color(0xFF14110F) else Color(0xFFF8F4EF)
-val Line: Color get() = if (ThemeState.dark) Color(0xFF2C2622) else Color(0xFFECE4DA)
+// Tasarım A (açık: beyaz + Tayfa karamel) ve B (koyu: siyah + kırmızı vurgu).
+/** Vurgu rengi (yazı, simge, seçili durum). */
+val Blue: Color get() = if (ThemeState.dark) Color(0xFFFF5148) else Color(0xFF9A5F33)
+/** Dolgulu düğmeler (gönder, yeni sohbet, rozet): üzerinde beyaz yazı okunur. */
+val AccentFill: Color get() = if (ThemeState.dark) Color(0xFFE2231A) else Color(0xFF9A5F33)
+val BlueLight: Color get() = if (ThemeState.dark) Color(0xFFE2231A) else Color(0xFFA86C3E)
+val BlueDark: Color get() = if (ThemeState.dark) Color(0xFFC81D15) else Color(0xFF8F5530)
+val Ink: Color get() = if (ThemeState.dark) Color(0xFFF2F2F3) else Color(0xFF1B1612)
+val Muted: Color get() = if (ThemeState.dark) Color(0xFFA6A6AD) else Color(0xFF6E645B)
+val SoftBlue: Color get() = if (ThemeState.dark) Color(0xFF9C9CA3) else Color(0xFF7A6E63)
+val Bg: Color get() = if (ThemeState.dark) Color(0xFF0B0B0C) else Color(0xFFFFFFFF)
+val Line: Color get() = if (ThemeState.dark) Color(0xFF26262A) else Color(0xFFEEE7DF)
+/** Seçili sekme / çip zemini ve üzerindeki yazı. */
+val SoftAccent: Color get() = if (ThemeState.dark) Color(0xFF2B1311) else Color(0xFFF4E9DE)
+val SoftAccentInk: Color get() = if (ThemeState.dark) Color(0xFFFF8A83) else Color(0xFF7A4A26)
 val Online = Color(0xFF34C759)
 
 class MainActivity : FragmentActivity() {

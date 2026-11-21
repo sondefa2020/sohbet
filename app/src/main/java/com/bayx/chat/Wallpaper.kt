@@ -51,7 +51,7 @@ object Wallpaper {
     )
 
     val options = listOf(
-        Option("krem", "Krem", listOf(Color(0xFFFCFAF7), Color(0xFFF1E9DF))),
+        Option("krem", t("Varsayılan"), listOf(Color(0xFFF4EEE6), Color(0xFFF4EEE6))),
         Option("yesil", t("Yeşil doodle"), listOf(Color(0xFFE9F3EC), Color(0xFFDDEBE0)), doodle = true, doodleColor = Color(0x1A2E8B6E)),
         Option("gun", t("Gün batımı"), listOf(Color(0xFFFCE9D6), Color(0xFFF3C9A8))),
         Option("mavi", "Okyanus", listOf(Color(0xFFE3EEF7), Color(0xFFCADEEE)), doodle = true, doodleColor = Color(0x163B6EA5)),
@@ -77,6 +77,26 @@ object Wallpaper {
 @Composable
 fun ChatBackground(id: String, modifier: Modifier = Modifier) {
     val option = Wallpaper.current(id)
+    if (option.id == "krem") {
+        // Varsayılan (yeni tasarım): düz, sıcak zemin üzerinde ince nokta deseni; koyu temada siyah.
+        val base = if (ThemeState.dark) Color(0xFF101012) else Color(0xFFF4EEE6)
+        val dot = if (ThemeState.dark) Color(0xFF1C1C1F) else Color(0xFFE6DCCE)
+        Canvas(modifier.fillMaxSize()) {
+            drawRect(base)
+            val step = 22.dp.toPx()
+            val r = 1.3.dp.toPx()
+            var y = step / 2
+            while (y < size.height) {
+                var x = step / 2
+                while (x < size.width) {
+                    drawCircle(dot, radius = r, center = Offset(x, y))
+                    x += step
+                }
+                y += step
+            }
+        }
+        return
+    }
     Box(modifier.fillMaxSize().background(Brush.verticalGradient(option.colors))) {
         if (option.doodle) {
             Canvas(Modifier.fillMaxSize()) {

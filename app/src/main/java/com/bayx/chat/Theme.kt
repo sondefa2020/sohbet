@@ -31,5 +31,5 @@ object ThemeState {
 }
 
 // Yüzey renkleri (kart, alan). Açıkta beyaz; koyuda koyu gri tonları.
-val CardBg: Color get() = if (ThemeState.dark) Color(0xFF221E1A) else Color.White
-val FieldBg: Color get() = if (ThemeState.dark) Color(0xFF1B1815) else Color(0xFFFCFAF7)
+val CardBg: Color get() = if (ThemeState.dark) Color(0xFF161618) else Color.White
+val FieldBg: Color get() = if (ThemeState.dark) Color(0xFF1E1E21) else Color(0xFFF6F2ED)

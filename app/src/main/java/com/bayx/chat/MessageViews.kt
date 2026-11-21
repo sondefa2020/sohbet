@@ -197,14 +197,15 @@ internal fun MessageRow(
         }
         return
     }
+    // WhatsApp gibi: köşesi gönderen tarafında üstte sivri balon.
     val shape = RoundedCornerShape(
-        topStart = 22.dp,
-        topEnd = 22.dp,
-        bottomEnd = if (msg.mine) 6.dp else 22.dp,
-        bottomStart = if (msg.mine) 22.dp else 6.dp,
+        topStart = if (msg.mine) 16.dp else 4.dp,
+        topEnd = if (msg.mine) 4.dp else 16.dp,
+        bottomEnd = 16.dp,
+        bottomStart = 16.dp,
     )
-    val fg = Ink
-    val sub = if (msg.mine) (if (ThemeState.dark) Color(0xFFC2A68C) else Color(0xFF8A7460)) else Muted
+    val fg = if (msg.mine && ThemeState.dark) Color(0xFFFCEDEC) else Ink
+    val sub = if (msg.mine) (if (ThemeState.dark) Color(0xFFE7B2AE) else Color(0xFF7D6551)) else Muted
     val visual = msg.kind == MsgKind.IMAGE || msg.kind == MsgKind.VIDEO
     // Sağa kaydırınca yanıtla (WhatsApp gibi).
     val density = androidx.compose.ui.platform.LocalDensity.current
@@ -238,11 +239,11 @@ internal fun MessageRow(
     ) {
         Surface(
             shape = shape,
-            color = if (msg.mine) Color.Transparent else CardBg,
-            shadowElevation = if (msg.mine) 0.dp else 3.dp,
+            color = if (msg.mine) Color.Transparent else (if (ThemeState.dark) Color(0xFF1E1E21) else Color.White),
+            shadowElevation = if (msg.mine) 0.dp else 1.dp,
             modifier = Modifier
-                .widthIn(max = 310.dp)
-                .then(if (msg.mine) Modifier.shadow(3.dp, shape, ambientColor = SoftShadow, spotColor = SoftShadow) else Modifier)
+                .widthIn(max = 300.dp)
+                .then(if (msg.mine) Modifier.shadow(1.dp, shape) else Modifier)
                 .clip(shape)
                 .then(if (msg.mine) Modifier.background(PeachBrush) else Modifier)
                 .combinedClickable(

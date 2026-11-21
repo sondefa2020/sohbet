@@ -624,28 +624,18 @@ private fun DialpadOverlay(onDismiss: () -> Unit) {
 // --- Modern arama arka planı: yavaş akan renkli ışıklar + cam efekti ---
 @Composable
 private fun ModernCallBackdrop(name: String) {
-    val palettes = listOf(
-        listOf(Color(0xFF4F46E5), Color(0xFF06B6D4), Color(0xFFEC4899)),
-        listOf(Color(0xFF7C3AED), Color(0xFF2563EB), Color(0xFF10B981)),
-        listOf(Color(0xFFDB2777), Color(0xFFF59E0B), Color(0xFF6366F1)),
-        listOf(Color(0xFF0EA5E9), Color(0xFF8B5CF6), Color(0xFF14B8A6)),
-    )
-    val pal = palettes[(name.hashCode() and 0x7fffffff) % palettes.size]
+    // Yeni tasarım: koyu, sıcak zemin; avatarın arkasında iki yumuşak ışık halkası (hafifçe nefes alır).
+    val base = if (ThemeState.dark) Color(0xFF120708) else Color(0xFF1C130D)
+    val glow = if (ThemeState.dark) Color(0xFF3A0F0C) else Color(0xFF4A2E1A)
     val tr = androidx.compose.animation.core.rememberInfiniteTransition(label = "bg")
     val p by tr.animateFloat(0f, 1f, androidx.compose.animation.core.infiniteRepeatable(
-        androidx.compose.animation.core.tween(9000, easing = androidx.compose.animation.core.LinearEasing),
+        androidx.compose.animation.core.tween(4000, easing = androidx.compose.animation.core.FastOutSlowInEasing),
         androidx.compose.animation.core.RepeatMode.Reverse), label = "p")
     androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
-        drawRect(Brush.verticalGradient(listOf(Color(0xFF070B1A), Color(0xFF0B1230), Color(0xFF05070F))))
-        fun blob(c: Color, x: Float, y: Float, r: Float) = drawCircle(
-            Brush.radialGradient(listOf(c.copy(alpha = 0.55f), Color.Transparent), center = androidx.compose.ui.geometry.Offset(x, y), radius = r),
-            radius = r, center = androidx.compose.ui.geometry.Offset(x, y),
-        )
-        val w = size.width; val h = size.height
-        blob(pal[0], w * (0.15f + 0.35f * p), h * (0.18f + 0.10f * p), w * 0.85f)
-        blob(pal[1], w * (0.90f - 0.30f * p), h * (0.55f - 0.12f * p), w * 0.80f)
-        blob(pal[2], w * (0.30f + 0.25f * p), h * (0.92f - 0.08f * p), w * 0.75f)
-        drawRect(Color(0x55050816)) // okunurluk için hafif karartma
+        drawRect(base)
+        val c = androidx.compose.ui.geometry.Offset(size.width / 2f, size.height * 0.33f)
+        drawCircle(glow.copy(alpha = 0.50f + 0.08f * p), radius = size.width * (0.72f + 0.03f * p), center = c)
+        drawCircle(glow.copy(alpha = 0.75f), radius = size.width * 0.46f, center = c)
     }
 }
 
